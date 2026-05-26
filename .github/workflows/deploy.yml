@@ -63,7 +63,7 @@ jobs:
             API_BASE_URL=/api
           secrets: |
             REDIS_URL=REDIS_URL:latest
-            PRECONSULT_API_KEY=PRECONSULT_API_KEY:latest
+            PRECONSULT_API_KEY=SECUREMED_API_KEY:latest
           flags: |
             --allow-unauthenticated
             --max-instances=5

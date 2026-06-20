@@ -1,6 +1,6 @@
 import logging
 from langchain_google_vertexai import ChatVertexAI
-from .config import LLM_MODEL, REGION, PROJECT_ID
+from .config import LLM_MODEL, VERTEX_REGION, PROJECT_ID
 
 _llm = None
 
@@ -12,7 +12,7 @@ def get_llm() -> ChatVertexAI:
             model_name=LLM_MODEL,
             temperature=0.2,
             project=PROJECT_ID,
-            location=REGION,
+            location=VERTEX_REGION,
             streaming=True
         )
         logging.info("Vertex AI LLM initialized successfully.")

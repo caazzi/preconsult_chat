@@ -61,6 +61,36 @@ class State(rx.State):
         return self._t["alcohol_opts"]
 
     @rx.var
+    def duration_opts_with_keys(self) -> List[Dict[str, str]]:
+        keys = ["today", "days", "weeks", "months", "years"]
+        labels = self._t["duration_opts"]
+        return [{"id": k, "label": l} for k, l in zip(keys, labels)]
+
+    @rx.var
+    def conditions_opts_with_keys(self) -> List[Dict[str, str]]:
+        keys = ["asthma", "depression", "diabetes", "hypertension", "thyroid"]
+        labels = self._t["conditions_opts"]
+        return [{"id": k, "label": l} for k, l in zip(keys, labels)]
+
+    @rx.var
+    def family_history_opts_with_keys(self) -> List[Dict[str, str]]:
+        keys = ["alzheimers", "cancer", "diabetes", "heart"]
+        labels = self._t["family_history_opts"]
+        return [{"id": k, "label": l} for k, l in zip(keys, labels)]
+
+    @rx.var
+    def smoking_opts_with_keys(self) -> List[Dict[str, str]]:
+        keys = ["never", "former", "current"]
+        labels = self._t["smoking_opts"]
+        return [{"id": k, "label": l} for k, l in zip(keys, labels)]
+
+    @rx.var
+    def alcohol_opts_with_keys(self) -> List[Dict[str, str]]:
+        keys = ["never", "rarely", "socially", "frequently"]
+        labels = self._t["alcohol_opts"]
+        return [{"id": k, "label": l} for k, l in zip(keys, labels)]
+
+    @rx.var
     def step_progress(self) -> int:
         return int(((self.step + 1) / 6) * 100)
     
@@ -215,6 +245,38 @@ class State(rx.State):
         except RuntimeError:
             pass
 
+    def get_localized_value(self, category: str, key: str) -> str:
+        if not key:
+            return ""
+        keys_map = {
+            "duration": ["today", "days", "weeks", "months", "years"],
+            "conditions": ["asthma", "depression", "diabetes", "hypertension", "thyroid"],
+            "family_history": ["alzheimers", "cancer", "diabetes", "heart"],
+            "smoking": ["never", "former", "current"],
+            "alcohol": ["never", "rarely", "socially", "frequently"]
+        }
+        opts_map = {
+            "duration": "duration_opts",
+            "conditions": "conditions_opts",
+            "family_history": "family_history_opts",
+            "smoking": "smoking_opts",
+            "alcohol": "alcohol_opts"
+        }
+        if category not in keys_map:
+            return key
+        try:
+            idx = keys_map[category].index(key)
+            opts_list = self._t[opts_map[category]]
+            if idx < len(opts_list):
+                return opts_list[idx]
+        except (ValueError, IndexError):
+            pass
+        return key
+
+    def go_back(self):
+        if self.step > 0:
+            self.step -= 1
+
     def go_to_step_1(self):
         self.step = 1
         self.log_analytics_event("demographics_submitted")
@@ -246,14 +308,14 @@ class State(rx.State):
                     "lang": self.lang,
                     "specialist": self.specialist,
                     "chief_complaint": self.chief_complaint,
-                    "duration": self.duration,
+                    "duration": self.get_localized_value("duration", self.duration),
                     "complaint_detail": self.complaint_detail,
-                    "conditions": self.conditions,
+                    "conditions": [self.get_localized_value("conditions", c) for c in self.conditions],
                     "medications": [m for m in self.medications if m.strip()],
                     "allergies": self.allergies_text if self.allergies_flag else "None",
-                    "family_history": self.family_history,
-                    "smoking": self.smoking,
-                    "alcohol": self.alcohol
+                    "family_history": [self.get_localized_value("family_history", f) for f in self.family_history],
+                    "smoking": self.get_localized_value("smoking", self.smoking),
+                    "alcohol": self.get_localized_value("alcohol", self.alcohol)
                 }
                 
                 resp = await client.post(

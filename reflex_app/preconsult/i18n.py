@@ -77,7 +77,7 @@ translations = {
         "err_download_gen": "Download Error: "
     },
     "pt": {
-        "title": "Pré-Consulta",
+        "title": "PreConsult",
         "intake": "Triagem do Paciente",
         "intake_desc": "Fale-nos sobre você. Nós o ajudaremos a organizar seus pensamentos.",
         "age": "Faixa Etária",

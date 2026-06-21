@@ -24,7 +24,7 @@ def header() -> rx.Component:
             spacing="2",
         ),
         width="100%",
-        padding={"initial": "0.75em 1em", "sm": "1.5em"},
+        padding={"initial": "0.5em 1em", "sm": "1em"},
         border_bottom=rx.cond(
             rx.color_mode == "light",
             "1px solid rgba(0, 0, 0, 0.08)",
@@ -35,7 +35,7 @@ def header() -> rx.Component:
 def step_0_demographics() -> rx.Component:
     return rx.vstack(
         rx.vstack(
-            rx.heading(State.t["intake"], size={"initial": "6", "sm": "7", "md": "8"}, margin_bottom="0.5em"),
+            rx.heading(State.t["intake"], size={"initial": "6", "sm": "7", "md": "8"}, margin_bottom="0.25em"),
             rx.text(State.t["intake_desc"], color_scheme="gray"),
             rx.divider(),
             width="100%", spacing="2", animation="fadeInUp 0.4s ease-out 0s both"
@@ -47,7 +47,7 @@ def step_0_demographics() -> rx.Component:
                             variant=rx.cond(State.age_bracket == bracket, "solid", "outline"),
                             width="100%", min_height="44px")
                   for bracket in ["18-25", "26-35", "36-45", "46-60", "60+"]],
-                columns={"initial": "1", "xs": "3", "sm": "5"},
+                columns={"initial": "3", "sm": "5"},
                 spacing="2",
                 width="100%"
             ),
@@ -61,9 +61,9 @@ def step_0_demographics() -> rx.Component:
                 min_height="44px",
                 aria_label="Select your gender"
             ),
-            spacing="4",
+            spacing="3",
             width="100%",
-            padding_y="1em",
+            padding_y="0.5em",
             animation="fadeInUp 0.4s ease-out 0.1s both"
         ),
         rx.button(
@@ -78,7 +78,7 @@ def step_0_demographics() -> rx.Component:
             animation="fadeInUp 0.4s ease-out 0.2s both"
         ),
         width="100%",
-        spacing="5"
+        spacing="3"
     )
 
 def step_1_chief_complaint() -> rx.Component:
@@ -105,11 +105,11 @@ def step_1_chief_complaint() -> rx.Component:
                 on_change=State.set_chief_complaint,
                 value=State.chief_complaint,
                 width="100%",
-                height="80px",
+                height="65px",
                 min_height="44px",
                 aria_label="Chief Complaint"
             ),
-            animation="fadeInUp 0.4s ease-out 0.1s both", spacing="4", width="100%"
+            animation="fadeInUp 0.4s ease-out 0.1s both", spacing="2", width="100%"
         ),
         rx.vstack(
             rx.text(State.t["duration"], weight="bold"),
@@ -120,7 +120,7 @@ def step_1_chief_complaint() -> rx.Component:
                                           variant=rx.cond(State.duration == opt["id"], "solid", "outline"),
                                           width="100%", min_height="44px")
                 ),
-                columns={"initial": "1", "xs": "3", "sm": "5"},
+                columns={"initial": "3", "sm": "5"},
                 spacing="2",
                 width="100%"
             ),
@@ -130,11 +130,11 @@ def step_1_chief_complaint() -> rx.Component:
                 on_change=State.set_complaint_detail,
                 value=State.complaint_detail,
                 width="100%",
-                height="80px",
+                height="65px",
                 min_height="44px",
                 aria_label="Additional details"
             ),
-            animation="fadeInUp 0.4s ease-out 0.2s both", spacing="4", width="100%"
+            animation="fadeInUp 0.4s ease-out 0.2s both", spacing="2", width="100%"
         ),
         rx.grid(
             rx.button(State.t["back_btn"], on_click=State.go_back, color_scheme="gray", variant="outline", size="3", width="100%", min_height="44px"),
@@ -144,7 +144,7 @@ def step_1_chief_complaint() -> rx.Component:
             width="100%",
             animation="fadeInUp 0.4s ease-out 0.3s both"
         ),
-        width="100%", spacing="5"
+        width="100%", spacing="3"
     )
 def step_2_history() -> rx.Component:
     def medication_item(med_idx):
@@ -191,7 +191,7 @@ def step_2_history() -> rx.Component:
                                           variant=rx.cond(State.conditions.contains(opt["id"]), "solid", "outline"),
                                           width="100%", min_height="44px")
                 ),
-                columns={"initial": "1", "xs": "2", "sm": "5"},
+                columns={"initial": "2", "sm": "5"},
                 spacing="2",
                 width="100%"
             ),
@@ -201,7 +201,7 @@ def step_2_history() -> rx.Component:
                 rx.button(State.t["add_medication"], on_click=State.add_medication, variant="ghost", min_height="44px"),
                 align_items="start", width="100%"
             ),
-            animation="fadeInUp 0.4s ease-out 0.1s both", spacing="4", width="100%"
+            animation="fadeInUp 0.4s ease-out 0.1s both", spacing="2", width="100%"
         ),
         rx.vstack(
             rx.text(State.t["allergies_label"], weight="bold"),
@@ -225,7 +225,7 @@ def step_2_history() -> rx.Component:
                     aria_label="List your drug allergies"
                 )
             ),
-            animation="fadeInUp 0.4s ease-out 0.2s both", spacing="4", width="100%"
+            animation="fadeInUp 0.4s ease-out 0.2s both", spacing="2", width="100%"
         ),
         rx.grid(
             rx.button(State.t["back_btn"], on_click=State.go_back, color_scheme="gray", variant="outline", size="3", width="100%", min_height="44px"),
@@ -235,7 +235,7 @@ def step_2_history() -> rx.Component:
             width="100%",
             animation="fadeInUp 0.4s ease-out 0.3s both"
         ),
-        width="100%", spacing="5"
+        width="100%", spacing="3"
     )
 
 def step_3_lifestyle() -> rx.Component:
@@ -255,11 +255,11 @@ def step_3_lifestyle() -> rx.Component:
                                           variant=rx.cond(State.family_history.contains(opt["id"]), "solid", "outline"),
                                           width="100%", min_height="44px")
                 ),
-                columns={"initial": "1", "xs": "2", "sm": "4"},
+                columns={"initial": "2", "sm": "4"},
                 spacing="2",
                 width="100%"
             ),
-            animation="fadeInUp 0.4s ease-out 0.1s both", spacing="4", width="100%"
+            animation="fadeInUp 0.4s ease-out 0.1s both", spacing="2", width="100%"
         ),
         rx.vstack(
             rx.text(State.t["smoking_label"], weight="bold"),
@@ -270,7 +270,7 @@ def step_3_lifestyle() -> rx.Component:
                                           variant=rx.cond(State.smoking == opt["id"], "solid", "outline"),
                                           width="100%", min_height="44px")
                 ),
-                columns={"initial": "1", "xs": "3", "sm": "3"},
+                columns={"initial": "3"},
                 spacing="2",
                 width="100%"
             ),
@@ -282,11 +282,11 @@ def step_3_lifestyle() -> rx.Component:
                                           variant=rx.cond(State.alcohol == opt["id"], "solid", "outline"),
                                           width="100%", min_height="44px")
                 ),
-                columns={"initial": "1", "xs": "2", "sm": "4"},
+                columns={"initial": "2", "sm": "4"},
                 spacing="2",
                 width="100%"
             ),
-            animation="fadeInUp 0.4s ease-out 0.2s both", spacing="4", width="100%"
+            animation="fadeInUp 0.4s ease-out 0.2s both", spacing="2", width="100%"
         ),
         rx.grid(
             rx.button(State.t["back_btn"], on_click=State.go_back, color_scheme="gray", variant="outline", size="3", width="100%", min_height="44px"),
@@ -301,7 +301,7 @@ def step_3_lifestyle() -> rx.Component:
             width="100%",
             animation="fadeInUp 0.4s ease-out 0.3s both"
         ),
-        width="100%", spacing="5"
+        width="100%", spacing="3"
     )
 
 
@@ -313,7 +313,7 @@ def step_4_interview_qs() -> rx.Component:
                 placeholder=State.t["answers_ph"],
                 on_change=lambda val: State.set_answer(idx, val),
                 value=State.current_answers[idx],
-                width="100%", height="80px", min_height="44px",
+                width="100%", height="65px", min_height="44px",
                 aria_label="Answer for clinical question"
             ),
             width="100%", spacing="2"
@@ -371,7 +371,11 @@ def step_4_interview_qs() -> rx.Component:
                         ),
                         rx.center(rx.spinner(), width="100%", padding="2em")
                     ),
-                    width="100%", animation="fadeInUp 0.4s ease-out 0.1s both"
+                    width="100%",
+                    max_height={"initial": "220px", "sm": "320px"},
+                    overflow_y="auto",
+                    padding_right="0.5em",
+                    animation="fadeInUp 0.4s ease-out 0.1s both"
                 ),
                 rx.grid(
                     rx.button(State.t["back_btn"], on_click=State.go_back, color_scheme="gray", variant="outline", size="3", width="100%", min_height="44px"),
@@ -387,10 +391,10 @@ def step_4_interview_qs() -> rx.Component:
                     animation="fadeInUp 0.4s ease-out 0.2s both"
                 ),
                 width="100%",
-                spacing="5",
+                spacing="3",
             ),
         ),
-        width="100%", spacing="5"
+        width="100%", spacing="3"
     )
 
 def step_5_summary() -> rx.Component:
@@ -426,7 +430,7 @@ def step_5_summary() -> rx.Component:
             ),
             width="100%", spacing="2", animation="fadeInUp 0.4s ease-out 0.1s both"
         ),
-        width="100%", spacing="5", padding_y="2em"
+        width="100%", spacing="3", padding_y="0.75em"
     )
 def stepper_component() -> rx.Component:
     def stepper_item(idx: int):
@@ -481,7 +485,7 @@ def stepper_component() -> rx.Component:
     return rx.box(
         rx.box(mobile_progress, display={"initial": "block", "sm": "none"}),
         rx.box(desktop_stepper, display={"initial": "none", "sm": "block"}),
-        padding_bottom="2em", width="100%",
+        padding_bottom="1em", width="100%",
     )
 
 def index() -> rx.Component:
@@ -501,7 +505,7 @@ def index() -> rx.Component:
                         (5, step_5_summary()),
                         step_0_demographics()
                     ),
-                    padding={"initial": "1.25em", "sm": "1.5em", "md": "2em"},
+                    padding={"initial": "1em", "sm": "1.25em", "md": "1.5em"},
                     width="100%",
                     background=rx.cond(
                         rx.color_mode == "light",
@@ -523,7 +527,8 @@ def index() -> rx.Component:
                 ),
                 max_width={"initial": "95%", "sm": "90%", "md": "600px"},
                 width="100%",
-                padding_top="2em", padding_bottom="5em"
+                padding_top={"initial": "0.5em", "sm": "1.5em"},
+                padding_bottom={"initial": "0.5em", "sm": "1.5em"}
             ),
             width="100%", min_height="100vh",
             align_items="center",

@@ -681,7 +681,7 @@ class CustomStaticFiles(StaticFiles):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
             
         # Optimize index.html dynamically to defer CSS block and inline critical styles
-        elif path == "" or path == "index.html":
+        elif path in ("", ".", "index.html"):
             if hasattr(response, "path") and os.path.exists(response.path):
                 try:
                     with open(response.path, "r", encoding="utf-8") as f:

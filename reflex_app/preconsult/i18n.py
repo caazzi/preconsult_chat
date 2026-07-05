@@ -74,7 +74,9 @@ translations = {
         "err_initial_ans": "Please answer the questions.",
         "err_followup_ans": "Please answer all questions.",
         "err_download": "Download failed: ",
-        "err_download_gen": "Download Error: "
+        "err_download_gen": "Download Error: ",
+        "lang_select_sr": "Select language",
+        "gender_select_sr": "Select your gender"
     },
     "pt": {
         "title": "PreConsult",
@@ -151,6 +153,8 @@ translations = {
         "err_initial_ans": "Por favor, responda às perguntas.",
         "err_followup_ans": "Por favor, responda a todas as perguntas.",
         "err_download": "Falha no download: ",
-        "err_download_gen": "Erro no Download: "
+        "err_download_gen": "Erro no Download: ",
+        "lang_select_sr": "Selecionar idioma",
+        "gender_select_sr": "Selecione seu sexo biológico"
     }
 }

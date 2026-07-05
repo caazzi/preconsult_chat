@@ -114,6 +114,7 @@ jobs:
           flags: |
             --allow-unauthenticated
             --max-instances=5
+            --min-instances=1
             --concurrency=80
             --cpu=1
             --memory=1Gi

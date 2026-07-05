@@ -11,16 +11,19 @@ def header() -> rx.Component:
         rx.heading(State.t["title"], size={"initial": "5", "xs": "6", "sm": "7"}, color_scheme="cyan"),
         rx.spacer(),
         rx.hstack(
-            rx.select(
-                ["en", "pt"],
-                on_change=State.set_lang,
-                value=State.lang,
-                width="70px",
-                min_height="44px",
-                variant="ghost",
-                aria_label="Select language"
+            rx.el.label(
+                rx.text(State.t["lang_select_sr"], class_name="sr-only"),
+                rx.select(
+                    ["en", "pt"],
+                    on_change=State.set_lang,
+                    value=State.lang,
+                    width="70px",
+                    min_height="44px",
+                    variant="ghost",
+                    aria_label="Select language"
+                ),
             ),
-            rx.color_mode.button(),
+            rx.color_mode.button(aria_label="Toggle color mode"),
             spacing="2",
         ),
         width="100%",
@@ -52,14 +55,17 @@ def step_0_demographics() -> rx.Component:
                 width="100%"
             ),
             rx.text(State.t["gender"], weight="bold"),
-            rx.select(
-                State.gender_opts,
-                placeholder=State.t["gender_ph"],
-                on_change=State.set_gender,
-                value=State.gender,
-                width="100%",
-                min_height="44px",
-                aria_label="Select your gender"
+            rx.el.label(
+                rx.text(State.t["gender_select_sr"], class_name="sr-only"),
+                rx.select(
+                    State.gender_opts,
+                    placeholder=State.t["gender_ph"],
+                    on_change=State.set_gender,
+                    value=State.gender,
+                    width="100%",
+                    min_height="44px",
+                    aria_label="Select your gender"
+                ),
             ),
             spacing="3",
             width="100%",
@@ -477,7 +483,7 @@ def stepper_component() -> rx.Component:
             ),
             width="100%",
         ),
-        rx.progress(value=State.step_progress, width="100%", color_scheme="cyan"),
+        rx.progress(value=State.step_progress, width="100%", color_scheme="cyan", aria_label="Overall progress"),
         width="100%",
         spacing="1",
     )
@@ -492,43 +498,48 @@ def index() -> rx.Component:
     return rx.center(
         rx.vstack(
             header(),
-            rx.container(
-                stepper_component(),
-                rx.card(
-                    rx.match(
-                        State.step,
-                        (0, step_0_demographics()),
-                        (1, step_1_chief_complaint()),
-                        (2, step_2_history()),
-                        (3, step_3_lifestyle()),
-                        (4, step_4_interview_qs()),
-                        (5, step_5_summary()),
-                        step_0_demographics()
+            rx.el.main(
+                rx.container(
+                    stepper_component(),
+                    rx.card(
+                        rx.match(
+                            State.step,
+                            (0, step_0_demographics()),
+                            (1, step_1_chief_complaint()),
+                            (2, step_2_history()),
+                            (3, step_3_lifestyle()),
+                            (4, step_4_interview_qs()),
+                            (5, step_5_summary()),
+                            step_0_demographics()
+                        ),
+                        padding={"initial": "1em", "sm": "1.25em", "md": "1.5em"},
+                        width="100%",
+                        background=rx.cond(
+                            rx.color_mode == "light",
+                            "rgba(255,255,255,0.75)",
+                            "rgba(255,255,255,0.05)"
+                        ),
+                        backdrop_filter="blur(15px)",
+                        border=rx.cond(
+                            rx.color_mode == "light",
+                            "1px solid rgba(0,0,0,0.08)",
+                            "1px solid rgba(255,255,255,0.1)"
+                        ),
+                        border_radius="20px",
+                        box_shadow=rx.cond(
+                            rx.color_mode == "light",
+                            "0 8px 32px 0 rgba(0,0,0,0.08)",
+                            "0 8px 32px 0 rgba(0,0,0,0.37)"
+                        )
                     ),
-                    padding={"initial": "1em", "sm": "1.25em", "md": "1.5em"},
+                    max_width={"initial": "95%", "sm": "90%", "md": "600px"},
                     width="100%",
-                    background=rx.cond(
-                        rx.color_mode == "light",
-                        "rgba(255,255,255,0.75)",
-                        "rgba(255,255,255,0.05)"
-                    ),
-                    backdrop_filter="blur(15px)",
-                    border=rx.cond(
-                        rx.color_mode == "light",
-                        "1px solid rgba(0,0,0,0.08)",
-                        "1px solid rgba(255,255,255,0.1)"
-                    ),
-                    border_radius="20px",
-                    box_shadow=rx.cond(
-                        rx.color_mode == "light",
-                        "0 8px 32px 0 rgba(0,0,0,0.08)",
-                        "0 8px 32px 0 rgba(0,0,0,0.37)"
-                    )
+                    padding_top={"initial": "0.5em", "sm": "1.5em"},
+                    padding_bottom={"initial": "0.5em", "sm": "1.5em"}
                 ),
-                max_width={"initial": "95%", "sm": "90%", "md": "600px"},
                 width="100%",
-                padding_top={"initial": "0.5em", "sm": "1.5em"},
-                padding_bottom={"initial": "0.5em", "sm": "1.5em"}
+                display="flex",
+                justify_content="center"
             ),
             width="100%", min_height="100vh",
             align_items="center",
@@ -642,16 +653,94 @@ def admin_dashboard() -> rx.Component:
     )
 
 
-app.add_page(index, on_load=State.detect_lang)
-app.add_page(admin_dashboard, route="/admin/dashboard", on_load=AdminState.load_analytics)
+app.add_page(
+    index,
+    on_load=State.detect_lang,
+    title="PreConsult — Privacy-First Medical Intake Assistant",
+    description="Guided AI interview helper for patient intake with zero data persistence."
+)
+app.add_page(
+    admin_dashboard,
+    route="/admin/dashboard",
+    on_load=AdminState.load_analytics,
+    title="PreConsult Admin Dashboard",
+    description="Analytics funnel dashboard for PreConsult administrators."
+)
 
 import os
+import re
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, Response
+
+class CustomStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope) -> Response:
+        response = await super().get_response(path, scope)
+        
+        # Serve hashed assets with immutable long-term caching
+        if "assets/" in path or path.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            
+        # Optimize index.html dynamically to defer CSS block and inline critical styles
+        elif path == "" or path == "index.html":
+            if hasattr(response, "path") and os.path.exists(response.path):
+                try:
+                    with open(response.path, "r", encoding="utf-8") as f:
+                        html_content = f.read()
+                    
+                    # Defer stylesheet load using non-render-blocking preload pattern
+                    pattern = r'<link href="(/assets/__reflex_global_styles-[^"]+\.css)" rel="stylesheet" type="text/css"/>'
+                    match = re.search(pattern, html_content)
+                    if match:
+                        css_url = match.group(1)
+                        async_link = (
+                            f'<link rel="preload" href="{css_url}" as="style" onload="this.onload=null;this.rel=\'stylesheet\'"/>'
+                            f'<noscript><link href="{css_url}" rel="stylesheet" type="text/css"/></noscript>'
+                        )
+                        html_content = html_content.replace(match.group(0), async_link)
+                    
+                    # Inline critical body backgrounds & layouts to avoid Flash of Unstyled Content (FOUC)
+                    critical_style = """
+                    <style>
+                    html, body {
+                        background: radial-gradient(circle at top right, #0a192f, #001f3f, #001529) !important;
+                        margin: 0;
+                        padding: 0;
+                        min-height: 100vh;
+                        font-family: system-ui, -apple-system, sans-serif;
+                    }
+                    html.light, html.light body {
+                        background: radial-gradient(circle at top right, #f8fafc, #f1f5f9, #e2e8f0) !important;
+                    }
+                    .sr-only {
+                        position: absolute;
+                        width: 1px;
+                        height: 1px;
+                        padding: 0;
+                        margin: -1px;
+                        overflow: hidden;
+                        clip: rect(0, 0, 0, 0);
+                        white-space: nowrap;
+                        border: 0;
+                    }
+                    </style>
+                    """
+                    html_content = html_content.replace("</head>", f"{critical_style}</head>")
+                    
+                    new_response = HTMLResponse(content=html_content, status_code=response.status_code)
+                    for key, val in response.headers.items():
+                        if key.lower() not in ("content-length", "content-type"):
+                            new_response.headers[key] = val
+                    return new_response
+                except Exception:
+                    pass
+        return response
+
 static_dir_vite = os.path.join(os.getcwd(), ".web", "build", "client")
 static_dir_legacy = os.path.join(os.getcwd(), ".web", "_static")
 static_dir = static_dir_vite if os.path.exists(static_dir_vite) else static_dir_legacy
 if os.path.exists(static_dir):
-    from fastapi.staticfiles import StaticFiles
-    app._api.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+    app._api.mount("/", CustomStaticFiles(directory=static_dir, html=True), name="static")
 
 app._api.router.lifespan_context = app._run_lifespan_tasks
 api = app._context_middleware(app._api)
+

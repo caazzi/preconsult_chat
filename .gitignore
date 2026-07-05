@@ -101,5 +101,9 @@ reports/
 .states/
 *.db
 
+# Reflex Build Artifacts (gerados por `reflex export`, não devem ser versionados)
+reflex_app/frontend.zip
+*.zip
+
 # Local scratch files
 scratch/

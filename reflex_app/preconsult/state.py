@@ -129,8 +129,15 @@ class State(rx.State):
     loading: bool = False
 
     def detect_lang(self):
-        """Infer language from browser headers."""
+        """Infer language from URL query param or browser headers."""
         try:
+            query_params = self.router.page.params
+            lang_param = query_params.get("lang", "").lower()
+            if lang_param in ["pt", "en"]:
+                self.lang = lang_param
+                self.gender = "Feminino" if lang_param == "pt" else "Female"
+                return
+            
             accept_lang = self.router.headers.get("accept-language", "")
             if "pt" in accept_lang.lower().split(",")[0]:
                 self.lang = "pt"

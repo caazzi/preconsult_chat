@@ -37,11 +37,65 @@ def header() -> rx.Component:
 
 def step_0_demographics() -> rx.Component:
     return rx.vstack(
+        # Hero Section
         rx.vstack(
-            rx.heading(State.t["intake"], size={"initial": "6", "sm": "7", "md": "8"}, margin_bottom="0.25em"),
+            rx.badge("AI Assistant", color_scheme="cyan", variant="soft"),
+            rx.heading(State.t["hero_title"], size={"initial": "5", "xs": "6", "sm": "7"}, text_align="center", line_height="1.2"),
+            rx.text(State.t["hero_subtitle"], color_scheme="gray", size="2", text_align="center"),
+            spacing="2",
+            align_items="center",
+            width="100%",
+            padding_bottom="0.5em",
+            animation="fadeInUp 0.4s ease-out 0s both"
+        ),
+        # 3-step Timeline / How it works
+        rx.grid(
+            rx.vstack(
+                rx.icon("message-square", size=20, color="cyan"),
+                rx.text(State.t["step_how_1"], size="1", weight="bold", text_align="center"),
+                align_items="center", spacing="1"
+            ),
+            rx.vstack(
+                rx.icon("activity", size=20, color="cyan"),
+                rx.text(State.t["step_how_2"], size="1", weight="bold", text_align="center"),
+                align_items="center", spacing="1"
+            ),
+            rx.vstack(
+                rx.icon("file-text", size=20, color="cyan"),
+                rx.text(State.t["step_how_3"], size="1", weight="bold", text_align="center"),
+                align_items="center", spacing="1"
+            ),
+            columns="3",
+            spacing="2",
+            width="100%",
+            background="rgba(0, 200, 255, 0.03)",
+            border="1px dashed rgba(0, 200, 255, 0.2)",
+            border_radius="8px",
+            padding="0.75em",
+            margin_bottom="0.5em",
+            animation="fadeInUp 0.4s ease-out 0.1s both"
+        ),
+        # Privacy Badge
+        rx.center(
+            rx.hstack(
+                rx.icon("shield", size=16, color="green"),
+                rx.text(State.t["privacy_badge"], size="1", color_scheme="green", weight="bold", text_align="center"),
+                spacing="2",
+                align_items="center",
+            ),
+            width="100%",
+            background="rgba(0, 255, 100, 0.05)",
+            border="1px solid rgba(0, 255, 100, 0.15)",
+            border_radius="8px",
+            padding="0.5em",
+            margin_bottom="0.5em",
+            animation="fadeInUp 0.4s ease-out 0.15s both"
+        ),
+        rx.vstack(
+            rx.heading(State.t["intake"], size={"initial": "5", "sm": "6"}, margin_bottom="0.25em"),
             rx.text(State.t["intake_desc"], color_scheme="gray"),
             rx.divider(),
-            width="100%", spacing="2", animation="fadeInUp 0.4s ease-out 0s both"
+            width="100%", spacing="2", animation="fadeInUp 0.4s ease-out 0.2s both"
         ),
         rx.vstack(
             rx.text(State.t["age"], weight="bold"),
@@ -70,7 +124,7 @@ def step_0_demographics() -> rx.Component:
             spacing="3",
             width="100%",
             padding_y="0.5em",
-            animation="fadeInUp 0.4s ease-out 0.1s both"
+            animation="fadeInUp 0.4s ease-out 0.25s both"
         ),
         rx.button(
             State.t["start_btn"], 
@@ -81,7 +135,7 @@ def step_0_demographics() -> rx.Component:
             min_height="44px",
             _hover={"transform": "scale(1.02)", "bg": "cyan.600"},
             transition="all 0.2s ease",
-            animation="fadeInUp 0.4s ease-out 0.2s both"
+            animation="fadeInUp 0.4s ease-out 0.3s both"
         ),
         width="100%",
         spacing="3"
@@ -727,7 +781,20 @@ class CustomStaticFiles(StaticFiles):
                     }
                     </style>
                     """
-                    html_content = html_content.replace("</head>", f"{critical_style}</head>")
+                    gtag_id = os.environ.get("GTAG_ID", "")
+                    gtag_script = ""
+                    if gtag_id:
+                        gtag_script = f"""
+                        <!-- Google tag (gtag.js) -->
+                        <script async src="https://www.googletagmanager.com/gtag/js?id={gtag_id}"></script>
+                        <script>
+                          window.dataLayer = window.dataLayer || [];
+                          function gtag(){{dataLayer.push(arguments);}}
+                          gtag('js', new Date());
+                          gtag('config', '{gtag_id}');
+                        </script>
+                        """
+                    html_content = html_content.replace("</head>", f"{critical_style}{gtag_script}</head>")
 
                     # Fix og:image relative path → 404 in crawl/Lighthouse contexts.
                     # Reflex generates `content="favicon.ico"` (relative); make it absolute.

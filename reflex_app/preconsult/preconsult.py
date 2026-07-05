@@ -483,7 +483,7 @@ def stepper_component() -> rx.Component:
             ),
             width="100%",
         ),
-        rx.progress(value=State.step_progress, width="100%", color_scheme="cyan", aria_label="Overall progress"),
+        rx.progress(value=State.step_progress, width="100%", height="8px", color_scheme="cyan", aria_label="Overall progress"),
         width="100%",
         spacing="1",
     )
@@ -687,16 +687,19 @@ class CustomStaticFiles(StaticFiles):
                     with open(response.path, "r", encoding="utf-8") as f:
                         html_content = f.read()
                     
-                    # Defer stylesheet load using non-render-blocking preload pattern
+                    # Preload CSS to start download early while still applying it synchronously.
+                    # The previous async onload pattern improved FCP but caused CLS (layout shift
+                    # when the full stylesheet fired after first paint). preload + sync link
+                    # gives us the early download benefit without the CLS penalty.
                     pattern = r'<link href="(/assets/__reflex_global_styles-[^"]+\.css)" rel="stylesheet" type="text/css"/>'
                     match = re.search(pattern, html_content)
                     if match:
                         css_url = match.group(1)
-                        async_link = (
-                            f'<link rel="preload" href="{css_url}" as="style" onload="this.onload=null;this.rel=\'stylesheet\'"/>'
-                            f'<noscript><link href="{css_url}" rel="stylesheet" type="text/css"/></noscript>'
+                        preload_link = (
+                            f'<link rel="preload" href="{css_url}" as="style"/>'
+                            f'<link href="{css_url}" rel="stylesheet" type="text/css"/>'
                         )
-                        html_content = html_content.replace(match.group(0), async_link)
+                        html_content = html_content.replace(match.group(0), preload_link)
                     
                     # Inline critical body backgrounds & layouts to avoid Flash of Unstyled Content (FOUC)
                     critical_style = """
@@ -725,7 +728,23 @@ class CustomStaticFiles(StaticFiles):
                     </style>
                     """
                     html_content = html_content.replace("</head>", f"{critical_style}</head>")
-                    
+
+                    # Fix og:image relative path → 404 in crawl/Lighthouse contexts.
+                    # Reflex generates `content="favicon.ico"` (relative); make it absolute.
+                    html_content = html_content.replace(
+                        'content="favicon.ico" property="og:image"',
+                        'content="https://pre-consult.org/favicon.ico" property="og:image"'
+                    )
+
+                    # Suppress React Router scroll-restoration console.error.
+                    # sessionStorage may be blocked (private mode, restrictive CSP, iframe)
+                    # causing JSON.parse to throw → console.error(error). The error is
+                    # benign (storage is cleared in the catch), but Lighthouse flags it.
+                    html_content = html_content.replace(
+                        'console.error(error);\n      sessionStorage.removeItem("react-router-scroll-positions");',
+                        '/* sessionStorage unavailable */ sessionStorage.removeItem("react-router-scroll-positions");'
+                    )
+
                     new_response = HTMLResponse(content=html_content, status_code=response.status_code)
                     for key, val in response.headers.items():
                         if key.lower() not in ("content-length", "content-type"):

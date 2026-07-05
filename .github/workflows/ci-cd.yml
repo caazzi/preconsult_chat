@@ -95,6 +95,8 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          build-args: |
+            API_URL=https://pre-consult.org
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

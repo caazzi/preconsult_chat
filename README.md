@@ -126,6 +126,14 @@ gcloud run deploy preconsult \
   --set-secrets=PRECONSULT_API_KEY=PRECONSULT_API_KEY:latest,REDIS_URL=REDIS_URL:latest
 ```
 
+### Custom Domain & Routing (Cloudflare)
+
+Because legacy domain mappings are not supported in the GCP `southamerica-east1` region, the app uses **pre-consult.org** mapped via a **Cloudflare Worker** to route traffic and rewrite the `Host` header on the fly. 
+
+To update or manage this:
+- The compiled React/Next.js frontend in the container uses `https://pre-consult.org` as its target `API_URL`.
+- Incoming traffic to `https://pre-consult.org` is proxied via a Cloudflare Worker that forwards requests to the GCP Cloud Run service endpoint (`preconsult-811607528687.southamerica-east1.run.app`) while rewriting the `Host` header to match.
+
 ---
 
 > **Disclaimer**: PreConsult is an organizational tool, not a medical device. It does not provide diagnoses or medical advice. Always consult a qualified healthcare provider.

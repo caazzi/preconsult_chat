@@ -100,3 +100,6 @@ reports/
 .web/
 .states/
 *.db
+
+# Local scratch files
+scratch/

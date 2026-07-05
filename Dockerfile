@@ -22,7 +22,7 @@ COPY . .
 
 # Build Reflex frontend
 WORKDIR /app/reflex_app
-ARG API_URL="https://securemed-chat-tcjbweemnq-rj.a.run.app"
+ARG API_URL="https://pre-consult.org"
 ENV API_URL=$API_URL
 RUN BUILD_MODE=true uv run reflex export --frontend-only --no-zip
 

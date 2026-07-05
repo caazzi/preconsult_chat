@@ -9,8 +9,8 @@
 ## Project structure reference
 
 ```
-securemed_chat/
-├── src/securemed_chat/
+preconsult_chat/
+├── src/preconsult/
 │   ├── api/endpoints.py          # FastAPI routes
 │   ├── core/config.py            # Env config
 │   ├── core/llm.py               # Vertex AI LLM singleton
@@ -70,8 +70,8 @@ Sprint 1 (new API contract)
 **Goal:** Define the new endpoints and full session data model. Old endpoints stay alive for backward compatibility until Sprint 3.
 
 ### Read first
-- `src/securemed_chat/api/endpoints.py` (full file)
-- `src/securemed_chat/services/agent_service.py` (full file)
+- `src/preconsult/api/endpoints.py` (full file)
+- `src/preconsult/services/agent_service.py` (full file)
 - `tests/test_api_integration.py` (full file)
 
 ### New session schema
@@ -196,7 +196,7 @@ def test_generate_pdf_session_not_found(mock_get):
 **Goal:** Rewrite `pdf_service.py` to accept the new two-source data model (structured form + Q&A pairs). No LLM output consumed. This sprint is independent of Sprint 3.
 
 ### Read first
-- `src/securemed_chat/services/pdf_service.py` (full file)
+- `src/preconsult/services/pdf_service.py` (full file)
 - `tests/test_pdf_service.py` (full file)
 - `docs/PRD.md` Section 5.2 (PDF Template Specification)
 
@@ -338,8 +338,8 @@ def test_pdf_unknown_lang_defaults_to_en():
 **Goal:** Replace the two-chain OPQRST+SAMPLE architecture with one interview chain receiving full form context. Add emergency detection. Remove dead code.
 
 ### Read first
-- `src/securemed_chat/services/agent_service.py` (full file)
-- `src/securemed_chat/api/endpoints.py` (full file)
+- `src/preconsult/services/agent_service.py` (full file)
+- `src/preconsult/api/endpoints.py` (full file)
 - `tests/test_agent_service.py` (full file)
 - `docs/PRD.md` Section 5.1 (full system prompt and rules)
 
@@ -644,7 +644,7 @@ def test_auto_destruction_notice_pt():
 
 def test_emergency_rule_in_interview_prompt():
     import inspect
-    from securemed_chat.services.agent_service import get_interview_chain
+    from preconsult.services.agent_service import get_interview_chain
     # Inspect the prompt template's system message
     chain = get_interview_chain()
     prompt = chain.steps[0]  # or however the chain is structured

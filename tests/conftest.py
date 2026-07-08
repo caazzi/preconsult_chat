@@ -13,8 +13,8 @@ def reset_redis_pool():
     from preconsult.services import session_service
     session_service._redis_pool = None
     session_service._redis_available = None
-    session_service._memory_cache.clear()
+    session_service._memory_limiter.clear()
     yield
     session_service._redis_pool = None
     session_service._redis_available = None
-    session_service._memory_cache.clear()
+    session_service._memory_limiter.clear()

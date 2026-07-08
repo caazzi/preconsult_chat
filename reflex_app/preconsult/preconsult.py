@@ -13,7 +13,7 @@ def error_callout() -> rx.Component:
             State.error_message,
             icon="triangle_alert",
             color_scheme="red",
-            variant="solid",
+            variant="surface",
             size="3",
             width="100%",
             margin_bottom="0.5em",
@@ -392,10 +392,7 @@ def step_4_lifestyle() -> rx.Component:
 def step_5_interview_qs() -> rx.Component:
     def question_item(q, idx):
         return rx.vstack(
-            rx.text(
-                State.t["question_counter"].replace("{current}", str(idx + 1)).replace("{total}", str(State.questions.length())),
-                size="2", color_scheme="gray", weight="bold",
-            ),
+            rx.text(f"Question {idx + 1} of {State.questions.length()}", size="2", color_scheme="gray", weight="bold"),
             rx.text(q, weight="bold"),
             rx.text_area(
                 placeholder=State.t["answers_ph"],

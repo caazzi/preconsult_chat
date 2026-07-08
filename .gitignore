@@ -95,6 +95,7 @@ reports/
 .gemini/
 .agentignore
 .claude/
+opencode.json
 
 # Reflex App Tooling
 .web/

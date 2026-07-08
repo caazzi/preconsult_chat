@@ -48,8 +48,7 @@ No health data is ever written to disk. Every design decision flows from this co
 - **No database** — session state lives in Redis with a 30-minute TTL.
 - **No user accounts** — complete anonymity, no registration required.
 - **In-memory PDF generation** — reports are built in RAM and streamed directly to the browser.
-- **High-Performance State** — uses Redis Hashes for granular, partial updates, minimizing I/O and latency.
-- **Local API Routing** — the UI communicates with the API on the same origin (no cross-service exposure).
+- **No data in transit to disk** — even if Redis fails, rate limiting falls back to in-memory counters (no clinical data).
 - **No model training** — API calls use contracts that exclude session data from training.
 
 ---
@@ -58,12 +57,14 @@ No health data is ever written to disk. Every design decision flows from this co
 
 | Layer | Technology |
 |---|---|
-| Core | Reflex (Unified Frontend & API Host) |
+| Core | Reflex 0.9.1 (Unified Frontend & API Host) |
 | Backend | FastAPI (Integrated into Reflex backend) |
-| Session | Redis (Hashes, ephemeral, 30-min TTL) |
-| AI | Vertex AI (Gemini-Flash) |
-| Deployment | GCP Cloud Run (1.0 CPU, 1Gi RAM, Scale-to-Zero) |
-| CI/CD | GitHub Actions (Consolidated Mono-Service build) |
+| Session | Redis (Hashes, ephemeral, 30-min TTL, RedisUnavailable → 503) |
+| AI | Vertex AI Gemini 2.5 Flash Lite (via LangChain) |
+| PDF | ReportLab (in-memory, deterministic, no LLM call) |
+| Monitoring | Sentry (error tracking) + `GET /health` endpoint |
+| Deployment | GCP Cloud Run (1.0 CPU, 1Gi RAM, 0-5 instances) |
+| CI/CD | GitHub Actions (tests + WIF auth + Cloud Run deploy) |
 
 ---
 
@@ -77,62 +78,130 @@ Foundation models already contain the necessary medical knowledge. Structured pr
 
 ## Local Setup
 
-The project uses `uv` for lightning-fast dependency management.
+The project uses `uv` for dependency management.
+
+### Prerequisites
+
+- Python 3.11
+- Redis (via `docker compose` or local install)
+- GCP service account with Vertex AI access
+- `.env` file in the project root
 
 ### Running the App
-1. **Start infrastructure** (Redis):
-   ```bash
-   docker compose up -d redis
-   ```
 
-2. **Start the Unified App**:
-   ```bash
-   # Both UI and API will run together
-   uv run reflex run
-   ```
+```bash
+docker compose up -d redis
+uv sync
+uv run reflex run
+```
 
-Requires a `.env` file in the root with:
+### Environment Variables
+
+Create a `.env` file:
+
 ```bash
 PRECONSULT_API_KEY=your_key
 GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
+GOOGLE_CLOUD_PROJECT=your_project_id
+REDIS_URL=redis://localhost:6379/0
+SENTRY_DSN=  # optional
+GTAG_ID=     # optional
 ```
 
 ### Running Tests
-The project includes a comprehensive suite of 34 tests covering services, security, and integration.
 
 ```bash
-# Sync test dependencies
 uv sync --extra test
-
-# Run full suite
-uv run python -m pytest tests/
+uv run python -m pytest tests/ -v
 ```
+
+The suite has **50 tests** covering:
+- Agent service (LLM chains, language, emergency detection)
+- API integration (session init, streaming, PDF generation, analytics)
+- PDF generation (i18n, pagination, empty states)
+- Rate limiting (Redis + in-memory fallback, concurrency)
+- Security (API key enforcement, error sanitization, BUILD_MODE)
+- Session service (CRUD, Redis recovery after failure)
+- i18n (fallback, key consistency, `get_localized_value`)
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/` | Root — welcome message |
+| `GET` | `/health` | Liveness probe (returns `{"status": "healthy", "redis": "ok"}`) |
+| `POST` | `/api/session/init` | Create session with full form data (rate limited: 2/min) |
+| `POST` | `/api/interview-questions-stream` | SSE stream of LLM-generated clinical questions |
+| `POST` | `/api/generate-pdf` | Deterministic PDF from form + Q&A (no LLM call) |
+| `POST` | `/api/analytics/event` | Log analytics event |
+| `GET` | `/api/analytics/stats` | 7-day funnel stats (token-gated) |
 
 ---
 
 ## Deployment (GCP Cloud Run)
 
-The app is deployed as a single consolidated container:
+The app deploys as a single consolidated container via GitHub Actions CI/CD.
+
+### Manual deploy
 
 ```bash
 gcloud run deploy preconsult \
   --source . \
   --project=securemed-chat-494521 \
   --region=southamerica-east1 \
-  --memory=1Gi \
-  --cpu=1 \
-  --min-instances=0 \
-  --max-instances=5 \
+  --memory=1Gi --cpu=1 \
+  --min-instances=0 --max-instances=5 \
+  --concurrency=80 \
   --set-secrets=PRECONSULT_API_KEY=PRECONSULT_API_KEY:latest,REDIS_URL=REDIS_URL:latest
 ```
 
-### Custom Domain & Routing (Cloudflare)
+### Custom Domain (Cloudflare)
 
-Because legacy domain mappings are not supported in the GCP `southamerica-east1` region, the app uses **pre-consult.org** mapped via a **Cloudflare Worker** to route traffic and rewrite the `Host` header on the fly. 
+The app is served at **pre-consult.org** via a Cloudflare Worker that proxies requests to the Cloud Run endpoint, rewriting the `Host` header to match GCP's requirements.
 
-To update or manage this:
-- The compiled React/Next.js frontend in the container uses `https://pre-consult.org` as its target `API_URL`.
-- Incoming traffic to `https://pre-consult.org` is proxied via a Cloudflare Worker that forwards requests to the GCP Cloud Run service endpoint (`preconsult-811607528687.southamerica-east1.run.app`) while rewriting the `Host` header to match.
+---
+
+## Project Structure
+
+```
+preconsult_chat/
+├── src/preconsult/          # Backend package
+│   ├── api/endpoints.py     # FastAPI routes
+│   ├── core/config.py       # Environment config
+│   ├── core/errors.py       # Exception handlers
+│   ├── core/llm.py          # Vertex AI singleton
+│   ├── main.py              # FastAPI app + Sentry + health
+│   └── services/
+│       ├── agent_service.py  # LangChain prompts + streaming
+│       ├── pdf_service.py    # ReportLab PDF generation
+│       └── session_service.py# Redis + in-memory rate limiting
+├── reflex_app/preconsult/   # Reflex frontend
+│   ├── preconsult.py        # UI components + app setup
+│   ├── state.py             # Reflex state + API calls
+│   ├── analytics.py         # Analytics via HTTP
+│   └── i18n.py              # EN/PT translations (174 keys)
+├── tests/                   # 50 tests
+├── Dockerfile               # Multi-stage build
+├── docker-compose.yml       # Local Redis
+└── .github/workflows/ci-cd.yml
+```
+
+---
+
+## Phases Completed
+
+| Phase | Focus | Commits |
+|---|---|---|
+| 0 | Security: race condition, API_BASE_URL, BUILD_MODE, Sentry | 1 |
+| 1 | Resilience: Redis fallback, error handlers, sanitized errors, analytics HTTP | 2 |
+| 1.5 | Test coverage: mock cleanup, 7 new tests | 1 |
+| 2 | Maintenance: gender-neutral, PDF i18n, Dependabot | 1 |
+| 3 | Coverage: concurrency tests, i18n edge cases | 1 |
+| 4 | Infra: healthcheck, MockWebSocket extraction | 1 |
+| 5 | UI/UX: mobile-first layout, inline errors via callout, streaming timeout | 2 |
+| | **Total** | **50 tests, ~68% coverage** |
 
 ---
 

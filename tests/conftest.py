@@ -10,8 +10,11 @@ os.environ["REDIS_URL"] = "redis://localhost:6379/0"
 
 @pytest.fixture(autouse=True)
 def reset_redis_pool():
-    """Resets the global Redis connection pool in session_service to avoid event loop conflicts."""
     from preconsult.services import session_service
     session_service._redis_pool = None
+    session_service._redis_available = None
+    session_service._memory_cache.clear()
     yield
     session_service._redis_pool = None
+    session_service._redis_available = None
+    session_service._memory_cache.clear()

@@ -51,6 +51,9 @@ async def test_session_quota():
         "alcohol": "No"
     }
 
+    from preconsult.services.session_service import _memory_cache
+    _memory_cache.clear()
+
     # Clear redis
     async with redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0")) as r:
         await r.flushdb()
@@ -60,14 +63,15 @@ async def test_session_quota():
             for i in range(20):
                 resp = await client.post("/api/session/init", json=payload, headers=headers)
                 if resp.status_code == 429 and "Too many session requests" in resp.json()["detail"]:
-                    # Manually clear the rate limit key to test quota
                     await r.delete("rate_limit:init:127.0.0.1")
+                    _memory_cache.delete("rate_limit:init:127.0.0.1")
                     resp = await client.post("/api/session/init", json=payload, headers=headers)
                 
-                assert resp.status_code == 200
+                assert resp.status_code == 200, f"Falhou na iteracao {i}: {resp.status_code} - {resp.text}"
 
             # 21st session should hit quota
             await r.delete("rate_limit:init:127.0.0.1")
+            _memory_cache.delete("rate_limit:init:127.0.0.1")
             resp21 = await client.post("/api/session/init", json=payload, headers=headers)
             assert resp21.status_code == 429
             assert "Daily session limit reached" in resp21.json()["detail"]

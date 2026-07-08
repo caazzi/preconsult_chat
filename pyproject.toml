@@ -16,7 +16,8 @@ dependencies = [
     "python-dotenv==1.1.1",
     "redis==6.4.0",
     "reflex==0.9.1",
-    "sentry-sdk==2.26.1"
+    "sentry-sdk==2.26.1",
+    "cachetools==5.5.2"
 ]
 
 [project.optional-dependencies]

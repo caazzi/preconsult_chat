@@ -1,18 +1,15 @@
 import reflex as rx
 import httpx
 import json
+import re
 from typing import List, Dict, Any
 import os
 from datetime import datetime
 from .i18n import translations
+from .analytics import log_analytics_event, fetch_analytics_data
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "/api")
 API_KEY = os.environ.get("PRECONSULT_API_KEY", "")
-
-try:
-    from preconsult.services.session_service import get_redis
-except ImportError:
-    get_redis = None
 
 class State(rx.State):
     """The app state."""
@@ -225,27 +222,10 @@ class State(rx.State):
         self.current_answers = answers
 
     def log_analytics_event(self, event_name: str):
-        """Asynchronously log an analytics event in Redis."""
-        if get_redis is None:
-            return
-        
         import asyncio
-        from datetime import date
-        today_str = date.today().isoformat()
-        key = f"analytics:{today_str}"
-        
-        async def _log():
-            try:
-                client = get_redis()
-                await client.hincrby(key, event_name, 1)
-                await client.expire(key, 30 * 24 * 60 * 60)
-            except Exception as e:
-                import logging
-                logging.error(f"Failed to log analytics event: {e}")
-                
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(_log())
+            loop.create_task(log_analytics_event(event_name))
         except RuntimeError:
             pass
 
@@ -331,7 +311,7 @@ class State(rx.State):
                 if resp.status_code == 200:
                     session_id = resp.json().get("session_id")
                     if not session_id:
-                        yield rx.window_alert(self._t["err_generic"] + "Invalid session response from server.")
+                        yield rx.window_alert(self._t["err_generic"])
                         return
                     self.session_id = session_id
                     self.step = 4
@@ -339,13 +319,14 @@ class State(rx.State):
                     self.current_answers = []
                     self.questions = []
                     self.is_emergency = False
-                    # Auto-trigger interview questions
                     async for item in self.get_interview_questions():
                         yield item
+                elif resp.status_code == 429:
+                    yield rx.window_alert(self._t["err_rate_limit"])
                 else:
-                    yield rx.window_alert(f"{self._t['err_init']}{resp.text}")
-            except Exception as e:
-                yield rx.window_alert(f"{self._t['err_generic']}{str(e)}")
+                    yield rx.window_alert(self._t["err_init"])
+            except Exception:
+                yield rx.window_alert(self._t["err_generic"])
             finally:
                 self.loading = False
 
@@ -385,7 +366,6 @@ class State(rx.State):
                                 yield
                                 return
                                 
-                            import re
                             # Match lines like "1. Question", "2) Question", etc. Very permissive match
                             qs = [q.strip() for q in re.split(r'\n(?:\d+[\.\)]|\-)\s*', '\n' + self._qs_buffer) if q.strip()]
                             self.questions = qs
@@ -393,8 +373,8 @@ class State(rx.State):
                             while len(self.current_answers) < len(self.questions):
                                 self.current_answers.append("")
                             yield
-            except Exception as e:
-                yield rx.window_alert(f"{self._t['err_stream']}{str(e)}")
+            except Exception:
+                yield rx.window_alert(self._t["err_stream"])
             finally:
                 self.loading = False
 
@@ -446,9 +426,9 @@ class State(rx.State):
                         filename=f"PreConsult_Report{datetime.now().strftime('_%y%m%d%H%M')}.pdf"
                     )
                 else:
-                    yield rx.window_alert(f"{self._t['err_download']}{resp.text}")
-            except Exception as e:
-                yield rx.window_alert(f"{self._t['err_download_gen']}{str(e)}")
+                    yield rx.window_alert(self._t["err_download"])
+            except Exception:
+                yield rx.window_alert(self._t["err_download_gen"])
             finally:
                 self.loading = False
 
@@ -471,28 +451,4 @@ class AdminState(rx.State):
             self.analytics_data = []
 
     async def fetch_analytics_data(self):
-        if get_redis is None:
-            return
-        
-        client = get_redis()
-        from datetime import date, timedelta
-        data = []
-        
-        for i in range(7):
-            day = date.today() - timedelta(days=i)
-            day_str = day.isoformat()
-            key = f"analytics:{day_str}"
-            
-            raw_stats = await client.hgetall(key)
-            stats = {
-                "date": day_str,
-                "demographics": int(raw_stats.get("demographics_submitted", 0)),
-                "complaint": int(raw_stats.get("complaint_submitted", 0)),
-                "history": int(raw_stats.get("history_submitted", 0)),
-                "lifestyle": int(raw_stats.get("lifestyle_submitted", 0)),
-                "summary": int(raw_stats.get("summary_generated", 0)),
-                "pdf": int(raw_stats.get("pdf_downloaded", 0)),
-            }
-            data.append(stats)
-            
-        self.analytics_data = list(reversed(data))
+        self.analytics_data = await fetch_analytics_data()

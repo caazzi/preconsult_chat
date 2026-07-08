@@ -7,14 +7,16 @@ the application starts quickly. Includes Redis-backed ephemeral state.
 """
 import json
 import logging
+from datetime import date, timedelta
 from typing import AsyncGenerator
-from fastapi import APIRouter, HTTPException, Security, Depends
+from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from langchain_core.runnables import Runnable
 
 from preconsult.core.config import PRECONSULT_API_KEY
+from preconsult.core.errors import RedisUnavailableError, LLMUnavailableError
 from preconsult.services.agent_service import (
     stream_interview_questions,
     get_interview_chain,
@@ -26,10 +28,9 @@ from preconsult.services.session_service import (
     update_session,
     check_rate_limit,
     check_session_quota,
-    increment_session_quota
+    increment_session_quota,
+    get_redis,
 )
-from fastapi import Request
-
 # --- Security & Helper Functions ---
 API_KEY_HEADER = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
@@ -124,7 +125,6 @@ async def get_initial_questions_streamed(
 ):
     """ Streams interview questions based on chief complaint. """
     ip = fastapi_req.client.host
-    # Max 5 calls per minute for streaming
     if not await check_rate_limit(f"stream:{ip}", limit=5, window=60):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait a moment.")
 
@@ -132,19 +132,15 @@ async def get_initial_questions_streamed(
     if not session_data:
         raise HTTPException(status_code=404, detail="Session expired or invalid")
         
-    try:
-        sanitized_complaint = _sanitize_input(request.chief_complaint)
-        await update_session(request.session_id, {"chief_complaint": sanitized_complaint})
-        session_data["chief_complaint"] = sanitized_complaint
-        
-        async def event_generator():
-            async for chunk in stream_interview_questions(session_data, session_data.get("lang", "en"), chain):
-                yield f"data: {json.dumps(chunk)}\n\n"
+    sanitized_complaint = _sanitize_input(request.chief_complaint)
+    await update_session(request.session_id, {"chief_complaint": sanitized_complaint})
+    session_data["chief_complaint"] = sanitized_complaint
+    
+    async def event_generator():
+        async for chunk in stream_interview_questions(session_data, session_data.get("lang", "en"), chain):
+            yield f"data: {json.dumps(chunk)}\n\n"
 
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
-    except Exception as e:
-        logging.error(f"Unhandled exception in initial questions: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to generate questions. Please try again.")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.post("/interview-questions-stream")
 async def get_interview_questions_streamed(
@@ -154,7 +150,6 @@ async def get_interview_questions_streamed(
 ):
     """Streams targeted interview questions based on full form context. Single LLM call."""
     ip = fastapi_req.client.host
-    # Max 5 calls per minute for streaming
     if not await check_rate_limit(f"stream:{ip}", limit=5, window=60):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait a moment.")
 
@@ -162,17 +157,13 @@ async def get_interview_questions_streamed(
     if not session_data:
         raise HTTPException(status_code=404, detail="Session expired or invalid")
 
-    try:
-        lang = session_data.get("lang", "en")
+    lang = session_data.get("lang", "en")
 
-        async def event_generator():
-            async for chunk in stream_interview_questions(session_data, lang, chain):
-                yield f"data: {json.dumps(chunk)}\n\n"
+    async def event_generator():
+        async for chunk in stream_interview_questions(session_data, lang, chain):
+            yield f"data: {json.dumps(chunk)}\n\n"
 
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
-    except Exception as e:
-        logging.error(f"Unhandled exception in interview questions: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to generate questions. Please try again.")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @router.post("/generate-pdf")
 async def generate_pdf_endpoint(request: GeneratePdfRequest):
@@ -181,15 +172,53 @@ async def generate_pdf_endpoint(request: GeneratePdfRequest):
     if not session_data:
         raise HTTPException(status_code=404, detail="Session expired or invalid")
 
+    qa_pairs = [{"question": pair.question, "answer": pair.answer} for pair in request.qa_pairs]
+    pdf_bytes, filename = generate_pdf_report_in_memory(
+        form=session_data,
+        qa_pairs=qa_pairs,
+        lang=session_data.get("lang", "en")
+    )
+    headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
+    return Response(content=pdf_bytes, media_type='application/pdf', headers=headers)
+
+
+class AnalyticsEventRequest(BaseModel):
+    event: str
+
+
+@router.post("/analytics/event")
+async def log_analytics_event(request: AnalyticsEventRequest):
     try:
-        qa_pairs = [{"question": pair.question, "answer": pair.answer} for pair in request.qa_pairs]
-        pdf_bytes, filename = generate_pdf_report_in_memory(
-            form=session_data,
-            qa_pairs=qa_pairs,
-            lang=session_data.get("lang", "en")
-        )
-        headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
-        return Response(content=pdf_bytes, media_type='application/pdf', headers=headers)
+        client = get_redis()
+        today_str = date.today().isoformat()
+        key = f"analytics:{today_str}"
+        await client.hincrby(key, request.event, 1)
+        await client.expire(key, 30 * 24 * 60 * 60)
     except Exception as e:
-        logging.error(f"Unhandled exception in PDF generation: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="An unexpected error occurred. Please try again.")
+        logging.error(f"Falha ao registrar analytics: {e}")
+    return {"status": "ok"}
+
+
+@router.get("/analytics/stats")
+async def get_analytics_stats():
+    data = []
+    try:
+        client = get_redis()
+        for i in range(7):
+            day = date.today() - timedelta(days=i)
+            day_str = day.isoformat()
+            key = f"analytics:{day_str}"
+            raw_stats = await client.hgetall(key)
+            stats = {
+                "date": day_str,
+                "demographics": int(raw_stats.get("demographics_submitted", 0)),
+                "complaint": int(raw_stats.get("complaint_submitted", 0)),
+                "history": int(raw_stats.get("history_submitted", 0)),
+                "lifestyle": int(raw_stats.get("lifestyle_submitted", 0)),
+                "summary": int(raw_stats.get("summary_generated", 0)),
+                "pdf": int(raw_stats.get("pdf_downloaded", 0)),
+            }
+            data.append(stats)
+    except Exception as e:
+        logging.error(f"Falha ao buscar analytics: {e}")
+    return list(reversed(data))

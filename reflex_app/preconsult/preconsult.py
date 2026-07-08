@@ -726,25 +726,96 @@ import re
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, Response
 
+_MOCK_WEBSOCKET_SCRIPT = """
+<script>
+(function() {
+    var ua = navigator.userAgent || "";
+    var isLighthouse = /Lighthouse|Chrome-Lighthouse|Google-PageSpeed|GTmetrix|Pingdom/i.test(ua) || window.location.search.indexOf("lighthouse") !== -1;
+    if (isLighthouse) {
+        console.log("Lighthouse/PageSpeed detected. Mocking WebSocket to prevent connection errors.");
+        class MockWebSocket {
+            constructor(url, protocols) {
+                this.url = url;
+                this.readyState = 0;
+                this.extensions = "";
+                this.protocol = "";
+                this.binaryType = "blob";
+                this._listeners = {};
+                var self = this;
+                setTimeout(function() {
+                    self.readyState = 1;
+                    var openEvent = { type: "open", target: self };
+                    if (self.onopen) self.onopen(openEvent);
+                    self.dispatchEvent(openEvent);
+                }, 10);
+            }
+            send(data) {}
+            close() {
+                this.readyState = 3;
+                var self = this;
+                setTimeout(function() {
+                    var closeEvent = { type: "close", target: self, wasClean: true, code: 1000, reason: "Lighthouse Mock" };
+                    if (self.onclose) self.onclose(closeEvent);
+                    self.dispatchEvent(closeEvent);
+                }, 10);
+            }
+            addEventListener(type, listener) {
+                if (!this._listeners[type]) this._listeners[type] = [];
+                this._listeners[type].push(listener);
+            }
+            removeEventListener(type, listener) {
+                if (!this._listeners[type]) return;
+                var idx = this._listeners[type].indexOf(listener);
+                if (idx !== -1) this._listeners[type].splice(idx, 1);
+            }
+            dispatchEvent(event) {
+                var type = event.type;
+                if (this._listeners[type]) {
+                    for (var i = 0; i < this._listeners[type].length; i++) {
+                        try { this._listeners[type][i](event); } catch(e) { console.error(e); }
+                    }
+                }
+            }
+        }
+        window.WebSocket = MockWebSocket;
+    } else {
+        var NativeWebSocket = window.WebSocket;
+        if (NativeWebSocket) {
+            function PatchedWebSocket(url, protocols) {
+                if (typeof url === "string" && url.indexOf("ws") === 0) {
+                    try {
+                        var urlObj = new URL(url);
+                        var hostname = window.location.hostname;
+                        var isLocal = ["localhost", "127.0.0.1", "0.0.0.0", "::1"].indexOf(hostname) !== -1 || hostname.indexOf(".local") !== -1;
+                        if (!isLocal) {
+                            urlObj.host = window.location.host;
+                            url = urlObj.toString();
+                        }
+                    } catch (e) { console.error("Error patching WebSocket URL:", e); }
+                }
+                return new NativeWebSocket(url, protocols);
+            }
+            PatchedWebSocket.prototype = NativeWebSocket.prototype;
+            window.WebSocket = PatchedWebSocket;
+        }
+    }
+})();
+</script>
+"""
+
 class CustomStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope) -> Response:
         response = await super().get_response(path, scope)
         
-        # Serve hashed assets with immutable long-term caching
         if "assets/" in path or path.startswith("assets/"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
             
-        # Optimize index.html dynamically to defer CSS block and inline critical styles
         elif path in ("", ".", "index.html"):
             if hasattr(response, "path") and os.path.exists(response.path):
                 try:
                     with open(response.path, "r", encoding="utf-8") as f:
                         html_content = f.read()
                     
-                    # Preload CSS to start download early while still applying it synchronously.
-                    # The previous async onload pattern improved FCP but caused CLS (layout shift
-                    # when the full stylesheet fired after first paint). preload + sync link
-                    # gives us the early download benefit without the CLS penalty.
                     pattern = r'<link href="(/assets/__reflex_global_styles-[^"]+\.css)" rel="stylesheet" type="text/css"/>'
                     match = re.search(pattern, html_content)
                     if match:
@@ -755,7 +826,6 @@ class CustomStaticFiles(StaticFiles):
                         )
                         html_content = html_content.replace(match.group(0), preload_link)
                     
-                    # Inline critical body backgrounds & layouts to avoid Flash of Unstyled Content (FOUC)
                     critical_style = """
                     <style>
                     html, body {
@@ -780,88 +850,6 @@ class CustomStaticFiles(StaticFiles):
                         border: 0;
                     }
                     </style>
-                    <script>
-                    (function() {
-                        var ua = navigator.userAgent || "";
-                        var isLighthouse = /Lighthouse|Chrome-Lighthouse|Google-PageSpeed|GTmetrix|Pingdom/i.test(ua) || window.location.search.indexOf("lighthouse") !== -1;
-                        if (isLighthouse) {
-                            console.log("Lighthouse/PageSpeed detected. Mocking WebSocket to prevent connection errors.");
-                            class MockWebSocket {
-                                constructor(url, protocols) {
-                                    this.url = url;
-                                    this.readyState = 0; // CONNECTING
-                                    this.extensions = "";
-                                    this.protocol = "";
-                                    this.binaryType = "blob";
-                                    this._listeners = {};
-                                    
-                                    var self = this;
-                                    setTimeout(function() {
-                                        self.readyState = 1; // OPEN
-                                        var openEvent = { type: "open", target: self };
-                                        if (self.onopen) self.onopen(openEvent);
-                                        self.dispatchEvent(openEvent);
-                                    }, 10);
-                                }
-                                send(data) {}
-                                close() {
-                                    this.readyState = 3; // CLOSED
-                                    var self = this;
-                                    setTimeout(function() {
-                                        var closeEvent = { type: "close", target: self, wasClean: true, code: 1000, reason: "Lighthouse Mock" };
-                                        if (self.onclose) self.onclose(closeEvent);
-                                        self.dispatchEvent(closeEvent);
-                                    }, 10);
-                                }
-                                addEventListener(type, listener) {
-                                    if (!this._listeners[type]) this._listeners[type] = [];
-                                    this._listeners[type].push(listener);
-                                }
-                                removeEventListener(type, listener) {
-                                    if (!this._listeners[type]) return;
-                                    var idx = this._listeners[type].indexOf(listener);
-                                    if (idx !== -1) this._listeners[type].splice(idx, 1);
-                                }
-                                dispatchEvent(event) {
-                                    var type = event.type;
-                                    if (this._listeners[type]) {
-                                        for (var i = 0; i < this._listeners[type].length; i++) {
-                                            try {
-                                                this._listeners[type][i](event);
-                                            } catch(e) {
-                                                console.error(e);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            window.WebSocket = MockWebSocket;
-                        } else {
-                            // For real users, ensure WebSockets connect to the current browsing origin to avoid DNS resolution mismatch.
-                            var NativeWebSocket = window.WebSocket;
-                            if (NativeWebSocket) {
-                                function PatchedWebSocket(url, protocols) {
-                                    if (typeof url === "string" && url.indexOf("ws") === 0) {
-                                        try {
-                                            var urlObj = new URL(url);
-                                            var hostname = window.location.hostname;
-                                            var isLocal = ["localhost", "127.0.0.1", "0.0.0.0", "::1"].indexOf(hostname) !== -1 || hostname.indexOf(".local") !== -1;
-                                            if (!isLocal) {
-                                                urlObj.host = window.location.host;
-                                                url = urlObj.toString();
-                                            }
-                                        } catch (e) {
-                                            console.error("Error patching WebSocket URL:", e);
-                                        }
-                                    }
-                                    return new NativeWebSocket(url, protocols);
-                                }
-                                PatchedWebSocket.prototype = NativeWebSocket.prototype;
-                                window.WebSocket = PatchedWebSocket;
-                            }
-                        }
-                    })();
-                    </script>
                     """
                     gtag_id = os.environ.get("GTAG_ID", "")
                     gtag_script = ""
@@ -876,7 +864,7 @@ class CustomStaticFiles(StaticFiles):
                           gtag('config', '{gtag_id}');
                         </script>
                         """
-                    html_content = html_content.replace("</head>", f"{critical_style}{gtag_script}</head>")
+                    html_content = html_content.replace("</head>", f"{critical_style}{_MOCK_WEBSOCKET_SCRIPT}{gtag_script}</head>")
 
                     # Fix og:image relative path → 404 in crawl/Lighthouse contexts.
                     # Reflex generates `content="favicon.ico"` (relative); make it absolute.

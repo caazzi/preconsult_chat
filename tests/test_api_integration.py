@@ -203,3 +203,13 @@ async def test_analytics_stats_endpoint(mock_get_redis):
     assert len(data) == 7
     assert data[-1]["demographics"] == 5
     assert data[-1]["pdf"] == 1
+
+
+@pytest.mark.asyncio
+async def test_health_endpoint():
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "healthy"
+    assert body["redis"] in ("ok", "unavailable")

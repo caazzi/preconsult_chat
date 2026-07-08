@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from google.api_core.exceptions import GoogleAPIError
 from preconsult.api.endpoints import router as api_router
 from preconsult.core.config import SENTRY_DSN
+from preconsult.services.session_service import get_redis, _redis_available
 from preconsult.core.errors import (
     RedisUnavailableError,
     LLMUnavailableError,
@@ -47,3 +48,9 @@ app.include_router(api_router, prefix="/api", tags=["Medical Chat"])
 @app.get("/", tags=["Root"])
 async def read_root():
     return {"message": "Welcome to the PreConsult API. Go to /docs for the API documentation."}
+
+
+@app.get("/health", tags=["Health"])
+async def health():
+    redis_status = "ok" if _redis_available is not False else "unavailable"
+    return {"status": "healthy", "redis": redis_status}

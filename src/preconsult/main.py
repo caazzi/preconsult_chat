@@ -97,3 +97,33 @@ async def sitemap_xml():
         media_type="application/xml",
         headers={"Cache-Control": "public, max-age=86400"}
     )
+
+
+@app.get("/llms.txt", include_in_schema=False)
+async def llms_txt():
+    content = (
+        "# PreConsult — AI Medical Intake Assistant\n\n"
+        "> Privacy-first guided AI interview helper for patient intake. "
+        "Zero data persistence. No account required.\n\n"
+        "PreConsult helps patients organize symptoms and prepare for "
+        "doctor's appointments through a structured multi-step intake form. "
+        "The entire process runs in-browser, uses Google Vertex AI (Gemini) "
+        "to generate targeted clinical questions, and produces a downloadable "
+        "PDF report. All data is deleted when the browser tab is closed.\n\n"
+        "Key principles:\n"
+        "- Zero data persistence: No data stored on servers after session ends\n"
+        "- No account required: Fully anonymous usage\n"
+        "- AI-powered clinical questions via Google Vertex AI (Gemini 2.5 Flash Lite)\n"
+        "- Multi-language: English and Portuguese (Brazil)\n"
+        "- PDF report generation with form data and Q&A\n"
+        "- Privacy-first: No tracking, no cookies, no PII collected\n\n"
+        "## Pages\n\n"
+        "- [Homepage](https://pre-consult.org/): Main intake form with 6-step wizard\n"
+        "- [Admin Dashboard](https://pre-consult.org/admin/dashboard): "
+        "Analytics funnel (token-gated)\n"
+    )
+    return Response(
+        content=content,
+        media_type="text/markdown",
+        headers={"Cache-Control": "public, max-age=3600"}
+    )

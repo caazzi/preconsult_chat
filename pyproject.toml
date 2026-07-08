@@ -3,7 +3,7 @@ name = "preconsult"
 version = "0.1.0"
 description = "PreConsult - Privacy-First Medical Intake Assistant"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi==0.136.1",
     "gunicorn==23.0.0",
@@ -18,13 +18,13 @@ dependencies = [
     "reflex==0.9.1",
     "sentry-sdk==2.26.1",
     "cachetools==5.5.2",
-    "pytest-cov[test]>=7.1.0",
 ]
 
 [project.optional-dependencies]
 test = [
     "pytest",
     "pytest-asyncio",
+    "pytest-cov>=7.1.0",
     "httpx",
 ]
 

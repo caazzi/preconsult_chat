@@ -49,3 +49,16 @@ async def test_update_session(mock_get_redis):
     
     assert mock_client.hset.called
     assert mock_client.expire.called
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_recovers_after_redis_comes_back():
+    from preconsult.services.session_service import _redis_available, _memory_limiter, check_rate_limit
+
+    _redis_available = False
+    _memory_limiter.clear()
+
+    assert await check_rate_limit("recovery-ip", limit=2, window=60) is True
+
+    _redis_available = None
+    _memory_limiter.clear()

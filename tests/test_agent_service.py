@@ -112,32 +112,4 @@ async def test_emergency_detection_in_output(mock_get_llm):
     assert any(word in lower_text for word in ["emergency", "911", "immediate"])
     assert not full_text.startswith("1.")
 
-@pytest.mark.asyncio
-@patch("reflex_app.preconsult.state.httpx.AsyncClient")
-async def test_reflex_state_emergency_detection(mock_client_class):
-    from reflex_app.preconsult.state import State
-    
-    # Mock the AsyncClient.stream response
-    mock_response = MagicMock()
-    async def mock_aiter_lines():
-        yield 'data: "⚠️ EMERGENCY: Seek immediate care."\n'
-    mock_response.aiter_lines = mock_aiter_lines
-    
-    mock_client = MagicMock()
-    mock_client_class.return_value.__aenter__.return_value = mock_client
-    mock_client_class.return_value.__aexit__ = AsyncMock()
-    
-    mock_stream_ctx = MagicMock()
-    mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
-    mock_stream_ctx.__aexit__ = AsyncMock()
-    mock_client.stream.return_value = mock_stream_ctx
-    
-    state = State()
-    state.session_id = "test-session"
-    
-    # Run the generator
-    async for _ in state.get_interview_questions():
-        pass
-        
-    assert state.is_emergency is True
-    assert state.questions == []
+

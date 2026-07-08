@@ -152,3 +152,54 @@ async def test_full_session_happy_path(mock_inc, mock_quota, mock_rate, mock_cre
         resp3 = await client.post("/api/generate-pdf", json=payload, headers=HEADERS)
         assert resp3.status_code == 200
         assert resp3.content.startswith(b"%PDF-")
+
+
+@pytest.mark.asyncio
+async def test_missing_api_key_returns_403():
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/session/init", json=FULL_SESSION_PAYLOAD)
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_wrong_api_key_returns_403():
+    headers = {"X-API-KEY": "wrong_key"}
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/session/init", json=FULL_SESSION_PAYLOAD, headers=headers)
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+@patch("preconsult.api.endpoints.get_redis")
+async def test_analytics_event_endpoint(mock_get_redis):
+    from datetime import date
+    mock_client = AsyncMock()
+    mock_get_redis.return_value = mock_client
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/analytics/event", json={"event": "test_event"}, headers=HEADERS)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+    expected_key = f"analytics:{date.today().isoformat()}"
+    mock_client.hincrby.assert_called_once_with(expected_key, "test_event", 1)
+    mock_client.expire.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("preconsult.api.endpoints.get_redis")
+async def test_analytics_stats_endpoint(mock_get_redis):
+    mock_client = AsyncMock()
+    mock_client.hgetall.return_value = {
+        "demographics_submitted": "5",
+        "complaint_submitted": "3",
+        "pdf_downloaded": "1",
+    }
+    mock_get_redis.return_value = mock_client
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/analytics/stats", headers=HEADERS)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 7
+    assert data[-1]["demographics"] == 5
+    assert data[-1]["pdf"] == 1

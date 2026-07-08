@@ -98,3 +98,26 @@ class TestP6_Sprint5Features:
         system_msg = str(prompt.messages[0])
         assert "emergency" in system_msg.lower()
         assert "do not generate questions" in system_msg.lower()
+
+
+class TestP7_BuildMode:
+    def test_build_mode_allows_startup_without_api_key(self):
+        import dotenv
+        original_load_dotenv = dotenv.load_dotenv
+        dotenv.load_dotenv = lambda *args, **kwargs: None
+        saved_key = os.environ.pop("PRECONSULT_API_KEY", None)
+        saved_build = os.environ.get("BUILD_MODE")
+        os.environ["BUILD_MODE"] = "true"
+        try:
+            import preconsult.core.config as cfg
+            import importlib
+            importlib.reload(cfg)
+            assert cfg.PRECONSULT_API_KEY is None
+        finally:
+            dotenv.load_dotenv = original_load_dotenv
+            if saved_key is not None:
+                os.environ["PRECONSULT_API_KEY"] = saved_key
+            if saved_build:
+                os.environ["BUILD_MODE"] = saved_build
+            else:
+                os.environ.pop("BUILD_MODE", None)

@@ -72,3 +72,23 @@ async def test_session_quota():
             resp21 = await client.post("/api/session/init", json=payload, headers=headers)
             assert resp21.status_code == 429
             assert "Daily session limit reached" in resp21.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_fallback_memory():
+    from preconsult.services.session_service import _redis_available, _memory_limiter, check_rate_limit, check_session_quota, increment_session_quota
+
+    _redis_available = False
+    _memory_limiter.clear()
+
+    assert await check_rate_limit("test-ip", limit=2, window=60) is True
+    assert await check_rate_limit("test-ip", limit=2, window=60) is True
+    assert await check_rate_limit("test-ip", limit=2, window=60) is False
+
+    assert await check_session_quota("test-quota", limit=20) is True
+    for _ in range(20):
+        await increment_session_quota("test-quota")
+    assert await check_session_quota("test-quota", limit=20) is False
+
+    _redis_available = None
+    _memory_limiter.clear()

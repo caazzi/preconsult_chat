@@ -1,6 +1,6 @@
 import pytest
 import reflex as rx
-from reflex_app.preconsult.preconsult import header, stepper_component, step_2_history, admin_dashboard
+from reflex_app.preconsult.preconsult import header, stepper_component, step_0_landing, step_1_demographics, step_2_chief_complaint, step_3_history, step_4_lifestyle, step_5_interview_qs, step_6_summary, error_callout, admin_dashboard
 from reflex_app.preconsult.state import State
 
 def test_header_rendering():
@@ -13,8 +13,28 @@ def test_stepper_component_rendering():
     assert isinstance(comp, rx.Component)
     assert comp is not None
 
-def test_step_2_history_rendering():
-    comp = step_2_history()
+def test_error_callout_rendering():
+    comp = error_callout()
+    assert isinstance(comp, rx.Component)
+    assert comp is not None
+
+def test_step_0_landing_rendering():
+    comp = step_0_landing()
+    assert isinstance(comp, rx.Component)
+    assert comp is not None
+
+def test_step_1_demographics_rendering():
+    comp = step_1_demographics()
+    assert isinstance(comp, rx.Component)
+    assert comp is not None
+
+def test_step_2_chief_complaint_rendering():
+    comp = step_2_chief_complaint()
+    assert isinstance(comp, rx.Component)
+    assert comp is not None
+
+def test_step_3_history_rendering():
+    comp = step_3_history()
     assert isinstance(comp, rx.Component)
     assert comp is not None
 
@@ -23,13 +43,40 @@ def test_admin_dashboard_rendering():
     assert isinstance(comp, rx.Component)
     assert comp is not None
 
+def test_step_4_lifestyle_rendering():
+    comp = step_4_lifestyle()
+    assert isinstance(comp, rx.Component)
+    assert comp is not None
+
+def test_step_5_interview_qs_rendering():
+    comp = step_5_interview_qs()
+    assert isinstance(comp, rx.Component)
+    assert comp is not None
+
+def test_step_6_summary_rendering():
+    comp = step_6_summary()
+    assert isinstance(comp, rx.Component)
+    assert comp is not None
+
 def test_state_step_progress():
     state = State()
     state.step = 0
-    assert state.step_progress == 16  # int(1/6 * 100) = 16
+    assert state.step_progress == 14  # int(1/7 * 100) = 14
     
-    state.step = 5
+    state.step = 6
     assert state.step_progress == 100
+
+def test_state_clear_conditions():
+    state = State()
+    state.conditions = ["asthma", "diabetes"]
+    state.clear_conditions()
+    assert state.conditions == []
+
+def test_state_question_index():
+    state = State()
+    assert state.question_index == 0
+    state.set_question_index(3)
+    assert state.question_index == 3
 
 def test_custom_static_files_injection(tmp_path):
     from reflex_app.preconsult.preconsult import CustomStaticFiles

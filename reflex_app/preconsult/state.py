@@ -86,7 +86,7 @@ class State(rx.State):
 
     @rx.var
     def step_progress(self) -> int:
-        return int(((self.step + 1) / 6) * 100)
+        return int(((self.step + 1) / 7) * 100)
     
     # --- General Form State ---
     gender: str = ""
@@ -95,7 +95,7 @@ class State(rx.State):
     
     # --- Step 2: Chief Complaint ---
     specialist: str = ""
-    age_bracket: str = "26-35"
+    age_bracket: str = ""
     chief_complaint: str = ""
     duration: str = ""
     complaint_detail: str = ""
@@ -117,9 +117,10 @@ class State(rx.State):
     _qs_buffer: str = ""
     summary_text: str = ""
     is_emergency: bool = False
+    question_index: int = 0
     
     # --- UI State ---
-    step: int = 0  # 0: Demographics, 1-4: Form, 5: Q&A, 6: Summary
+    step: int = 0  # 0: Landing, 1: Demographics, 2-5: Form, 6: Q&A, 7: Summary
     loading: bool = False
     error_message: str = ""
 
@@ -165,6 +166,9 @@ class State(rx.State):
         else:
             self.conditions.append(condition)
 
+    def clear_conditions(self):
+        self.conditions = []
+
     def toggle_family_history(self, item: str):
         if item in self.family_history:
             self.family_history.remove(item)
@@ -202,6 +206,9 @@ class State(rx.State):
         answers = self.current_answers.copy()
         answers[idx] = val
         self.current_answers = answers
+
+    def set_question_index(self, idx: int):
+        self.question_index = idx
 
     def log_analytics_event(self, event_name: str):
         import asyncio
@@ -244,29 +251,34 @@ class State(rx.State):
             self.step -= 1
         self.error_message = ""
 
-    def go_to_step_1(self):
+    def start_intake(self):
+        self.error_message = ""
+        self.step = 1
+        self.log_analytics_event("intake_started")
+
+    def go_to_step_2(self):
         if not self.gender.strip():
             self.error_message = self._t.get("err_gender", "Please select a biological sex.")
             return
         self.error_message = ""
-        self.step = 1
+        self.step = 2
         self.log_analytics_event("demographics_submitted")
 
-    def go_to_step_2(self):
+    def go_to_step_3(self):
         if not self.specialist.strip() or not self.chief_complaint.strip():
             self.error_message = self._t["err_chief_complaint"]
             return
         self.error_message = ""
-        self.step = 2
+        self.step = 3
         self.log_analytics_event("complaint_submitted")
 
-    def go_to_step_3(self):
+    def go_to_step_4(self):
         self.error_message = ""
-        self.step = 3
+        self.step = 4
         self.log_analytics_event("history_submitted")
 
-    def go_to_step_4(self):
-        self.step = 4
+    def go_to_step_5(self):
+        self.step = 5
 
     async def init_session(self):
         """Step 4 -> Step 5: Initialize Redis session."""
@@ -304,11 +316,12 @@ class State(rx.State):
                         self.error_message = self._t["err_generic"]
                         return
                     self.session_id = session_id
-                    self.step = 4
+                    self.step = 5
                     self.error_message = ""
                     self.log_analytics_event("lifestyle_submitted")
                     self.current_answers = []
                     self.questions = []
+                    self.question_index = 0
                     self.is_emergency = False
                     async for item in self.get_interview_questions():
                         yield item
@@ -326,6 +339,7 @@ class State(rx.State):
         self._qs_buffer = ""
         self.questions = []
         self.current_answers = []
+        self.question_index = 0
         self.is_emergency = False
         self.error_message = ""
         yield
@@ -385,7 +399,7 @@ class State(rx.State):
             f"Chief Complaint: {self.chief_complaint}\n\n"
             f"--- Questions & Answers ---\n{qs_ans_text}"
         )
-        self.step = 5
+        self.step = 6
         self.log_analytics_event("summary_generated")
 
     async def download_report(self):

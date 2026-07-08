@@ -13,7 +13,8 @@ def error_callout() -> rx.Component:
             State.error_message,
             icon="triangle_alert",
             color_scheme="red",
-            variant="soft",
+            variant="solid",
+            size="3",
             width="100%",
             margin_bottom="0.5em",
             role="alert",
@@ -51,7 +52,7 @@ def form_step_layout(
             *header_items,
             rx.text(description, color_scheme="gray"),
             rx.divider(),
-            width="100%", spacing="2",
+            width="100%", spacing="3",
             animation="fadeInUp 0.4s ease-out 0s both"
         ),
         content,
@@ -60,19 +61,19 @@ def form_step_layout(
                 State.t["back_btn"],
                 on_click=back_on_click,
                 color_scheme="gray", variant="outline",
-                size="3", width="100%", min_height="44px",
+                size="4", width="100%", min_height="48px",
             ),
             rx.button(
                 State.t[next_text_key],
                 on_click=next_on_click,
                 color_scheme=next_color,
-                size="3", width="100%", min_height="44px",
+                size="4", width="100%", min_height="48px",
                 loading=next_loading,
             ),
-            columns="2", spacing="3", width="100%",
+            columns="2", spacing="4", width="100%",
             animation="fadeInUp 0.4s ease-out 0.3s both"
         ),
-        width="100%", spacing="3"
+        width="100%", spacing="4"
     )
 
 
@@ -81,16 +82,19 @@ def header() -> rx.Component:
         rx.heading(State.t["title"], size={"initial": "5", "xs": "6", "sm": "7"}, color_scheme="cyan"),
         rx.spacer(),
         rx.hstack(
-            rx.el.label(
-                rx.text(State.t["lang_select_sr"], class_name="sr-only"),
-                rx.select(
-                    ["en", "pt"],
-                    on_change=State.set_lang,
-                    value=State.lang,
-                    width="70px",
-                    min_height="44px",
-                    variant="ghost",
-                    aria_label="Select language"
+            rx.cond(
+                State.step == 0,
+                rx.el.label(
+                    rx.text(State.t["lang_select_sr"], class_name="sr-only"),
+                    rx.select(
+                        ["en", "pt"],
+                        on_change=State.set_lang,
+                        value=State.lang,
+                        width="70px",
+                        min_height="44px",
+                        variant="ghost",
+                        aria_label="Select language"
+                    ),
                 ),
             ),
             rx.color_mode.button(aria_label="Toggle color mode"),
@@ -105,61 +109,87 @@ def header() -> rx.Component:
         ),
     )
 
-def step_0_demographics() -> rx.Component:
+def step_0_landing() -> rx.Component:
     return rx.vstack(
-        error_callout(),
-        # Hero Section
+        rx.center(
+            rx.hstack(
+                rx.icon("shield", size=16, color="green"),
+                rx.text(State.t["privacy_badge_landing"], size="3", color_scheme="green", weight="bold", text_align="center"),
+                spacing="2", align_items="center",
+            ),
+            width="100%",
+            background="rgba(0, 255, 100, 0.08)",
+            border="1px solid rgba(0, 255, 100, 0.2)",
+            border_radius="8px", padding="0.5em",
+        ),
         rx.vstack(
             rx.badge("AI Assistant", color_scheme="cyan", variant="soft"),
-            rx.heading(State.t["hero_title"], size={"initial": "5", "xs": "6", "sm": "7"}, text_align="center", line_height="1.2"),
-            rx.text(State.t["hero_subtitle"], color_scheme="gray", size="2", text_align="center"),
-            spacing="2",
+            rx.heading(State.t["hero_title"], size={"initial": "6", "xs": "7", "sm": "8"}, text_align="center", line_height="1.2"),
+            rx.text(State.t["hero_subtitle"], color_scheme="gray", size="3", text_align="center"),
+            spacing="3",
             align_items="center",
             width="100%",
-            padding_bottom="0.5em",
+            padding_y="0.5em",
             animation="fadeInUp 0.4s ease-out 0s both"
         ),
-        # How it works (dialog trigger)
         rx.dialog.root(
             rx.dialog.trigger(
                 rx.button(
                     State.t["how_it_works"],
                     variant="ghost",
-                    size="2",
+                    size="3",
                     color_scheme="cyan",
                     width="100%",
-                    min_height="44px",
+                    min_height="48px",
                 ),
             ),
             rx.dialog.content(
                 rx.dialog.title(State.t["how_it_works_title"]),
                 rx.dialog.description(State.t["how_it_works_desc"]),
                 rx.vstack(
-                    rx.hstack(rx.icon("message-square", size=20), rx.text(State.t["step_how_1"], size="2")),
-                    rx.hstack(rx.icon("activity", size=20), rx.text(State.t["step_how_2"], size="2")),
-                    rx.hstack(rx.icon("file-text", size=20), rx.text(State.t["step_how_3"], size="2")),
-                    spacing="3", width="100%", align_items="start",
+                    rx.hstack(rx.icon("message-square", size=20), rx.text(State.t["step_how_1"], size="3")),
+                    rx.hstack(rx.icon("activity", size=20), rx.text(State.t["step_how_2"], size="3")),
+                    rx.hstack(rx.icon("file-text", size=20), rx.text(State.t["step_how_3"], size="3")),
+                    spacing="4", width="100%", align_items="start",
                 ),
-                rx.dialog.close(rx.button(State.t["got_it"], color_scheme="cyan", width="100%", min_height="44px")),
+                rx.dialog.close(rx.button(State.t["got_it"], color_scheme="cyan", width="100%", min_height="48px")),
                 max_width="400px", width="100%",
             ),
             animation="fadeInUp 0.4s ease-out 0.1s both",
         ),
+        rx.button(
+            State.t["start_cta"],
+            on_click=State.start_intake,
+            color_scheme="cyan",
+            size="4",
+            width="100%",
+            min_height="48px",
+            _hover={"transform": "scale(1.02)", "bg": "cyan.600"},
+            transition="all 0.2s ease",
+            animation="fadeInUp 0.4s ease-out 0.2s both"
+        ),
+        width="100%",
+        spacing="4"
+    )
+
+def step_1_demographics() -> rx.Component:
+    return rx.vstack(
+        error_callout(),
         rx.vstack(
-            rx.heading(State.t["intake"], size={"initial": "5", "sm": "6"}, margin_bottom="0.25em"),
+            rx.heading(State.t["intake"], size={"initial": "6", "sm": "7"}, margin_bottom="0.25em"),
             rx.text(State.t["intake_desc"], color_scheme="gray"),
             rx.divider(),
-            width="100%", spacing="2", animation="fadeInUp 0.4s ease-out 0.2s both"
+            width="100%", spacing="3", animation="fadeInUp 0.4s ease-out 0s both"
         ),
         rx.vstack(
             rx.text(State.t["age"], weight="bold"),
             rx.grid(
                 *[rx.button(bracket, on_click=State.set_age_bracket(bracket),
                             variant=rx.cond(State.age_bracket == bracket, "solid", "outline"),
-                            width="100%", min_height="44px")
+                            width="100%", min_height="48px")
                   for bracket in ["18-25", "26-35", "36-45", "46-60", "60+"]],
-                columns={"initial": "3", "sm": "5"},
-                spacing="2",
+                columns={"initial": "2", "sm": "5"},
+                spacing="3",
                 width="100%"
             ),
             rx.text(State.t["gender"], weight="bold"),
@@ -170,43 +200,49 @@ def step_0_demographics() -> rx.Component:
                 on_change=State.set_gender,
                 value=State.gender,
                 width="100%",
-                min_height="44px",
+                min_height="48px",
                 aria_label="Select your gender"
             ),
-            spacing="3",
+            spacing="4",
             width="100%",
             padding_y="0.5em",
-            animation="fadeInUp 0.4s ease-out 0.25s both"
+            animation="fadeInUp 0.4s ease-out 0.1s both"
         ),
         rx.button(
-            State.t["start_btn"], 
-            on_click=State.go_to_step_1, 
+            State.t["start_btn"],
+            on_click=State.go_to_step_2,
             color_scheme="cyan",
-            size="3",
+            size="4",
             width="100%",
-            min_height="44px",
+            min_height="48px",
             _hover={"transform": "scale(1.02)", "bg": "cyan.600"},
             transition="all 0.2s ease",
-            animation="fadeInUp 0.4s ease-out 0.3s both"
+            animation="fadeInUp 0.4s ease-out 0.2s both"
+        ),
+        rx.center(
+            rx.hstack(
+                rx.icon("shield", size=14, color="green"),
+                rx.text(State.t["privacy_step_note"], size="2", color_scheme="green", text_align="center"),
+                spacing="2", align_items="center",
+            ),
+            width="100%",
+            animation="fadeInUp 0.4s ease-out 0.25s both",
         ),
         width="100%",
-        spacing="3"
+        spacing="4"
     )
 
-def step_1_chief_complaint() -> rx.Component:
+def step_2_chief_complaint() -> rx.Component:
     content = rx.vstack(
-        rx.text(State.t["specialist"], weight="bold"),
-        rx.input(
-            placeholder=State.t["specialist_ph"],
-            on_change=State.set_specialist, value=State.specialist,
-            width="100%", min_height="44px",
-            aria_label="Specialist you are seeing"
-        ),
         rx.text(State.t["concern"], weight="bold"),
         rx.text_area(
             placeholder=State.t["concern_ph"],
-            on_change=State.set_chief_complaint, value=State.chief_complaint,
-            width="100%", height="65px", min_height="44px",
+            on_change=lambda val: (
+                State.set_chief_complaint(val),
+                State.set_complaint_detail("")
+            ),
+            value=State.chief_complaint,
+            width="100%", height="80px", min_height="48px",
             aria_label="Chief Complaint"
         ),
         rx.text(State.t["duration"], weight="bold"),
@@ -215,24 +251,24 @@ def step_1_chief_complaint() -> rx.Component:
                 State.duration_opts_with_keys,
                 lambda opt: rx.button(opt["label"], on_click=State.set_duration(opt["id"]),
                     variant=rx.cond(State.duration == opt["id"], "solid", "outline"),
-                    width="100%", min_height="44px")
+                    width="100%", min_height="48px")
             ),
-            columns={"initial": "3", "sm": "5"}, spacing="2", width="100%"
+            columns={"initial": "2", "sm": "5"}, spacing="3", width="100%"
         ),
-        rx.text(State.t["complaint_detail"], weight="bold"),
-        rx.text_area(
-            placeholder=State.t["complaint_detail_ph"],
-            on_change=State.set_complaint_detail, value=State.complaint_detail,
-            width="100%", height="65px", min_height="44px",
-            aria_label="Additional details"
+        rx.text(State.t["specialist"], weight="bold"),
+        rx.input(
+            placeholder=State.t["specialist_ph"],
+            on_change=State.set_specialist, value=State.specialist,
+            width="100%", min_height="48px",
+            aria_label="Specialist you are seeing"
         ),
-        spacing="3", width="100%"
+        spacing="4", width="100%"
     )
     return form_step_layout(
         State.t["step_1"], State.t["step_1_desc"], content,
-        back_on_click=State.go_back, next_on_click=State.go_to_step_2,
+        back_on_click=State.go_back, next_on_click=State.go_to_step_3,
     )
-def step_2_history() -> rx.Component:
+def step_3_history() -> rx.Component:
     def medication_item(med_idx):
         return rx.hstack(
             rx.input(
@@ -240,7 +276,7 @@ def step_2_history() -> rx.Component:
                 on_change=lambda val: State.update_medication(med_idx, val),
                 value=State.medications[med_idx],
                 flex="1",
-                min_height="44px",
+                min_height="48px",
                 aria_label="Medication name"
             ),
             rx.button(
@@ -253,8 +289,8 @@ def step_2_history() -> rx.Component:
                 on_click=lambda: State.remove_medication(med_idx), 
                 color_scheme="red", 
                 variant="outline",
-                min_height="44px",
-                width={"initial": "44px", "sm": "auto"},
+                min_height="48px",
+                width={"initial": "48px", "sm": "auto"},
                 aria_label="Remove medication"
             ),
             width="100%",
@@ -270,20 +306,29 @@ def step_2_history() -> rx.Component:
                     State.conditions_opts_with_keys,
                     lambda opt: rx.button(opt["label"], on_click=State.toggle_condition(opt["id"]),
                         variant=rx.cond(State.conditions.contains(opt["id"]), "solid", "outline"),
-                        width="100%", min_height="44px")
+                        width="100%", min_height="48px")
                 ),
-                columns={"initial": "2", "sm": "5"}, spacing="2", width="100%"
+                columns={"initial": "2", "sm": "5"}, spacing="3", width="100%"
+            ),
+            rx.button(
+                State.t["conditions_none"],
+                on_click=State.clear_conditions,
+                variant=rx.cond(State.conditions.length() == 0, "solid", "outline"),
+                width="100%", min_height="48px", color_scheme="gray",
             ),
             rx.text(State.t["medications_label"], weight="bold"),
             rx.vstack(
-                rx.foreach(State.medications, lambda m, i: medication_item(i)),
-                rx.button(State.t["add_medication"], on_click=State.add_medication, variant="ghost", min_height="44px"),
+                rx.cond(
+                    State.medications.length() > 0,
+                    rx.vstack(rx.foreach(State.medications, lambda m, i: medication_item(i)), width="100%"),
+                ),
+                rx.button(State.t["add_medication"], on_click=State.add_medication, variant="ghost", min_height="48px"),
                 align_items="start", width="100%"
             ),
             rx.text(State.t["allergies_label"], weight="bold"),
             rx.segmented_control.root(
-                rx.segmented_control.item(State.t["allergies_no"], value=State.t["allergies_no"], min_height="44px"),
-                rx.segmented_control.item(State.t["allergies_yes"], value=State.t["allergies_yes"], min_height="44px"),
+                rx.segmented_control.item(State.t["allergies_no"], value=State.t["allergies_no"], min_height="48px"),
+                rx.segmented_control.item(State.t["allergies_yes"], value=State.t["allergies_yes"], min_height="48px"),
                 on_change=lambda val: State.set_allergies_flag(val == State.t["allergies_yes"]),
                 value=rx.cond(State.allergies_flag, State.t["allergies_yes"], State.t["allergies_no"]),
                 width="100%", aria_label="Do you have any drug allergies?"
@@ -293,17 +338,17 @@ def step_2_history() -> rx.Component:
                 rx.text_area(
                     placeholder=State.t["allergies_ph"],
                     on_change=State.set_allergies_text, value=State.allergies_text,
-                    width="100%", min_height="44px",
+                    width="100%", min_height="48px",
                     animation="fadeInUp 0.2s ease-out both",
                     aria_label="List your drug allergies"
                 )
             ),
-            spacing="3", width="100%"
+            spacing="4", width="100%"
         ),
-        back_on_click=State.go_back, next_on_click=State.go_to_step_3,
+        back_on_click=State.go_back, next_on_click=State.go_to_step_4,
     )
 
-def step_3_lifestyle() -> rx.Component:
+def step_4_lifestyle() -> rx.Component:
     return form_step_layout(
         State.t["step_3"], State.t["step_3_desc"],
         rx.vstack(
@@ -313,9 +358,9 @@ def step_3_lifestyle() -> rx.Component:
                     State.family_history_opts_with_keys,
                     lambda opt: rx.button(opt["label"], on_click=State.toggle_family_history(opt["id"]),
                         variant=rx.cond(State.family_history.contains(opt["id"]), "solid", "outline"),
-                        width="100%", min_height="44px")
+                        width="100%", min_height="48px")
                 ),
-                columns={"initial": "2", "sm": "4"}, spacing="2", width="100%"
+                columns={"initial": "2", "sm": "4"}, spacing="3", width="100%"
             ),
             rx.text(State.t["smoking_label"], weight="bold"),
             rx.grid(
@@ -323,9 +368,9 @@ def step_3_lifestyle() -> rx.Component:
                     State.smoking_opts_with_keys,
                     lambda opt: rx.button(opt["label"], on_click=State.set_smoking(opt["id"]),
                         variant=rx.cond(State.smoking == opt["id"], "solid", "outline"),
-                        width="100%", min_height="44px")
+                        width="100%", min_height="48px")
                 ),
-                columns={"initial": "3"}, spacing="2", width="100%"
+                columns={"initial": "3"}, spacing="3", width="100%"
             ),
             rx.text(State.t["alcohol_label"], weight="bold"),
             rx.grid(
@@ -333,72 +378,98 @@ def step_3_lifestyle() -> rx.Component:
                     State.alcohol_opts_with_keys,
                     lambda opt: rx.button(opt["label"], on_click=State.set_alcohol(opt["id"]),
                         variant=rx.cond(State.alcohol == opt["id"], "solid", "outline"),
-                        width="100%", min_height="44px")
+                        width="100%", min_height="48px")
                 ),
-                columns={"initial": "2", "sm": "4"}, spacing="2", width="100%"
+                columns={"initial": "2", "sm": "4"}, spacing="3", width="100%"
             ),
-            spacing="3", width="100%"
+            spacing="4", width="100%"
         ),
         back_on_click=State.go_back, next_on_click=State.init_session,
         next_text_key="generate_qs_btn", next_loading=State.loading,
     )
 
 
-def step_4_interview_qs() -> rx.Component:
+def step_5_interview_qs() -> rx.Component:
     def question_item(q, idx):
         return rx.vstack(
+            rx.text(
+                State.t["question_counter"].replace("{current}", str(idx + 1)).replace("{total}", str(State.questions.length())),
+                size="2", color_scheme="gray", weight="bold",
+            ),
             rx.text(q, weight="bold"),
             rx.text_area(
                 placeholder=State.t["answers_ph"],
                 on_change=lambda val: State.set_answer(idx, val),
+                on_focus=State.set_question_index(idx),
                 value=State.current_answers[idx],
-                width="100%", height="65px", min_height="44px",
+                width="100%", height="80px", min_height="48px",
                 aria_label="Answer for clinical question"
             ),
-            width="100%", spacing="2"
+            width="100%", spacing="3"
         )
 
-    content = rx.cond(
-        State.is_emergency,
-        rx.vstack(
-            rx.hstack(
-                rx.icon("triangle_alert", size=28, color="red"),
-                rx.heading(
-                    rx.cond(State.lang == "pt", "AVISO DE EMERGÊNCIA", "EMERGENCY WARNING"),
-                    size="5", color="red",
-                ),
-                spacing="2", align_items="center",
+    def question_skeleton() -> rx.Component:
+        return rx.vstack(
+            rx.box(height="12px", width="40%", background="var(--slate-4)", border_radius="4px",
+                   animation="shimmer 1.5s ease-in-out infinite"),
+            rx.box(height="16px", width="80%", background="var(--slate-4)", border_radius="4px", margin_top="0.5em",
+                   animation="shimmer 1.5s ease-in-out infinite"),
+            rx.box(height="80px", width="100%", background="var(--slate-4)", border_radius="8px", margin_top="0.5em",
+                   animation="shimmer 1.5s ease-in-out infinite"),
+            rx.box(height="12px", width="30%", background="var(--slate-4)", border_radius="4px", margin_top="0.5em",
+                   animation="shimmer 1.5s ease-in-out infinite"),
+            rx.box(height="16px", width="70%", background="var(--slate-4)", border_radius="4px", margin_top="0.5em",
+                   animation="shimmer 1.5s ease-in-out infinite"),
+            rx.box(height="80px", width="100%", background="var(--slate-4)", border_radius="8px", margin_top="0.5em",
+                   animation="shimmer 1.5s ease-in-out infinite"),
+            width="100%", spacing="2", padding="1em",
+        )
+
+    content = rx.vstack(
+        rx.box(
+            rx.cond(
+                State.questions.length() > 0,
+                rx.vstack(rx.foreach(State.questions, lambda q, i: question_item(q, i)), width="100%"),
+                question_skeleton()
             ),
-            rx.text(State._qs_buffer, color="red", font_size="lg", font_weight="bold", text_align="center"),
-            rx.button(
-                rx.cond(State.lang == "pt", "Voltar para o Início", "Back to Start"),
-                on_click=rx.redirect("/"), color_scheme="gray",
-                width="100%", min_height="44px",
-            ),
-            width="100%", spacing="4", padding="2em",
-            border="2px solid red", border_radius="15px",
-            background="rgba(255, 0, 0, 0.15)",
+            width="100%", max_height={"sm": "320px"},
+            overflow_y="auto", padding_right="0.5em",
         ),
-        rx.vstack(
-            rx.box(
-                rx.cond(
-                    State.questions.length() > 0,
-                    rx.vstack(rx.foreach(State.questions, lambda q, i: question_item(q, i)), width="100%"),
-                    rx.center(rx.spinner(), width="100%", padding="2em")
+        rx.dialog.root(
+            rx.dialog.trigger(
+                rx.box(), # hidden trigger, opened via state
+            ),
+            rx.cond(
+                State.is_emergency,
+                rx.dialog.content(
+                    rx.hstack(
+                        rx.icon("triangle_alert", size=28, color="red"),
+                        rx.dialog.title(State.t["emergency_title"], color="red"),
+                        spacing="2", align_items="center",
+                    ),
+                    rx.text(State._qs_buffer, color="red", font_size="lg", font_weight="bold", text_align="center"),
+                    rx.text(State.t["emergency_body"], size="3"),
+                    rx.dialog.close(
+                        rx.button(
+                            State.t["emergency_cta"],
+                            on_click=rx.redirect("/"),
+                            color_scheme="red", variant="solid",
+                            width="100%", min_height="48px",
+                        ),
+                    ),
+                    max_width="450px", width="100%",
                 ),
-                width="100%", max_height={"sm": "320px"},
-                overflow_y="auto", padding_right="0.5em",
             ),
-            rx.grid(
-                rx.button(State.t["back_btn"], on_click=State.go_back,
-                    color_scheme="gray", variant="outline", size="3", width="100%", min_height="44px"),
-                rx.button(State.t["submit_continue"],
-                    on_click=State.submit_answers, loading=State.loading,
-                    color_scheme="cyan", size="3", width="100%", min_height="44px"),
-                columns="2", spacing="3", width="100%",
-            ),
-            width="100%", spacing="3",
         ),
+        rx.grid(
+            rx.button(State.t["back_btn"], on_click=State.go_back,
+                color_scheme="gray", variant="outline", size="4", width="100%", min_height="48px"),
+            rx.button(State.t["submit_continue"],
+                on_click=State.submit_answers, loading=State.loading,
+                color_scheme="cyan", size="4", width="100%", min_height="48px"),
+            columns="2", spacing="4", width="100%",
+        ),
+        width="100%", spacing="4",
     )
     return form_step_layout(
         State.t["step_4"], State.t["step_4_desc"],
@@ -408,41 +479,44 @@ def step_4_interview_qs() -> rx.Component:
         icon_name="clipboard-list",
     )
 
-def step_5_summary() -> rx.Component:
+def step_6_summary() -> rx.Component:
     return rx.vstack(
         error_callout(),
         rx.vstack(
             rx.heading(State.t["complete_title"], size={"initial": "7", "sm": "8"}, text_align="center"),
             rx.text(State.t["complete_desc"], text_align="center"),
             rx.divider(),
-            width="100%", spacing="2", animation="fadeInUp 0.4s ease-out 0s both"
+            width="100%", spacing="3", animation="fadeInUp 0.4s ease-out 0s both"
         ),
         rx.vstack(
             rx.button(
                 State.t["download_btn"],
                 on_click=State.download_report, loading=State.loading,
-                color_scheme="green", size="4", width="100%", padding="2em", min_height="44px",
+                color_scheme="green", size="4", width="100%", padding="1.5em", min_height="48px",
                 _hover={"transform": "scale(1.02)"}, transition="all 0.2s ease"
             ),
-            rx.button(
-                State.t["copy_btn"],
-                on_click=rx.set_clipboard(State.summary_text),
-                color_scheme="blue", variant="outline",
-                size="3", width="100%", min_height="44px"
+            rx.grid(
+                rx.button(
+                    State.t["copy_btn"],
+                    on_click=rx.set_clipboard(State.summary_text),
+                    color_scheme="blue", variant="outline",
+                    size="4", width="100%", min_height="48px"
+                ),
+                rx.button(
+                    State.t["start_new"],
+                    on_click=rx.redirect("/"),
+                    color_scheme="gray", variant="ghost",
+                    width="100%", min_height="48px",
+                    _hover={"transform": "scale(1.02)"}, transition="all 0.2s ease"
+                ),
+                columns="2", spacing="3", width="100%",
             ),
-            rx.button(
-                State.t["start_new"],
-                on_click=rx.redirect("/"),
-                color_scheme="gray", variant="ghost",
-                width="100%", min_height="44px",
-                _hover={"transform": "scale(1.02)"}, transition="all 0.2s ease"
-            ),
-            width="100%", spacing="2", animation="fadeInUp 0.4s ease-out 0.1s both"
+            width="100%", spacing="3", animation="fadeInUp 0.4s ease-out 0.1s both"
         ),
         rx.center(
             rx.hstack(
                 rx.icon("shield", size=16, color="green"),
-                rx.text(State.t["privacy_badge"], size="2", color_scheme="green", weight="bold", text_align="center"),
+                rx.text(State.t["privacy_badge"], size="3", color_scheme="green", weight="bold", text_align="center"),
                 spacing="2", align_items="center",
             ),
             width="100%",
@@ -451,7 +525,7 @@ def step_5_summary() -> rx.Component:
             border_radius="8px", padding="0.5em",
             animation="fadeInUp 0.4s ease-out 0.2s both",
         ),
-        width="100%", spacing="3", padding_y="0.75em"
+        width="100%", spacing="4", padding_y="0.75em"
     )
 def stepper_component() -> rx.Component:
     def stepper_item(idx: int):
@@ -483,13 +557,13 @@ def stepper_component() -> rx.Component:
         )
         
     desktop_stepper = rx.hstack(
-        *[stepper_item(i) for i in range(6)],
-        spacing={"initial": "2", "sm": "5"}, justify="center", width="100%",
+        *[stepper_item(i) for i in range(7)],
+        spacing={"initial": "2", "sm": "4"}, justify="center", width="100%",
     )
     
     mobile_progress = rx.vstack(
         rx.hstack(
-            rx.text(f"Step {State.step + 1} of 6", weight="bold", size="2"),
+            rx.text(f"Step {State.step + 1} of 7", weight="bold", size="2"),
             rx.spacer(),
             rx.cond(
                 State.step_names.length() > State.step,
@@ -515,23 +589,24 @@ def index() -> rx.Component:
             header(),
             rx.el.main(
                 rx.container(
-                    stepper_component(),
+                    rx.cond(State.step > 0, stepper_component()),
                     rx.card(
                         rx.match(
                             State.step,
-                            (0, step_0_demographics()),
-                            (1, step_1_chief_complaint()),
-                            (2, step_2_history()),
-                            (3, step_3_lifestyle()),
-                            (4, step_4_interview_qs()),
-                            (5, step_5_summary()),
-                            step_0_demographics()
+                            (0, step_0_landing()),
+                            (1, step_1_demographics()),
+                            (2, step_2_chief_complaint()),
+                            (3, step_3_history()),
+                            (4, step_4_lifestyle()),
+                            (5, step_5_interview_qs()),
+                            (6, step_6_summary()),
+                            step_0_landing()
                         ),
-                        padding={"initial": "1em", "sm": "1.25em", "md": "1.5em"},
+                        padding={"initial": "1.5em", "sm": "1.5em", "md": "2em"},
                         width="100%",
                         background=rx.cond(
                             rx.color_mode == "light",
-                            "rgba(255,255,255,0.75)",
+                            "rgba(255,255,255,0.92)",
                             "rgba(13, 27, 42, 0.85)"
                         ),
                         backdrop_filter="blur(15px)",
@@ -571,6 +646,18 @@ style = {
     "@keyframes fadeInUp": {
         "from": {"opacity": "0", "transform": "translateY(16px)"},
         "to": {"opacity": "1", "transform": "translateY(0)"}
+    },
+    "@keyframes shimmer": {
+        "0%": {"opacity": "0.3"},
+        "50%": {"opacity": "0.6"},
+        "100%": {"opacity": "0.3"},
+    },
+    "@media (prefers-reduced-motion: reduce)": {
+        "*, *::before, *::after": {
+            "animation-duration": "0.01ms !important",
+            "animation-iteration-count": "1 !important",
+            "transition-duration": "0.01ms !important",
+        }
     },
     "::placeholder": {"color": "var(--gray-8)"},
     'a[href="https://reflex.dev"]': {

@@ -14,10 +14,11 @@ PreConsult bridges that gap with a guided AI interview that generates a structur
 
 ## How It Works
 
-1. Patient enters their specialty and chief complaint in plain text
-2. The AI generates 3–5 targeted follow-up questions using clinical frameworks (OPQRST + SAMPLE)
-3. Answers are compiled into a structured summary the patient can download as a PDF
-4. Session data is destroyed — nothing is retained on the server
+1. Patient arrives at a welcome screen explaining the process with a clear privacy reassurance
+2. Patient fills out demographics (age, sex) and their chief complaint with duration
+3. The AI generates targeted follow-up questions using clinical frameworks (OPQRST + SAMPLE)
+4. Answers are compiled into a structured summary the patient can download as a PDF
+5. Session data is destroyed — nothing is retained on the server
 
 ---
 
@@ -62,6 +63,7 @@ No health data is ever written to disk. Every design decision flows from this co
 | Session | Redis (Hashes, ephemeral, 30-min TTL, RedisUnavailable → 503) |
 | AI | Vertex AI Gemini 2.5 Flash Lite (via LangChain) |
 | PDF | ReportLab (in-memory, deterministic, no LLM call) |
+| UI/UX | Glassmorphism, mobile-first, 48px touch targets, prefers-reduced-motion, EN/PT i18n |
 | Monitoring | Sentry (error tracking) + `GET /health` endpoint |
 | Deployment | GCP Cloud Run (1.0 CPU, 1Gi RAM, 0-5 instances) |
 | CI/CD | GitHub Actions (tests + WIF auth + Cloud Run deploy) |
@@ -178,11 +180,11 @@ preconsult_chat/
 │       ├── pdf_service.py    # ReportLab PDF generation
 │       └── session_service.py# Redis + in-memory rate limiting
 ├── reflex_app/preconsult/   # Reflex frontend
-│   ├── preconsult.py        # UI components + app setup
+│   ├── preconsult.py        # UI components + app setup (7 step wizard)
 │   ├── state.py             # Reflex state + API calls
 │   ├── analytics.py         # Analytics via HTTP
-│   └── i18n.py              # EN/PT translations (174 keys)
-├── tests/                   # 50 tests
+│   └── i18n.py              # EN/PT translations (190+ keys)
+├── tests/                   # 50+ tests
 ├── Dockerfile               # Multi-stage build
 ├── docker-compose.yml       # Local Redis
 └── .github/workflows/ci-cd.yml
@@ -201,7 +203,20 @@ preconsult_chat/
 | 3 | Coverage: concurrency tests, i18n edge cases | 1 |
 | 4 | Infra: healthcheck, MockWebSocket extraction | 1 |
 | 5 | UI/UX: mobile-first layout, inline errors via callout, streaming timeout | 2 |
-| | **Total** | **50 tests, ~68% coverage** |
+| 6 | UI/UX: landing split, privacy trust, accessibility for fragile users | 1 |
+| 7 | UI/UX: chief complaint reorder, "none" toggle, emergency dialog, skeleton | 1 |
+| 8 | UI/UX: prefers-reduced-motion, conditional lang selector, error callout | 1 |
+| | **Total** | **50+ tests** |
+
+---
+
+## UX Principles
+
+The UI was redesigned with three core principles:
+
+- **Mobile-first**: All touch targets are 48px minimum, spacing is generous (16px+), and grids collapse to 2 columns on mobile for easier tapping
+- **Privacy as trust**: A privacy badge appears on the landing page and each step, reassuring users that no data is stored
+- **Fragile-user friendly**: Font sizes start at 16px for body text, animations respect `prefers-reduced-motion`, skeletons replace spinners during loading, and error callouts use high-contrast solid styling
 
 ---
 

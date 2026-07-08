@@ -19,6 +19,10 @@ translations = {
         "step_how_2": "2. AI Clinical Assessment",
         "step_how_3": "3. Download PDF Report",
         "privacy_badge": "🔒 Zero Data Persistence: No account needed. Your data is deleted upon closing.",
+        "how_it_works": "How it works",
+        "how_it_works_title": "How PreConsult Works",
+        "how_it_works_desc": "Three simple steps to prepare for your appointment:",
+        "got_it": "Got it!",
         
         "step_1": "Chief Complaint",
         "step_1_desc": "What brought you to book this appointment?",
@@ -106,6 +110,11 @@ translations = {
         "step_how_2": "2. Avaliação Clínica com IA",
         "step_how_3": "3. Baixe o PDF",
         "privacy_badge": "🔒 Privacidade Total: Sem cadastro. Seus dados são apagados ao fechar.",
+        "how_it_works": "Como funciona",
+        "how_it_works_title": "Como o PreConsult Funciona",
+        "how_it_works_desc": "Três passos simples para se preparar para sua consulta:",
+        "got_it": "Entendi!",
+        
 
         "step_1": "Queixa Principal",
         "step_1_desc": "O que o levou a marcar esta consulta?",

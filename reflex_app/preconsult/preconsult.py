@@ -48,48 +48,31 @@ def step_0_demographics() -> rx.Component:
             padding_bottom="0.5em",
             animation="fadeInUp 0.4s ease-out 0s both"
         ),
-        # 3-step Timeline / How it works
-        rx.grid(
-            rx.vstack(
-                rx.icon("message-square", size=20, color="cyan"),
-                rx.text(State.t["step_how_1"], size="1", weight="bold", text_align="center"),
-                align_items="center", spacing="1"
+        # How it works (dialog trigger)
+        rx.dialog.root(
+            rx.dialog.trigger(
+                rx.button(
+                    State.t["how_it_works"],
+                    variant="ghost",
+                    size="2",
+                    color_scheme="cyan",
+                    width="100%",
+                    min_height="44px",
+                ),
             ),
-            rx.vstack(
-                rx.icon("activity", size=20, color="cyan"),
-                rx.text(State.t["step_how_2"], size="1", weight="bold", text_align="center"),
-                align_items="center", spacing="1"
+            rx.dialog.content(
+                rx.dialog.title(State.t["how_it_works_title"]),
+                rx.dialog.description(State.t["how_it_works_desc"]),
+                rx.vstack(
+                    rx.hstack(rx.icon("message-square", size=20), rx.text(State.t["step_how_1"], size="2")),
+                    rx.hstack(rx.icon("activity", size=20), rx.text(State.t["step_how_2"], size="2")),
+                    rx.hstack(rx.icon("file-text", size=20), rx.text(State.t["step_how_3"], size="2")),
+                    spacing="3", width="100%", align_items="start",
+                ),
+                rx.dialog.close(rx.button(State.t["got_it"], color_scheme="cyan", width="100%", min_height="44px")),
+                max_width="400px", width="100%",
             ),
-            rx.vstack(
-                rx.icon("file-text", size=20, color="cyan"),
-                rx.text(State.t["step_how_3"], size="1", weight="bold", text_align="center"),
-                align_items="center", spacing="1"
-            ),
-            columns="3",
-            spacing="2",
-            width="100%",
-            background="rgba(0, 200, 255, 0.03)",
-            border="1px dashed rgba(0, 200, 255, 0.2)",
-            border_radius="8px",
-            padding="0.75em",
-            margin_bottom="0.5em",
-            animation="fadeInUp 0.4s ease-out 0.1s both"
-        ),
-        # Privacy Badge
-        rx.center(
-            rx.hstack(
-                rx.icon("shield", size=16, color="green"),
-                rx.text(State.t["privacy_badge"], size="1", color_scheme="green", weight="bold", text_align="center"),
-                spacing="2",
-                align_items="center",
-            ),
-            width="100%",
-            background="rgba(0, 255, 100, 0.05)",
-            border="1px solid rgba(0, 255, 100, 0.15)",
-            border_radius="8px",
-            padding="0.5em",
-            margin_bottom="0.5em",
-            animation="fadeInUp 0.4s ease-out 0.15s both"
+            animation="fadeInUp 0.4s ease-out 0.1s both",
         ),
         rx.vstack(
             rx.heading(State.t["intake"], size={"initial": "5", "sm": "6"}, margin_bottom="0.25em"),
@@ -266,8 +249,8 @@ def step_2_history() -> rx.Component:
         rx.vstack(
             rx.text(State.t["allergies_label"], weight="bold"),
             rx.segmented_control.root(
-                rx.segmented_control.item(State.t["allergies_no"], value=State.t["allergies_no"]),
-                rx.segmented_control.item(State.t["allergies_yes"], value=State.t["allergies_yes"]),
+                rx.segmented_control.item(State.t["allergies_no"], value=State.t["allergies_no"], min_height="44px"),
+                rx.segmented_control.item(State.t["allergies_yes"], value=State.t["allergies_yes"], min_height="44px"),
                 on_change=lambda val: State.set_allergies_flag(val == State.t["allergies_yes"]),
                 value=rx.cond(State.allergies_flag, State.t["allergies_yes"], State.t["allergies_no"]),
                 width="100%",
@@ -432,7 +415,7 @@ def step_4_interview_qs() -> rx.Component:
                         rx.center(rx.spinner(), width="100%", padding="2em")
                     ),
                     width="100%",
-                    max_height={"initial": "220px", "sm": "320px"},
+                    max_height={"sm": "320px"},
                     overflow_y="auto",
                     padding_right="0.5em",
                     animation="fadeInUp 0.4s ease-out 0.1s both"
@@ -489,6 +472,20 @@ def step_5_summary() -> rx.Component:
                 _hover={"transform": "scale(1.02)"}, transition="all 0.2s ease"
             ),
             width="100%", spacing="2", animation="fadeInUp 0.4s ease-out 0.1s both"
+        ),
+        # Privacy badge movido para o final
+        rx.center(
+            rx.hstack(
+                rx.icon("shield", size=16, color="green"),
+                rx.text(State.t["privacy_badge"], size="1", color_scheme="green", weight="bold", text_align="center"),
+                spacing="2", align_items="center",
+            ),
+            width="100%",
+            background="rgba(0, 255, 100, 0.05)",
+            border="1px solid rgba(0, 255, 100, 0.15)",
+            border_radius="8px",
+            padding="0.5em",
+            animation="fadeInUp 0.4s ease-out 0.2s both",
         ),
         width="100%", spacing="3", padding_y="0.75em"
     )

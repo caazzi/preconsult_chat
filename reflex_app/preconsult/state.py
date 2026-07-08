@@ -89,7 +89,7 @@ class State(rx.State):
         return int(((self.step + 1) / 6) * 100)
     
     # --- General Form State ---
-    gender: str = "Female"
+    gender: str = ""
     lang: str = "en"
     session_id: str = ""
     
@@ -123,44 +123,25 @@ class State(rx.State):
     loading: bool = False
 
     def detect_lang(self):
-        """Infer language from URL query param or browser headers."""
         try:
             query_params = self.router.page.params
             lang_param = query_params.get("lang", "").lower()
             if lang_param in ["pt", "en"]:
                 self.lang = lang_param
-                self.gender = "Feminino" if lang_param == "pt" else "Female"
                 return
-            
             accept_lang = self.router.headers.get("accept-language", "")
             if "pt" in accept_lang.lower().split(",")[0]:
                 self.lang = "pt"
-                self.gender = "Feminino"
             else:
                 self.lang = "en"
-                self.gender = "Female"
         except Exception:
             self.lang = "en"
-            self.gender = "Female"
 
     def set_gender(self, val: str):
         self.gender = val
 
     def set_lang(self, val: str):
         self.lang = val
-        # Automatically translate biological sex selection to avoid dropdown selector mismatches
-        if val == "pt" and self.gender == "Female":
-            self.gender = "Feminino"
-        elif val == "pt" and self.gender == "Male":
-            self.gender = "Masculino"
-        elif val == "pt" and self.gender == "Intersex":
-            self.gender = "Intersexo"
-        elif val == "en" and self.gender == "Feminino":
-            self.gender = "Female"
-        elif val == "en" and self.gender == "Masculino":
-            self.gender = "Male"
-        elif val == "en" and self.gender == "Intersexo":
-            self.gender = "Intersex"
 
     def set_chief_complaint(self, val: str):
         self.chief_complaint = val
@@ -262,6 +243,8 @@ class State(rx.State):
             self.step -= 1
 
     def go_to_step_1(self):
+        if not self.gender.strip():
+            return rx.window_alert(self._t.get("err_gender", "Please select a biological sex."))
         self.step = 1
         self.log_analytics_event("demographics_submitted")
 

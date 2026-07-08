@@ -6,7 +6,7 @@ translations = {
         "age": "Age Bracket",
         "age_ph": "Ex: 26-35",
         "gender": "Biological Sex",
-        "gender_opts": ["Female", "Male", "Intersex"],
+        "gender_opts": ["Prefer not to say", "Female", "Male", "Intersex"],
         "gender_ph": "Select Sex at Birth",
         "lang": "Language Preference",
         "lang_opts": ["en", "pt"],
@@ -73,6 +73,7 @@ translations = {
         
         "step_names": ["Patient Intake", "Chief Complaint", "Medical History", "Lifestyle & Family", "Clinical Assessment", "Summary"],
         
+        "err_gender": "Please select a biological sex.",
         "err_chief_complaint": "Please enter a chief complaint.",
         "err_init": "Failed to init session. Please try again.",
         "err_generic": "An unexpected error occurred. Please try again.",
@@ -92,7 +93,7 @@ translations = {
         "age": "Faixa Etária",
         "age_ph": "Ex: 26-35",
         "gender": "Sexo Biológico",
-        "gender_opts": ["Feminino", "Masculino", "Intersexo"],
+        "gender_opts": ["Prefiro não informar", "Feminino", "Masculino", "Intersexo"],
         "gender_ph": "Selecione o sexo de nascimento",
         "lang": "Preferência de Idioma",
         "lang_opts": ["en", "pt"],
@@ -159,6 +160,7 @@ translations = {
 
         "step_names": ["Triagem", "Queixa Principal", "Histórico Médico", "Estilo de Vida", "Avaliação Clínica", "Resumo"],
 
+        "err_gender": "Por favor, selecione um sexo biológico.",
         "err_chief_complaint": "Por favor, insira uma queixa principal.",
         "err_init": "Falha ao iniciar a sessão. Tente novamente.",
         "err_generic": "Ocorreu um erro inesperado. Tente novamente.",

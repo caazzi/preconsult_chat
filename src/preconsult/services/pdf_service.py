@@ -21,6 +21,7 @@ translations = {
         "appointment": "Consulta",
         "age_bracket": "Faixa etária",
         "sex": "Sexo biológico",
+        "chief_complaint": "Queixa Principal",
         "duration": "Duração",
         "complaint_detail": "Detalhes adicionais",
         "conditions": "Condições pré-existentes",
@@ -42,6 +43,7 @@ translations = {
         "appointment": "Appointment",
         "age_bracket": "Age bracket",
         "sex": "Biological sex",
+        "chief_complaint": "Chief Complaint",
         "duration": "Duration",
         "complaint_detail": "Additional details",
         "conditions": "Pre-existing conditions",
@@ -128,7 +130,7 @@ def generate_pdf_report_in_memory(form: dict, qa_pairs: list, lang: str = 'en') 
     draw_labeled_section(labels['sex'], form.get("sex", none_reported_text))
 
     # Chief Complaint
-    draw_labeled_section("Chief Complaint" if lang == "en" else "Queixa Principal", form.get("chief_complaint", none_reported_text), padding=0.2 * inch)
+    draw_labeled_section(labels['chief_complaint'], form.get("chief_complaint", none_reported_text), padding=0.2 * inch)
     draw_labeled_section(labels['duration'], form.get("duration", none_reported_text), padding=0.2 * inch)
     draw_labeled_section(labels['complaint_detail'], form.get("complaint_detail") or none_reported_text)
 

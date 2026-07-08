@@ -7,9 +7,6 @@ from datetime import datetime
 from .i18n import translations
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "/api")
-if API_BASE_URL.startswith("/"):
-    PORT = os.environ.get("PORT", "8080")
-    API_BASE_URL = f"http://127.0.0.1:{PORT}{API_BASE_URL}"
 API_KEY = os.environ.get("PRECONSULT_API_KEY", "")
 
 try:

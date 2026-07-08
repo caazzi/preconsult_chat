@@ -5,14 +5,21 @@ import logging
 from typing import Dict, Any
 import redis.asyncio as redis
 
-# 30 minutes in seconds
 SESSION_TTL = 30 * 60
 
-# Redis connection setup
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
-# Lazy-loaded connection pool
 _redis_pool = None
+
+INCR_EXPIRE_SCRIPT = """
+local key = KEYS[1]
+local window = tonumber(ARGV[1])
+local count = redis.call('INCR', key)
+if count == 1 then
+    redis.call('EXPIRE', key, window)
+end
+return count
+"""
 
 def get_redis() -> redis.Redis:
     global _redis_pool
@@ -85,19 +92,9 @@ async def update_session(session_id: str, new_data: Dict[str, Any]) -> None:
     logging.debug(f"Updated session {session_id} fields: {list(new_data.keys())}")
 
 async def check_rate_limit(ip: str, limit: int = 10, window: int = 60) -> bool:
-    """
-    Checks if the given IP has exceeded the rate limit.
-    limit: max requests
-    window: time window in seconds
-    """
     client = get_redis()
     key = f"rate_limit:{ip}"
-    
-    # Increment and set TTL if new
-    count = await client.incr(key)
-    if count == 1:
-        await client.expire(key, window)
-    
+    count = await client.eval(INCR_EXPIRE_SCRIPT, 1, key, window)
     return count <= limit
 
 async def check_session_quota(ip: str, limit: int = 20) -> bool:
@@ -115,9 +112,6 @@ async def check_session_quota(ip: str, limit: int = 20) -> bool:
     return True
 
 async def increment_session_quota(ip: str, window: int = 86400) -> None:
-    """Increments the session quota count for an IP."""
     client = get_redis()
     key = f"session_quota:{ip}"
-    count = await client.incr(key)
-    if count == 1:
-        await client.expire(key, window)
+    await client.eval(INCR_EXPIRE_SCRIPT, 1, key, window)

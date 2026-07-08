@@ -15,7 +15,8 @@ dependencies = [
     "google-cloud-aiplatform==1.117.0",
     "python-dotenv==1.1.1",
     "redis==6.4.0",
-    "reflex==0.9.1"
+    "reflex==0.9.1",
+    "sentry-sdk==2.26.1"
 ]
 
 [project.optional-dependencies]

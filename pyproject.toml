@@ -10,7 +10,7 @@ dependencies = [
     "langchain-google-vertexai==2.1.2",
     "langchain==0.3.27",
     "pydantic==2.11.7",
-    "reportlab==4.4.10",
+    "reportlab==5.0.0",
     "uvicorn[standard]==0.34.0",
     "google-cloud-aiplatform==1.117.0",
     "python-dotenv==1.1.1",

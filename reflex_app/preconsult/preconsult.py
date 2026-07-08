@@ -110,52 +110,45 @@ def header() -> rx.Component:
     )
 
 def step_0_landing() -> rx.Component:
+    card = lambda icon, title, sub: rx.vstack(
+        rx.icon(icon, size=24, color="cyan"),
+        rx.text(State.t[title], weight="bold", size="3", text_align="center"),
+        rx.text(State.t[sub], size="2", color_scheme="gray", text_align="center"),
+        align_items="center",
+        spacing="2",
+        padding="1em",
+        border="1px solid rgba(255,255,255,0.1)",
+        border_radius="12px",
+        width="100%",
+        height="100%",
+        _hover={"background": "rgba(0, 200, 255, 0.04)"},
+    )
     return rx.vstack(
         rx.center(
             rx.hstack(
-                rx.icon("shield", size=16, color="green"),
-                rx.text(State.t["privacy_badge_landing"], size="3", color_scheme="green", weight="bold", text_align="center"),
-                spacing="2", align_items="center",
+                rx.icon("shield", size=14, color="green"),
+                rx.text(State.t["privacy_badge_landing"], size="2", color_scheme="green"),
+                spacing="1", align_items="center",
             ),
-            width="100%",
-            background="rgba(0, 255, 100, 0.08)",
-            border="1px solid rgba(0, 255, 100, 0.2)",
-            border_radius="8px", padding="0.5em",
+            padding="0.3em 0.8em",
+            background="rgba(0, 255, 100, 0.06)",
+            border_radius="999px",
         ),
         rx.vstack(
-            rx.badge("AI Assistant", color_scheme="cyan", variant="soft"),
-            rx.heading(State.t["hero_title"], size={"initial": "6", "xs": "7", "sm": "8"}, text_align="center", line_height="1.2"),
+            rx.heading(State.t["hero_title"], size={"initial": "6", "sm": "7"}, text_align="center", line_height="1.2"),
             rx.text(State.t["hero_subtitle"], color_scheme="gray", size="3", text_align="center"),
-            spacing="3",
+            spacing="2",
             align_items="center",
             width="100%",
-            padding_y="0.5em",
-            animation="fadeInUp 0.4s ease-out 0s both"
+            animation="fadeInUp 0.4s ease-out 0s both",
         ),
-        rx.dialog.root(
-            rx.dialog.trigger(
-                rx.button(
-                    State.t["how_it_works"],
-                    variant="ghost",
-                    size="3",
-                    color_scheme="cyan",
-                    width="100%",
-                    min_height="48px",
-                ),
-            ),
-            rx.dialog.content(
-                rx.dialog.title(State.t["how_it_works_title"]),
-                rx.dialog.description(State.t["how_it_works_desc"]),
-                rx.vstack(
-                    rx.hstack(rx.icon("message-square", size=20), rx.text(State.t["step_how_1"], size="3")),
-                    rx.hstack(rx.icon("activity", size=20), rx.text(State.t["step_how_2"], size="3")),
-                    rx.hstack(rx.icon("file-text", size=20), rx.text(State.t["step_how_3"], size="3")),
-                    spacing="4", width="100%", align_items="start",
-                ),
-                rx.dialog.close(rx.button(State.t["got_it"], color_scheme="cyan", width="100%", min_height="48px")),
-                max_width="400px", width="100%",
-            ),
-            animation="fadeInUp 0.4s ease-out 0.1s both",
+        rx.hstack(
+            card("message-square", "step_how_1", "step_sub_1"),
+            card("brain", "step_how_2", "step_sub_2"),
+            card("file-text", "step_how_3", "step_sub_3"),
+            spacing="3",
+            width="100%",
+            flex_direction=["column", "row"],
         ),
         rx.button(
             State.t["start_cta"],
@@ -166,10 +159,10 @@ def step_0_landing() -> rx.Component:
             min_height="48px",
             _hover={"transform": "scale(1.02)", "bg": "cyan.600"},
             transition="all 0.2s ease",
-            animation="fadeInUp 0.4s ease-out 0.2s both"
+            animation="fadeInUp 0.4s ease-out 0.2s both",
         ),
         width="100%",
-        spacing="4"
+        spacing="5",
     )
 
 def step_1_demographics() -> rx.Component:

@@ -6,6 +6,20 @@ except ImportError:
     api_router = None
 
 
+def error_callout() -> rx.Component:
+    return rx.cond(
+        State.error_message != "",
+        rx.callout(
+            State.error_message,
+            icon="triangle_alert",
+            color_scheme="red",
+            variant="soft",
+            width="100%",
+            margin_bottom="0.5em",
+            role="alert",
+        ),
+    )
+
 def header() -> rx.Component:
     return rx.hstack(
         rx.heading(State.t["title"], size={"initial": "5", "xs": "6", "sm": "7"}, color_scheme="cyan"),
@@ -37,6 +51,7 @@ def header() -> rx.Component:
 
 def step_0_demographics() -> rx.Component:
     return rx.vstack(
+        error_callout(),
         # Hero Section
         rx.vstack(
             rx.badge("AI Assistant", color_scheme="cyan", variant="soft"),
@@ -126,6 +141,7 @@ def step_0_demographics() -> rx.Component:
 
 def step_1_chief_complaint() -> rx.Component:
     return rx.vstack(
+        error_callout(),
         rx.vstack(
             rx.heading(State.t["step_1"], size={"initial": "6", "sm": "7"}),
             rx.text(State.t["step_1_desc"], color_scheme="gray"),
@@ -219,6 +235,7 @@ def step_2_history() -> rx.Component:
         )
 
     return rx.vstack(
+        error_callout(),
         rx.vstack(
             rx.heading(State.t["step_2"], size={"initial": "6", "sm": "7"}),
             rx.text(State.t["step_2_desc"], color_scheme="gray"),
@@ -283,6 +300,7 @@ def step_2_history() -> rx.Component:
 
 def step_3_lifestyle() -> rx.Component:
     return rx.vstack(
+        error_callout(),
         rx.vstack(
             rx.heading(State.t["step_3"], size={"initial": "6", "sm": "7"}),
             rx.text(State.t["step_3_desc"], color_scheme="gray"),
@@ -363,8 +381,14 @@ def step_4_interview_qs() -> rx.Component:
         )
 
     return rx.vstack(
+        error_callout(),
         rx.vstack(
-            rx.heading(State.t["step_4"], size={"initial": "6", "sm": "7"}),
+            rx.hstack(
+                rx.icon("clipboard-list", size=24, color="cyan"),
+                rx.heading(State.t["step_4"], size={"initial": "6", "sm": "7"}),
+                spacing="2",
+                align_items="center",
+            ),
             rx.text(State.t["step_4_desc"], color_scheme="gray"),
             rx.divider(),
             width="100%", spacing="2", animation="fadeInUp 0.4s ease-out 0s both"
@@ -442,6 +466,7 @@ def step_4_interview_qs() -> rx.Component:
 
 def step_5_summary() -> rx.Component:
     return rx.vstack(
+        error_callout(),
         rx.vstack(
             rx.heading(State.t["complete_title"], size={"initial": "7", "sm": "8"}, text_align="center"),
             rx.text(State.t["complete_desc"], text_align="center"),
@@ -477,7 +502,7 @@ def step_5_summary() -> rx.Component:
         rx.center(
             rx.hstack(
                 rx.icon("shield", size=16, color="green"),
-                rx.text(State.t["privacy_badge"], size="1", color_scheme="green", weight="bold", text_align="center"),
+                rx.text(State.t["privacy_badge"], size="2", color_scheme="green", weight="bold", text_align="center"),
                 spacing="2", align_items="center",
             ),
             width="100%",
@@ -583,7 +608,7 @@ def index() -> rx.Component:
                             "0 8px 32px 0 rgba(0,0,0,0.37)"
                         )
                     ),
-                    max_width={"initial": "95%", "sm": "90%", "md": "600px"},
+                    max_width={"initial": "95%", "sm": "90%", "md": "720px"},
                     width="100%",
                     padding_top={"initial": "0.5em", "sm": "1.5em"},
                     padding_bottom={"initial": "0.5em", "sm": "1.5em"}
@@ -608,7 +633,7 @@ style = {
         "from": {"opacity": "0", "transform": "translateY(16px)"},
         "to": {"opacity": "1", "transform": "translateY(0)"}
     },
-    "::placeholder": {"color": "rgba(255,255,255,0.6)"},
+    "::placeholder": {"color": "var(--gray-8)"},
     'a[href="https://reflex.dev"]': {
         "display": "none !important",
     }
@@ -700,7 +725,11 @@ def admin_dashboard() -> rx.Component:
         ),
         width="100%",
         min_height="100vh",
-        background="radial-gradient(circle at top right, #0a192f, #001f3f, #001529)"
+        background=rx.cond(
+            rx.color_mode == "light",
+            "radial-gradient(circle at top right, #f8fafc, #f1f5f9, #e2e8f0)",
+            "radial-gradient(circle at top right, #0a192f, #001f3f, #001529)"
+        )
     )
 
 

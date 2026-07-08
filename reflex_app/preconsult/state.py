@@ -121,6 +121,7 @@ class State(rx.State):
     # --- UI State ---
     step: int = 0  # 0: Demographics, 1-4: Form, 5: Q&A, 6: Summary
     loading: bool = False
+    error_message: str = ""
 
     def detect_lang(self):
         try:
@@ -241,20 +242,26 @@ class State(rx.State):
     def go_back(self):
         if self.step > 0:
             self.step -= 1
+        self.error_message = ""
 
     def go_to_step_1(self):
         if not self.gender.strip():
-            return rx.window_alert(self._t.get("err_gender", "Please select a biological sex."))
+            self.error_message = self._t.get("err_gender", "Please select a biological sex.")
+            return
+        self.error_message = ""
         self.step = 1
         self.log_analytics_event("demographics_submitted")
 
     def go_to_step_2(self):
         if not self.specialist.strip() or not self.chief_complaint.strip():
-            return rx.window_alert(self._t["err_chief_complaint"])
+            self.error_message = self._t["err_chief_complaint"]
+            return
+        self.error_message = ""
         self.step = 2
         self.log_analytics_event("complaint_submitted")
 
     def go_to_step_3(self):
+        self.error_message = ""
         self.step = 3
         self.log_analytics_event("history_submitted")
 
@@ -294,10 +301,11 @@ class State(rx.State):
                 if resp.status_code == 200:
                     session_id = resp.json().get("session_id")
                     if not session_id:
-                        yield rx.window_alert(self._t["err_generic"])
+                        self.error_message = self._t["err_generic"]
                         return
                     self.session_id = session_id
                     self.step = 4
+                    self.error_message = ""
                     self.log_analytics_event("lifestyle_submitted")
                     self.current_answers = []
                     self.questions = []
@@ -305,23 +313,26 @@ class State(rx.State):
                     async for item in self.get_interview_questions():
                         yield item
                 elif resp.status_code == 429:
-                    yield rx.window_alert(self._t["err_rate_limit"])
+                    self.error_message = self._t["err_rate_limit"]
                 else:
-                    yield rx.window_alert(self._t["err_init"])
+                    self.error_message = self._t["err_init"]
             except Exception:
-                yield rx.window_alert(self._t["err_generic"])
+                self.error_message = self._t["err_generic"]
             finally:
                 self.loading = False
 
     async def get_interview_questions(self):
-        """Step 5 Streaming: Trigger interview questions."""
         self.loading = True
         self._qs_buffer = ""
         self.questions = []
         self.current_answers = []
         self.is_emergency = False
+        self.error_message = ""
         yield
-        
+
+        import asyncio
+        stream_timeout = 30.0
+
         async with httpx.AsyncClient() as client:
             try:
                 headers = {"X-API-KEY": API_KEY}
@@ -329,16 +340,11 @@ class State(rx.State):
                     "session_id": self.session_id
                 }
                 
-                async with client.stream(
-                    "POST", 
-                    f"{API_BASE_URL}/interview-questions-stream", 
-                    json=payload, 
-                    headers=headers,
-                    timeout=60.0
-                ) as response:
-                    async for line in response.aiter_lines():
-                        if line.startswith("data: "):
-                            chunk = json.loads(line[len("data: "):])
+                async with asyncio.timeout(stream_timeout):
+                    async with client.stream("POST", f"{API_BASE_URL}/interview-questions-stream", json=payload, headers=headers, timeout=stream_timeout + 5.0) as response:
+                        async for line in response.aiter_lines():
+                            if line.startswith("data: "):
+                                chunk = json.loads(line[len("data: "):])
                             self._qs_buffer += chunk
                             
                             lower_buffer = self._qs_buffer.lower()
@@ -356,15 +362,16 @@ class State(rx.State):
                             while len(self.current_answers) < len(self.questions):
                                 self.current_answers.append("")
                             yield
+            except asyncio.TimeoutError:
+                self.error_message = self._t["err_timeout"]
             except Exception:
-                yield rx.window_alert(self._t["err_stream"])
+                self.error_message = self._t["err_stream"]
             finally:
                 self.loading = False
 
     async def submit_answers(self):
-        """Step 5 -> Step 6: Finalize."""
         if any(not ans.strip() for ans in self.current_answers[:len(self.questions)]):
-            yield rx.window_alert(self._t.get("err_followup_ans", "Please answer all questions."))
+            self.error_message = self._t.get("err_followup_ans", "Please answer all questions.")
             return
         
         # Build plain text summary for clipboard
@@ -409,9 +416,9 @@ class State(rx.State):
                         filename=f"PreConsult_Report{datetime.now().strftime('_%y%m%d%H%M')}.pdf"
                     )
                 else:
-                    yield rx.window_alert(self._t["err_download"])
+                    self.error_message = self._t["err_download"]
             except Exception:
-                yield rx.window_alert(self._t["err_download_gen"])
+                self.error_message = self._t["err_download_gen"]
             finally:
                 self.loading = False
 

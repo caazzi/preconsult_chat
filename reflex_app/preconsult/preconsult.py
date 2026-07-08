@@ -890,13 +890,68 @@ class CustomStaticFiles(StaticFiles):
                           gtag('config', '{gtag_id}');
                         </script>
                         """
-                    html_content = html_content.replace("</head>", f"{critical_style}{_MOCK_WEBSOCKET_SCRIPT}{gtag_script}</head>")
 
-                    # Fix og:image relative path → 404 in crawl/Lighthouse contexts.
-                    # Reflex generates `content="favicon.ico"` (relative); make it absolute.
+                    # hreflang tags for multilingual SEO
+                    hreflang_tags = """
+                    <link rel="alternate" hreflang="en" href="https://pre-consult.org/?lang=en"/>
+                    <link rel="alternate" hreflang="pt" href="https://pre-consult.org/?lang=pt"/>
+                    <link rel="alternate" hreflang="x-default" href="https://pre-consult.org/"/>
+                    """
+
+                    # Canonical tag — always points to root, ignoring ?lang= params
+                    canonical_tag = '<link rel="canonical" href="https://pre-consult.org/"/>'
+
+                    # Schema.org JSON-LD — WebSite + MedicalWebPage
+                    schema_jsonld = """
+                    <script type="application/ld+json">
+                    {
+                      "@context": "https://schema.org",
+                      "@graph": [
+                        {
+                          "@type": "WebSite",
+                          "@id": "https://pre-consult.org/#website",
+                          "name": "PreConsult",
+                          "description": "Privacy-first AI medical intake assistant. Prepare for your doctor appointment in minutes.",
+                          "url": "https://pre-consult.org/",
+                          "inLanguage": ["en", "pt"],
+                          "alternateName": "PreConsult — AI Patient Intake"
+                        },
+                        {
+                          "@type": "MedicalWebPage",
+                          "@id": "https://pre-consult.org/#webpage",
+                          "name": "PreConsult — Privacy-First Medical Intake Assistant",
+                          "description": "Guided AI interview helper for patient intake with zero data persistence.",
+                          "url": "https://pre-consult.org/",
+                          "isPartOf": {"@id": "https://pre-consult.org/#website"},
+                          "inLanguage": ["en", "pt"],
+                          "about": {
+                            "@type": "Thing",
+                            "name": "Medical Intake Preparation"
+                          },
+                          "audience": {
+                            "@type": "MedicalAudience",
+                            "audienceType": "Patient"
+                          }
+                        }
+                      ]
+                    }
+                    </script>
+                    """
+
+                    seo_tags = hreflang_tags + canonical_tag + schema_jsonld
+                    html_content = html_content.replace("</head>", f"{critical_style}{_MOCK_WEBSOCKET_SCRIPT}{gtag_script}{seo_tags}</head>")
+
+                    # Fix og:image — use dedicated 1200x630 PNG for social previews
                     html_content = html_content.replace(
                         'content="favicon.ico" property="og:image"',
-                        'content="https://pre-consult.org/favicon.ico" property="og:image"'
+                        'content="https://pre-consult.org/og-image.png" property="og:image"'
+                    )
+                    # Insert og:image dimensions after the og:image tag
+                    html_content = html_content.replace(
+                        'content="https://pre-consult.org/og-image.png" property="og:image"',
+                        'content="https://pre-consult.org/og-image.png" property="og:image"/>\n'
+                        '    <meta property="og:image:width" content="1200"/>\n'
+                        '    <meta property="og:image:height" content="630"/>'
                     )
 
                     # Suppress React Router scroll-restoration console.error.

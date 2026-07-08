@@ -1,7 +1,9 @@
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+from datetime import date
 from fastapi import FastAPI
+from fastapi.responses import Response
 from pydantic import ValidationError
 from google.api_core.exceptions import GoogleAPIError
 from preconsult.api.endpoints import router as api_router
@@ -54,3 +56,44 @@ async def read_root():
 async def health():
     redis_status = "ok" if _redis_available is not False else "unavailable"
     return {"status": "healthy", "redis": redis_status}
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt():
+    content = (
+        "User-agent: *\n"
+        "Disallow: /admin/\n"
+        "Disallow: /api/\n"
+        "Allow: /\n\n"
+        "Sitemap: https://pre-consult.org/sitemap.xml\n"
+    )
+    return Response(
+        content=content,
+        media_type="text/plain",
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml():
+    today = date.today().isoformat()
+    content = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"\n'
+        '        xmlns:xhtml="http://www.w3.org/1999/xhtml">\n'
+        '  <url>\n'
+        '    <loc>https://pre-consult.org/</loc>\n'
+        f'    <lastmod>{today}</lastmod>\n'
+        '    <changefreq>weekly</changefreq>\n'
+        '    <priority>1.0</priority>\n'
+        '    <xhtml:link rel="alternate" hreflang="en" href="https://pre-consult.org/?lang=en"/>\n'
+        '    <xhtml:link rel="alternate" hreflang="pt" href="https://pre-consult.org/?lang=pt"/>\n'
+        '    <xhtml:link rel="alternate" hreflang="x-default" href="https://pre-consult.org/"/>\n'
+        '  </url>\n'
+        '</urlset>\n'
+    )
+    return Response(
+        content=content,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=86400"}
+    )

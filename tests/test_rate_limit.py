@@ -97,6 +97,10 @@ async def test_rate_limit_fallback_memory():
 
 @pytest.mark.asyncio
 async def test_concurrent_rate_limit():
+    from preconsult.services.session_service import _redis_available, _memory_limiter
+    _redis_available = False
+    _memory_limiter.clear()
+
     headers = {"X-API-KEY": PRECONSULT_API_KEY}
     payload = {
         "age_bracket": "26-35",
@@ -108,12 +112,6 @@ async def test_concurrent_rate_limit():
         "smoking": "No",
         "alcohol": "No"
     }
-
-    from preconsult.services.session_service import _memory_limiter
-    _memory_limiter.clear()
-
-    async with redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0")) as r:
-        await r.flushdb()
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         async def req():
@@ -130,6 +128,10 @@ async def test_concurrent_rate_limit():
 
 @pytest.mark.asyncio
 async def test_concurrent_session_quota():
+    from preconsult.services.session_service import _redis_available, _memory_limiter
+    _redis_available = False
+    _memory_limiter.clear()
+
     headers = {"X-API-KEY": PRECONSULT_API_KEY}
     payload = {
         "age_bracket": "26-35",
@@ -141,19 +143,6 @@ async def test_concurrent_session_quota():
         "smoking": "No",
         "alcohol": "No"
     }
-
-    from preconsult.services.session_service import _memory_limiter
-    _memory_limiter.clear()
-
-    async with redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0")) as r:
-        await r.flushdb()
-        await r.delete("rate_limit:init:127.0.0.1")
-        _memory_limiter.delete("rate_limit:init:127.0.0.1")
-
-    async def clear_rate_limit():
-        async with redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0")) as r:
-            await r.delete("rate_limit:init:127.0.0.1")
-        _memory_limiter.delete("rate_limit:init:127.0.0.1")
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         ok_count = 0
@@ -169,7 +158,7 @@ async def test_concurrent_session_quota():
                     quota_reached = True
                     break
                 else:
-                    await clear_rate_limit()
+                    _memory_limiter.delete("rate_limit:init:127.0.0.1")
                     resp = await client.post("/api/session/init", json=payload, headers=headers)
                     if resp.status_code == 200:
                         ok_count += 1

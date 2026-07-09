@@ -45,14 +45,14 @@ jobs:
     - name: Install dependencies
       run: |
         uv sync --all-extras --dev
-        
+        uv pip install -e .
+
     - name: Run linting
       run: |
         uv run ruff check . || echo "Ruff failed, but continuing for now."
-        
+
     - name: Run tests with pytest
       env:
-        PYTHONPATH: src
         PRECONSULT_API_KEY: ci_test_key_123
         GOOGLE_CLOUD_PROJECT: ci_test_project
       run: |

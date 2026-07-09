@@ -58,15 +58,18 @@ class MemoryRateLimitStore:
 _memory_limiter = MemoryRateLimitStore()
 
 
-def get_redis() -> redis.Redis:
+def get_redis() -> Optional[redis.Redis]:
     global _redis_pool, _redis_available
+    if _redis_available is False:
+        return None
     if _redis_pool is None:
         try:
             _redis_pool = redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2, socket_timeout=2)
         except Exception:
             _redis_available = False
-            logging.error("Falha ao conectar ao Redis. Rate limit usara fallback em memoria.")
+            logging.error("Redis indisponivel. Usando fallback em memoria.")
             _redis_pool = None
+            return None
     return _redis_pool
 
 
@@ -95,9 +98,12 @@ async def create_session(data: Dict[str, Any]) -> str:
     key = f"session:{session_id}"
 
     client = get_redis()
-    await client.hset(key, mapping=_serialize(data))
-    await client.expire(key, SESSION_TTL)
-    logging.info(f"Criada sessao {session_id} no Redis")
+    if client is not None:
+        await client.hset(key, mapping=_serialize(data))
+        await client.expire(key, SESSION_TTL)
+        logging.info(f"Criada sessao {session_id} no Redis")
+    else:
+        logging.info(f"Sessao {session_id} criada em memoria (Redis indisponivel)")
     return session_id
 
 async def get_session(session_id: str) -> Dict[str, Any]:
@@ -105,6 +111,8 @@ async def get_session(session_id: str) -> Dict[str, Any]:
         return {}
 
     client = get_redis()
+    if client is None:
+        return {}
     key = f"session:{session_id}"
     raw_data = await client.hgetall(key)
 
@@ -118,6 +126,8 @@ async def update_session(session_id: str, new_data: Dict[str, Any]) -> None:
         return
 
     client = get_redis()
+    if client is None:
+        return
     key = f"session:{session_id}"
     await client.hset(key, mapping=_serialize(new_data))
     await client.expire(key, SESSION_TTL)

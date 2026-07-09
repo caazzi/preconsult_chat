@@ -318,3 +318,33 @@ async def test_llms_txt_endpoint():
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/markdown")
     assert "PreConsult" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_analytics_stats_empty_when_redis_down():
+    from preconsult.services.session_service import _redis_available, _memory_limiter
+    original = _redis_available
+    try:
+        import preconsult.services.session_service as svc
+        svc._redis_available = False
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/api/analytics/stats", headers=HEADERS)
+        assert resp.status_code == 200
+        assert resp.json() == []
+    finally:
+        svc._redis_available = original
+
+
+@pytest.mark.asyncio
+async def test_analytics_event_still_ok_when_redis_down():
+    from preconsult.services.session_service import _redis_available, _memory_limiter
+    original = _redis_available
+    try:
+        import preconsult.services.session_service as svc
+        svc._redis_available = False
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/api/analytics/event", json={"event": "test"}, headers=HEADERS)
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+    finally:
+        svc._redis_available = original

@@ -126,3 +126,42 @@ jobs:
             --concurrency=80
             --cpu=1
             --memory=1Gi
+
+  smoke-test:
+    name: Smoke Test Deployed Endpoint
+    needs: deploy
+    if: always() && needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Get Cloud Run URL
+        id: url
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --format='value(status.url)')
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test interview endpoint
+        env:
+          BASE_URL: ${{ steps.url.outputs.url }}
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${BASE_URL}/api/interview-questions-stream" \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: dummy_smoke_key" \
+            -d '{"session_id": "smoke-test","chief_complaint": "headache for 3 days","language": "en"}' \
+            --max-time 30)
+          echo "HTTP status: ${STATUS}"
+          if [ "${STATUS}" != "200" ]; then
+            echo "Smoke test FAILED: expected 200, got ${STATUS}"
+            exit 1
+          fi

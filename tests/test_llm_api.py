@@ -105,11 +105,19 @@ async def test_llm_detects_emergency_mocked(mock_get_llm):
     assert any(k in full_text for k in keywords)
 
 
-# ── Integration test (only runs with real GCP credentials & correct project) ──
+# ── Integration test: runs in CI when GCP auth and project match ──
+
+def _can_run_integration():
+    cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+    return bool(cred_path) and os.path.isfile(cred_path) and (
+        os.environ.get("GOOGLE_CLOUD_PROJECT", "") == _REAL_PROJECT
+    )
+
 
 @pytest.mark.skipif(
-    os.environ.get("RUN_VERTEX_INTEGRATION") != "true",
-    reason="Integration test: set RUN_VERTEX_INTEGRATION=true",
+    not _can_run_integration(),
+    reason="Integration test: requires GOOGLE_APPLICATION_CREDENTIALS and "
+    f"GOOGLE_CLOUD_PROJECT={_REAL_PROJECT}",
 )
 async def test_llm_real_vertex_call():
     os.environ["GOOGLE_CLOUD_PROJECT"] = _REAL_PROJECT

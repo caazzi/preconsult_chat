@@ -20,7 +20,10 @@ jobs:
   test:
     name: Run Unit Tests & Linting
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
     services:
       redis:
         image: redis:alpine
@@ -36,6 +39,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
     
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v3
+      with:
+        workload_identity_provider: ${{ env.WIF_PROVIDER }}
+        service_account: ${{ env.SERVICE_ACCOUNT }}
+
     - name: Set up uv
       uses: astral-sh/setup-uv@v5
       with:
@@ -54,7 +64,6 @@ jobs:
     - name: Run tests with pytest
       env:
         PRECONSULT_API_KEY: ci_test_key_123
-        GOOGLE_CLOUD_PROJECT: ci_test_project
       run: |
         uv run pytest tests/ -v
 
@@ -74,22 +83,22 @@ jobs:
 
       - name: Authenticate to Google Cloud
         id: auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and Push Container
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
@@ -101,7 +110,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Deploy to Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: ${{ env.SERVICE_NAME }}
           region: ${{ env.REGION }}

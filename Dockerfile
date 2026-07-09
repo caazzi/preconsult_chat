@@ -24,7 +24,8 @@ COPY . .
 WORKDIR /app/reflex_app
 ARG API_URL="https://pre-consult.org"
 ENV API_URL=$API_URL
-RUN BUILD_MODE=true uv run reflex export --frontend-only --no-zip
+RUN npm install -g bun && \
+    BUILD_MODE=true uv run reflex export --frontend-only --no-zip
 
 # --- Stage 2: Final Production Image ---
 FROM python:3.11-slim-bookworm

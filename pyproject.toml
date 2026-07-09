@@ -26,6 +26,7 @@ test = [
     "pytest-asyncio",
     "pytest-cov>=7.1.0",
     "httpx",
+    "ruff",
 ]
 
 [build-system]

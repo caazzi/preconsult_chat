@@ -798,7 +798,7 @@ import re
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, Response
 
-_LANG_COOKIE_SCRIPT = """
+_LANG_COOKIE_SCRIPT = r"""
 <script>
 (function() {
     var lang = (document.cookie.match(/(?:^|;\s*)preconsult_lang=([^;]*)/) || [])[1];

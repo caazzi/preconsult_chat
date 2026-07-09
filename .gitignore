@@ -108,3 +108,9 @@ reflex_app/frontend.zip
 
 # Local scratch files
 scratch/
+
+# Secrets
+.env
+.env.*
+!*.env.example
+*credentials*.json

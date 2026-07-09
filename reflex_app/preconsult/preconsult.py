@@ -667,9 +667,39 @@ app = rx.App(
 
 if api_router:
     from fastapi import FastAPI
+    from starlette.responses import Response
     custom_api = FastAPI()
     custom_api.include_router(api_router)
     app._api.mount("/api", custom_api)
+
+    async def llms_txt(request):
+        content = (
+            "# PreConsult — AI Medical Intake Assistant\n\n"
+            "> Privacy-first guided AI interview helper for patient intake. "
+            "Zero data persistence. No account required.\n\n"
+            "PreConsult helps patients organize symptoms and prepare for "
+            "doctor's appointments through a structured multi-step intake form. "
+            "The entire process runs in-browser, uses Google Vertex AI (Gemini) "
+            "to generate targeted clinical questions, and produces a downloadable "
+            "PDF report. All data is deleted when the browser tab is closed.\n\n"
+            "Key principles:\n"
+            "- Zero data persistence: No data stored on servers after session ends\n"
+            "- No account required: Fully anonymous usage\n"
+            "- AI-powered clinical questions via Google Vertex AI (Gemini 2.5 Flash Lite)\n"
+            "- Multi-language: English and Portuguese (Brazil)\n"
+            "- PDF report generation with form data and Q&A\n"
+            "- Privacy-first: No tracking, no cookies, no PII collected\n\n"
+            "## Pages\n\n"
+            "- [Homepage](https://pre-consult.org/): Main intake form with 6-step wizard\n"
+            "- [Admin Dashboard](https://pre-consult.org/admin/dashboard): "
+            "Analytics funnel (token-gated)\n"
+        )
+        return Response(
+            content=content,
+            media_type="text/markdown",
+            headers={"Cache-Control": "public, max-age=3600"}
+        )
+    app._api.add_route("/llms.txt", llms_txt, include_in_schema=False)
 
 def admin_dashboard() -> rx.Component:
     def analytics_row(row):

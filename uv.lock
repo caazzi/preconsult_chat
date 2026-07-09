@@ -1551,16 +1551,16 @@ wheels = [
 
 [[package]]
 name = "reflex-components-radix"
-version = "0.9.1"
+version = "0.9.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "reflex-base" },
     { name = "reflex-components-core" },
     { name = "reflex-components-lucide" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/85/2f/465af745c50d2d43e7302de1fdb5919e43a24f3f8a7ca324bfbaee0e651b/reflex_components_radix-0.9.1.tar.gz", hash = "sha256:f363069fa7dcd63e959c2d541b1a8ca54aefa5c5e11021b1afd1b5cfae06625f", size = 105797, upload-time = "2026-04-27T20:56:51.3Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/78/f9/c1e79f1f042bb3e10cdb0d8efab84a826c630c3feb246baf5431408394dd/reflex_components_radix-0.9.4.tar.gz", hash = "sha256:cba2355b786a6cf33457c9f505a8de614adf637411c9e23fd323e04b89e09bac", size = 113880, upload-time = "2026-06-04T01:44:14.993Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/8e/868df3c4f6684929b5aa72039bf114461c1ee50f349479f81428d3c2cae0/reflex_components_radix-0.9.1-py3-none-any.whl", hash = "sha256:c681d3c01c083e24f4d19d1c3b6af3c1307fa61e6ef0b1329bde78286a4eeb35", size = 262182, upload-time = "2026-04-27T20:56:52.438Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/8a/bcdd5b1f9a81bc145aa8d36c751f1597e1148dbad7c0aa04bf599389e600/reflex_components_radix-0.9.4-py3-none-any.whl", hash = "sha256:713e5968b6fcc09f363b45820c067c4b7e452990667b7649373a9c3455ffe742", size = 271527, upload-time = "2026-06-04T01:44:13.658Z" },
 ]
 
 [[package]]

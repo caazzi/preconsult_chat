@@ -62,3 +62,26 @@ async def test_rate_limit_recovers_after_redis_comes_back():
 
     _redis_available = None
     _memory_limiter.clear()
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.get_redis", return_value=None)
+async def test_create_session_redis_unavailable(mock_get_redis):
+    session_id = await create_session({"age": "30"})
+    assert session_id is not None
+    assert isinstance(session_id, str)
+    assert len(session_id) > 0
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.get_redis", return_value=None)
+async def test_get_session_redis_unavailable(mock_get_redis):
+    result = await get_session("any-id")
+    assert result == {}
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.get_redis", return_value=None)
+async def test_update_session_redis_unavailable(mock_get_redis):
+    result = await update_session("any-id", {"gender": "Female"})
+    assert result is None

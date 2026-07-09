@@ -82,6 +82,62 @@ async def test_interview_questions_stream(mock_chain, mock_rate, mock_stream, mo
             assert "Question" in full_text
             assert mock_stream.called
 
+
+@pytest.mark.asyncio
+@patch("preconsult.api.endpoints.stream_interview_questions")
+@patch("preconsult.api.endpoints.get_session", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.check_rate_limit", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.get_interview_chain", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.update_session", new_callable=AsyncMock)
+async def test_initial_questions_stream(mock_update, mock_chain, mock_rate, mock_get, mock_stream):
+    mock_get.return_value = {"lang": "en", "chief_complaint": "pain"}
+    mock_rate.return_value = True
+    async def fake_stream(*args, **kwargs):
+        yield "1. Question?"
+    mock_stream.side_effect = fake_stream
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with client.stream("POST", "/api/initial-questions-stream", json={"session_id": "fake-id", "chief_complaint": "  pain  "}, headers=HEADERS) as response:
+            assert response.status_code == 200
+            full_text = ""
+            async for line in response.aiter_lines():
+                if line.startswith("data:"):
+                    full_text += json.loads(line[len("data:"):].strip())
+            assert "Question" in full_text
+            assert mock_stream.called
+
+
+@pytest.mark.asyncio
+@patch("preconsult.api.endpoints.check_rate_limit", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.get_interview_chain", new_callable=AsyncMock)
+async def test_initial_questions_stream_session_not_found(mock_chain, mock_rate):
+    mock_rate.return_value = True
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/initial-questions-stream", json={"session_id": "bad-id", "chief_complaint": "pain"}, headers=HEADERS)
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+@patch("preconsult.api.endpoints.stream_interview_questions")
+@patch("preconsult.api.endpoints.get_session", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.check_rate_limit", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.get_interview_chain", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.update_session", new_callable=AsyncMock)
+async def test_initial_questions_stream_sanitizes_input(mock_update, mock_chain, mock_rate, mock_get, mock_stream):
+    mock_get.return_value = {"lang": "en", "chief_complaint": "pain"}
+    mock_rate.return_value = True
+    async def fake_stream(*args, **kwargs):
+        yield "1. Question?"
+    mock_stream.side_effect = fake_stream
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with client.stream("POST", "/api/initial-questions-stream", json={"session_id": "fake-id", "chief_complaint": "  chest pain  "}, headers=HEADERS) as response:
+            assert response.status_code == 200
+            await response.aread()
+            update_call = mock_update.call_args
+            assert update_call is not None
+            assert update_call[0][1]["chief_complaint"] == "chest pain"
+
 @pytest.mark.asyncio
 @patch("preconsult.api.endpoints.get_session", new_callable=AsyncMock)
 @patch("preconsult.api.endpoints.check_rate_limit", new_callable=AsyncMock)

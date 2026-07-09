@@ -126,16 +126,30 @@ class State(rx.State):
 
     def detect_lang(self):
         try:
+            lang_cookie = self.get_cookie("preconsult_lang")
+            if lang_cookie in ("pt", "en"):
+                self.lang = lang_cookie
+                return
             query_params = self.router.page.params
             lang_param = query_params.get("lang", "").lower()
-            if lang_param in ["pt", "en"]:
+            if lang_param in ("pt", "en"):
                 self.lang = lang_param
                 return
             accept_lang = self.router.headers.get("accept-language", "")
-            if "pt" in accept_lang.lower().split(",")[0]:
-                self.lang = "pt"
-            else:
-                self.lang = "en"
+            parsed = []
+            for entry in accept_lang.split(","):
+                parts = entry.split(";")
+                lang = parts[0].strip().lower().split("-")[0]
+                q = 1.0
+                if len(parts) > 1:
+                    import re
+                    m = re.search(r"q=([\d.]+)", parts[1])
+                    if m:
+                        q = float(m.group(1))
+                if lang in ("en", "pt"):
+                    parsed.append((lang, q))
+            parsed.sort(key=lambda x: x[1], reverse=True)
+            self.lang = parsed[0][0] if parsed else "en"
         except Exception:
             self.lang = "en"
 
@@ -144,6 +158,7 @@ class State(rx.State):
 
     def set_lang(self, val: str):
         self.lang = val
+        self.set_cookie("preconsult_lang", val, max_age=365 * 24 * 3600, path="/")
 
     def set_chief_complaint(self, val: str):
         self.chief_complaint = val

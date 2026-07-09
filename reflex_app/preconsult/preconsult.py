@@ -768,6 +768,21 @@ import re
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, Response
 
+_LANG_COOKIE_SCRIPT = """
+<script>
+(function() {
+    var lang = (document.cookie.match(/(?:^|;\s*)preconsult_lang=([^;]*)/) || [])[1];
+    if (lang === "pt" || lang === "en") {
+        var url = new URL(window.location.href);
+        if (!url.searchParams.has("lang")) {
+            url.searchParams.set("lang", lang);
+            window.history.replaceState({}, "", url.toString());
+        }
+    }
+})();
+</script>
+"""
+
 _MOCK_WEBSOCKET_SCRIPT = """
 <script>
 (function() {
@@ -955,7 +970,7 @@ class CustomStaticFiles(StaticFiles):
                     """
 
                     seo_tags = hreflang_tags + canonical_tag + schema_jsonld
-                    html_content = html_content.replace("</head>", f"{critical_style}{_MOCK_WEBSOCKET_SCRIPT}{gtag_script}{seo_tags}</head>")
+                    html_content = html_content.replace("</head>", f"{critical_style}{_LANG_COOKIE_SCRIPT}{_MOCK_WEBSOCKET_SCRIPT}{gtag_script}{seo_tags}</head>")
 
                     # Fix og:image — use dedicated 1200x630 PNG for social previews
                     html_content = html_content.replace(

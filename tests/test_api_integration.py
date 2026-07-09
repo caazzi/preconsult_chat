@@ -268,4 +268,53 @@ async def test_health_endpoint():
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "healthy"
-    assert body["redis"] in ("ok", "unavailable")
+
+
+@pytest.mark.asyncio
+async def test_health_reports_unavailable_when_redis_unknown():
+    from preconsult.services.session_service import _redis_available
+    original = _redis_available
+    try:
+        import preconsult.services.session_service as svc
+        svc._redis_available = None
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json()["redis"] == "unavailable"
+    finally:
+        svc._redis_available = original
+
+
+@pytest.mark.asyncio
+async def test_root_endpoint():
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/", headers=HEADERS)
+    assert resp.status_code == 200
+    assert "Welcome" in resp.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_robots_txt_endpoint():
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/robots.txt")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/plain")
+    assert "Disallow: /admin/" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_sitemap_xml_endpoint():
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/sitemap.xml")
+    assert resp.status_code == 200
+    assert "application/xml" in resp.headers["content-type"]
+    assert 'hreflang="en"' in resp.text
+
+
+@pytest.mark.asyncio
+async def test_llms_txt_endpoint():
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/llms.txt")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/markdown")
+    assert "PreConsult" in resp.text

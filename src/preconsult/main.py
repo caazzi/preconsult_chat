@@ -54,7 +54,7 @@ async def read_root():
 
 @app.get("/health", tags=["Health"])
 async def health():
-    redis_status = "ok" if _redis_available is not False else "unavailable"
+    redis_status = "ok" if _redis_available is True else "unavailable"
     return {"status": "healthy", "redis": redis_status}
 
 

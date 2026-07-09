@@ -59,3 +59,16 @@ def test_pdf_unknown_lang_defaults_to_en():
     assert pdf_bytes.startswith(b"%PDF-")
     assert filename.startswith("PreConsult_Report")
     assert filename.endswith(".pdf")
+
+def test_pdf_empty_form_dict_does_not_crash():
+    pdf_bytes, _ = generate_pdf_report_in_memory({}, MINIMAL_QA, lang="en")
+    assert pdf_bytes.startswith(b"%PDF-")
+
+def test_pdf_partial_form_does_not_crash():
+    pdf_bytes, _ = generate_pdf_report_in_memory({"specialist": "Cardio"}, [], lang="en")
+    assert pdf_bytes.startswith(b"%PDF-")
+
+def test_pdf_qa_without_question_field_does_not_crash():
+    qa = [{"answer": "yes"}]
+    pdf_bytes, _ = generate_pdf_report_in_memory(MINIMAL_FORM, qa, lang="en")
+    assert pdf_bytes.startswith(b"%PDF-")

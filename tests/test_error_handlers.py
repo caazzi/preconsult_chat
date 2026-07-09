@@ -86,3 +86,29 @@ async def test_generic_error_returns_500():
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/api/session/init", json={}, headers=HEADERS)
     assert response.status_code in (422, 500)
+
+
+@pytest.mark.asyncio
+async def test_validation_error_wrong_type_for_list_field_returns_422():
+    payload = {**FULL_PAYLOAD, "conditions": "not_a_list"}
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/session/init", json=payload, headers=HEADERS)
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_validation_error_long_answer_returns_422():
+    payload = {"session_id": "x", "qa_pairs": [{"question": "?", "answer": "a" * 2001}]}
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/generate-pdf", json=payload, headers=HEADERS)
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_get_llm_raises_on_init_failure():
+    import preconsult.core.llm as llm_module
+    llm_module._llm = None
+    with patch("preconsult.core.llm.ChatVertexAI") as mock_chat:
+        mock_chat.side_effect = GoogleAPIError("Vertex AI quota exceeded")
+        with pytest.raises(GoogleAPIError):
+            llm_module.get_llm()

@@ -58,31 +58,31 @@ class State(rx.State):
     def duration_opts_with_keys(self) -> List[Dict[str, str]]:
         keys = ["today", "days", "weeks", "months", "years"]
         labels = self._t["duration_opts"]
-        return [{"id": k, "label": l} for k, l in zip(keys, labels)]
+        return [{"id": k, "label": label} for k, label in zip(keys, labels)]
 
     @rx.var
     def conditions_opts_with_keys(self) -> List[Dict[str, str]]:
         keys = ["asthma", "depression", "diabetes", "hypertension", "thyroid"]
         labels = self._t["conditions_opts"]
-        return [{"id": k, "label": l} for k, l in zip(keys, labels)]
+        return [{"id": k, "label": label} for k, label in zip(keys, labels)]
 
     @rx.var
     def family_history_opts_with_keys(self) -> List[Dict[str, str]]:
         keys = ["alzheimers", "cancer", "diabetes", "heart"]
         labels = self._t["family_history_opts"]
-        return [{"id": k, "label": l} for k, l in zip(keys, labels)]
+        return [{"id": k, "label": label} for k, label in zip(keys, labels)]
 
     @rx.var
     def smoking_opts_with_keys(self) -> List[Dict[str, str]]:
         keys = ["never", "former", "current"]
         labels = self._t["smoking_opts"]
-        return [{"id": k, "label": l} for k, l in zip(keys, labels)]
+        return [{"id": k, "label": label} for k, label in zip(keys, labels)]
 
     @rx.var
     def alcohol_opts_with_keys(self) -> List[Dict[str, str]]:
         keys = ["never", "rarely", "socially", "frequently"]
         labels = self._t["alcohol_opts"]
-        return [{"id": k, "label": l} for k, l in zip(keys, labels)]
+        return [{"id": k, "label": label} for k, label in zip(keys, labels)]
 
     @rx.var
     def step_progress(self) -> int:

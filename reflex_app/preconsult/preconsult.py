@@ -110,19 +110,20 @@ def header() -> rx.Component:
     )
 
 def step_0_landing() -> rx.Component:
-    card = lambda icon, title, sub: rx.vstack(
-        rx.icon(icon, size=24, color="cyan"),
-        rx.text(State.t[title], weight="bold", size="3", text_align="center"),
-        rx.text(State.t[sub], size="2", color_scheme="gray", text_align="center"),
-        align_items="center",
-        spacing="2",
-        padding="1em",
-        border="1px solid rgba(255,255,255,0.1)",
-        border_radius="12px",
-        width="100%",
-        height="100%",
-        _hover={"background": "rgba(0, 200, 255, 0.04)"},
-    )
+    def card(icon, title, sub):
+        return rx.vstack(
+            rx.icon(icon, size=24, color="cyan"),
+            rx.text(State.t[title], weight="bold", size="3", text_align="center"),
+            rx.text(State.t[sub], size="2", color_scheme="gray", text_align="center"),
+            align_items="center",
+            spacing="2",
+            padding="1em",
+            border="1px solid rgba(255,255,255,0.1)",
+            border_radius="12px",
+            width="100%",
+            height="100%",
+            _hover={"background": "rgba(0, 200, 255, 0.04)"},
+        )
     return rx.vstack(
         rx.center(
             rx.hstack(
@@ -793,10 +794,10 @@ app.add_page(
     description="Analytics funnel dashboard for PreConsult administrators."
 )
 
-import os
-import re
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, Response
+import os  # noqa: E402
+import re  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+from fastapi.responses import HTMLResponse, Response  # noqa: E402
 
 _LANG_COOKIE_SCRIPT = r"""
 <script>

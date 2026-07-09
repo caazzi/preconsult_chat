@@ -8,8 +8,14 @@ from datetime import datetime
 from .i18n import translations
 from .analytics import log_analytics_event, fetch_analytics_data
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "/api")
 API_KEY = os.environ.get("PRECONSULT_API_KEY", "")
+
+
+def _api_url(path: str) -> str:
+    base = os.environ.get("API_BASE_URL", "").rstrip("/")
+    if base.startswith("http://") or base.startswith("https://"):
+        return f"{base}/api{path}"
+    return f"/api{path}"
 
 class State(rx.State):
     """The app state."""
@@ -320,7 +326,7 @@ class State(rx.State):
                 }
                 
                 resp = await client.post(
-                    f"{API_BASE_URL}/session/init",
+                    _api_url("/session/init"),
                     json=payload,
                     headers={"X-API-KEY": API_KEY},
                     timeout=10.0
@@ -370,7 +376,7 @@ class State(rx.State):
                 }
                 
                 async with asyncio.timeout(stream_timeout):
-                    async with client.stream("POST", f"{API_BASE_URL}/interview-questions-stream", json=payload, headers=headers, timeout=stream_timeout + 5.0) as response:
+                    async with client.stream("POST", _api_url("/interview-questions-stream"), json=payload, headers=headers, timeout=stream_timeout + 5.0) as response:
                         async for line in response.aiter_lines():
                             if line.startswith("data: "):
                                 chunk = json.loads(line[len("data: "):])
@@ -433,7 +439,7 @@ class State(rx.State):
                     ]
                 }
                 resp = await client.post(
-                    f"{API_BASE_URL}/generate-pdf",
+                    _api_url("/generate-pdf"),
                     json=payload,
                     headers=headers,
                     timeout=30.0

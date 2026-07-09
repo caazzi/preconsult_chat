@@ -2,15 +2,21 @@ import os
 import httpx
 import logging
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "/api")
 API_KEY = os.environ.get("PRECONSULT_API_KEY", "")
+
+
+def _api_url(path: str) -> str:
+    base = os.environ.get("API_BASE_URL", "").rstrip("/")
+    if base.startswith("http://") or base.startswith("https://"):
+        return f"{base}/api{path}"
+    return f"/api{path}"
 
 
 async def log_analytics_event(event_name: str):
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                f"{API_BASE_URL}/analytics/event",
+                _api_url("/analytics/event"),
                 json={"event": event_name},
                 headers={"X-API-KEY": API_KEY},
                 timeout=5.0,
@@ -25,7 +31,7 @@ async def fetch_analytics_data() -> list[dict]:
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(
-                f"{API_BASE_URL}/analytics/stats",
+                _api_url("/analytics/stats"),
                 headers={"X-API-KEY": API_KEY},
                 timeout=10.0,
             )

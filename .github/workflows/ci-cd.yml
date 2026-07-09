@@ -114,7 +114,7 @@ jobs:
           region: ${{ env.REGION }}
           image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
           env_vars: |
-            API_BASE_URL=/api
+            API_BASE_URL=https://pre-consult.org
             VERTEX_AI_REGION=${{ env.REGION }}
           secrets: |
             REDIS_URL=REDIS_URL:latest

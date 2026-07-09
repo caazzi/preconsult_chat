@@ -1,12 +1,10 @@
 import pytest
-import json
 from unittest.mock import patch, AsyncMock
 import httpx
 from httpx import ASGITransport
 from preconsult.main import app
-from pydantic import ValidationError
 from google.api_core.exceptions import GoogleAPIError
-from preconsult.core.errors import RedisUnavailableError, LLMUnavailableError
+from preconsult.core.errors import RedisUnavailableError
 
 HEADERS = {"X-API-KEY": "ci_test_key_123"}
 FULL_PAYLOAD = {
@@ -79,9 +77,9 @@ async def test_google_api_error_during_startup_returns_502():
 
 @pytest.mark.asyncio
 async def test_generic_error_returns_500():
-    from preconsult.services.session_service import _redis_available, _memory_limiter
-    _redis_available = False
-    _memory_limiter.clear()
+    import preconsult.services.session_service as srv
+    srv._redis_available = False
+    srv._memory_limiter.clear()
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/api/session/init", json={}, headers=HEADERS)

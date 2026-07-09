@@ -1,6 +1,5 @@
 import pytest
-import json
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, AsyncMock
 from preconsult.services.session_service import create_session, get_session, update_session
 
 @pytest.mark.asyncio
@@ -53,14 +52,15 @@ async def test_update_session(mock_get_redis):
 
 @pytest.mark.asyncio
 async def test_rate_limit_recovers_after_redis_comes_back():
-    from preconsult.services.session_service import _redis_available, _memory_limiter, check_rate_limit
+    import preconsult.services.session_service as srv
+    from preconsult.services.session_service import _memory_limiter, check_rate_limit
 
-    _redis_available = False
+    srv._redis_available = False
     _memory_limiter.clear()
 
     assert await check_rate_limit("recovery-ip", limit=2, window=60) is True
 
-    _redis_available = None
+    srv._redis_available = None
     _memory_limiter.clear()
 
 

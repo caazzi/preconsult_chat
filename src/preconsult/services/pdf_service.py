@@ -144,8 +144,11 @@ def generate_pdf_report_in_memory(form: dict, qa_pairs: list, lang: str = 'en') 
 
     # --- Clinical Questions & Patient Answers Section ---
     if qa_pairs:
-        if y_pos < 2.0 * inch: c.showPage(); y_pos = height - 1.0 * inch
-        else: y_pos -= 0.5 * inch
+        if y_pos < 2.0 * inch:
+            c.showPage()
+            y_pos = height - 1.0 * inch
+        else:
+            y_pos -= 0.5 * inch
         
         c.setFont("Helvetica-Bold", 14)
         c.drawString(inch, y_pos, labels['qa_section_title'])

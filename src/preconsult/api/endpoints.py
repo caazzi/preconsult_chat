@@ -8,7 +8,6 @@ the application starts quickly. Includes Redis-backed ephemeral state.
 import json
 import logging
 from datetime import date, timedelta
-from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
 from fastapi.responses import StreamingResponse, Response
@@ -16,7 +15,6 @@ from pydantic import BaseModel, Field
 from langchain_core.runnables import Runnable
 
 from preconsult.core.config import PRECONSULT_API_KEY
-from preconsult.core.errors import RedisUnavailableError, LLMUnavailableError
 from preconsult.services.agent_service import (
     stream_interview_questions,
     get_interview_chain,

@@ -1,5 +1,4 @@
-import pytest
-from preconsult.services.pdf_service import generate_pdf_report_in_memory, translations
+from preconsult.services.pdf_service import generate_pdf_report_in_memory
 
 MINIMAL_FORM = {
     "specialist": "Gastroenterologist",

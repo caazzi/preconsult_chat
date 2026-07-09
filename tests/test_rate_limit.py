@@ -77,9 +77,10 @@ async def test_session_quota():
 
 @pytest.mark.asyncio
 async def test_rate_limit_fallback_memory():
-    from preconsult.services.session_service import _redis_available, _memory_limiter, check_rate_limit, check_session_quota, increment_session_quota
+    import preconsult.services.session_service as srv
+    from preconsult.services.session_service import _memory_limiter, check_rate_limit, check_session_quota, increment_session_quota
 
-    _redis_available = False
+    srv._redis_available = False
     _memory_limiter.clear()
 
     assert await check_rate_limit("test-ip", limit=2, window=60) is True
@@ -91,14 +92,15 @@ async def test_rate_limit_fallback_memory():
         await increment_session_quota("test-quota")
     assert await check_session_quota("test-quota", limit=20) is False
 
-    _redis_available = None
+    srv._redis_available = None
     _memory_limiter.clear()
 
 
 @pytest.mark.asyncio
 async def test_concurrent_rate_limit():
-    from preconsult.services.session_service import _redis_available, _memory_limiter
-    _redis_available = False
+    import preconsult.services.session_service as srv
+    from preconsult.services.session_service import _memory_limiter
+    srv._redis_available = False
     _memory_limiter.clear()
 
     headers = {"X-API-KEY": PRECONSULT_API_KEY}
@@ -128,8 +130,9 @@ async def test_concurrent_rate_limit():
 
 @pytest.mark.asyncio
 async def test_concurrent_session_quota():
-    from preconsult.services.session_service import _redis_available, _memory_limiter
-    _redis_available = False
+    import preconsult.services.session_service as srv
+    from preconsult.services.session_service import _memory_limiter
+    srv._redis_available = False
     _memory_limiter.clear()
 
     headers = {"X-API-KEY": PRECONSULT_API_KEY}

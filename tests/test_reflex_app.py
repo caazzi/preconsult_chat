@@ -1,4 +1,3 @@
-import pytest
 import reflex as rx
 from reflex_app.preconsult.preconsult import header, stepper_component, step_0_landing, step_1_demographics, step_2_chief_complaint, step_3_history, step_4_lifestyle, step_5_interview_qs, step_6_summary, error_callout, admin_dashboard
 from reflex_app.preconsult.state import State
@@ -81,7 +80,6 @@ def test_state_question_index():
 def test_custom_static_files_injection(tmp_path):
     from reflex_app.preconsult.preconsult import CustomStaticFiles
     from fastapi.staticfiles import StaticFiles
-    import os
     
     # Create a dummy index.html in a temp directory
     dummy_dir = tmp_path / "static"

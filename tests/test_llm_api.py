@@ -7,7 +7,7 @@ _CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
 os.environ["GOOGLE_CLOUD_PROJECT"] = _REAL_PROJECT
 
 
-import pytest
+import pytest  # noqa: E402
 
 
 pytestmark = [

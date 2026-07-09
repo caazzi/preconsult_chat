@@ -1,7 +1,6 @@
 import pytest
-import os
 import json
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, AsyncMock
 import httpx
 from httpx import ASGITransport
 from preconsult.main import app
@@ -322,7 +321,7 @@ async def test_llms_txt_endpoint():
 
 @pytest.mark.asyncio
 async def test_analytics_stats_empty_when_redis_down():
-    from preconsult.services.session_service import _redis_available, _memory_limiter
+    from preconsult.services.session_service import _redis_available
     original = _redis_available
     try:
         import preconsult.services.session_service as svc
@@ -337,7 +336,7 @@ async def test_analytics_stats_empty_when_redis_down():
 
 @pytest.mark.asyncio
 async def test_analytics_event_still_ok_when_redis_down():
-    from preconsult.services.session_service import _redis_available, _memory_limiter
+    from preconsult.services.session_service import _redis_available
     original = _redis_available
     try:
         import preconsult.services.session_service as svc

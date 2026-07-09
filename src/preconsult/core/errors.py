@@ -1,5 +1,5 @@
 import logging
-from fastapi import Request, HTTPException
+from fastapi import Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from google.api_core.exceptions import GoogleAPIError

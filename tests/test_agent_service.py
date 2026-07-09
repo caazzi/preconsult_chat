@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch
 from langchain_core.language_models import FakeListChatModel
 from preconsult.services.agent_service import (
     get_language_instructions,

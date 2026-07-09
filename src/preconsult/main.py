@@ -1,15 +1,15 @@
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-from datetime import date
-from fastapi import FastAPI
-from fastapi.responses import Response
-from pydantic import ValidationError
-from google.api_core.exceptions import GoogleAPIError
-from preconsult.api.endpoints import router as api_router
-from preconsult.core.config import SENTRY_DSN
-from preconsult.services.session_service import get_redis, _redis_available
-from preconsult.core.errors import (
+from datetime import date  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
+from fastapi.responses import Response  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
+from google.api_core.exceptions import GoogleAPIError  # noqa: E402
+from preconsult.api.endpoints import router as api_router  # noqa: E402
+from preconsult.core.config import SENTRY_DSN  # noqa: E402
+from preconsult.services.session_service import _redis_available  # noqa: E402
+from preconsult.core.errors import (  # noqa: E402
     RedisUnavailableError,
     LLMUnavailableError,
     redis_unavailable_handler,

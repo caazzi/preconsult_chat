@@ -1,5 +1,5 @@
 # --- Stage 1: Build Frontend ---
-FROM python:3.11-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 
 # Install Node.js for Reflex frontend compilation
 RUN apt-get update && apt-get install -y curl && \
@@ -28,7 +28,7 @@ RUN npm install -g bun && \
     BUILD_MODE=true uv run reflex export --frontend-only --no-zip
 
 # --- Stage 2: Final Production Image ---
-FROM python:3.11-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 WORKDIR /app
 

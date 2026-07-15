@@ -7,7 +7,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi==0.136.1",
     "gunicorn==26.0.0",
-    "langchain-google-vertexai==2.1.2",
+    "langchain-google-vertexai==3.2.4",
     "langchain==0.3.27",
     "pydantic==2.13.4",
     "reportlab==5.0.0",

@@ -43,6 +43,14 @@ def _sanitize_input(text: str) -> str:
         return ""
     return text.strip()
 
+def get_client_ip(request: Request) -> str:
+    """Extrai o IP real do cliente, considerando proxies como Cloudflare ou Cloud Run."""
+    if "cf-connecting-ip" in request.headers:
+        return request.headers["cf-connecting-ip"]
+    if "x-forwarded-for" in request.headers:
+        return request.headers["x-forwarded-for"].split(",")[0].strip()
+    return request.client.host if request.client else "127.0.0.1"
+
 # --- Data Models (Ephemeral State Design) ---
 class SessionInitRequest(BaseModel):
     # Step 1 — Demographics
@@ -84,7 +92,7 @@ router = APIRouter(dependencies=[Depends(get_api_key)])
 @router.post("/session/init")
 async def init_session(request: SessionInitRequest, fastapi_req: Request):
     """Initializes a new ephemeral Redis session with full form data."""
-    ip = fastapi_req.client.host
+    ip = get_client_ip(fastapi_req)
     
     # 1. Check daily quota (max 20 sessions per IP)
     if not await check_session_quota(ip, limit=20):
@@ -122,7 +130,7 @@ async def get_initial_questions_streamed(
     chain: Runnable = Depends(get_interview_chain)
 ):
     """ Streams interview questions based on chief complaint. """
-    ip = fastapi_req.client.host
+    ip = get_client_ip(fastapi_req)
     if not await check_rate_limit(f"stream:{ip}", limit=5, window=60):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait a moment.")
 
@@ -147,7 +155,7 @@ async def get_interview_questions_streamed(
     chain: Runnable = Depends(get_interview_chain)
 ):
     """Streams targeted interview questions based on full form context. Single LLM call."""
-    ip = fastapi_req.client.host
+    ip = get_client_ip(fastapi_req)
     if not await check_rate_limit(f"stream:{ip}", limit=5, window=60):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait a moment.")
 

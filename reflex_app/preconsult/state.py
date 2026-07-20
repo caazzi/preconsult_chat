@@ -467,8 +467,8 @@ class AdminState(rx.State):
         query_params = self.router.page.params
         token_val = query_params.get("token", "")
         
-        expected_token = os.environ.get("ADMIN_DASHBOARD_TOKEN", "preconsult_dev_token")
-        if token_val == expected_token:
+        expected_token = os.environ.get("ADMIN_DASHBOARD_TOKEN")
+        if expected_token and token_val == expected_token:
             self.authorized = True
             await self.fetch_analytics_data()
         else:

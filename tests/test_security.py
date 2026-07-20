@@ -100,7 +100,22 @@ class TestP6_Sprint5Features:
         assert "do not generate questions" in system_msg.lower()
 
 
-class TestP7_BuildMode:
+class TestP7_InputSanitization:
+    def test_sanitize_escapes_html(self):
+        from preconsult.api.endpoints import _sanitize_input
+        assert _sanitize_input("<script>alert('xss')</script>") == "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;"
+
+    def test_sanitize_strips_whitespace(self):
+        from preconsult.api.endpoints import _sanitize_input
+        assert _sanitize_input("  hello  ") == "hello"
+
+    def test_sanitize_returns_empty_for_non_string(self):
+        from preconsult.api.endpoints import _sanitize_input
+        assert _sanitize_input(None) == ""
+        assert _sanitize_input(123) == ""
+
+
+class TestP8_BuildMode:
     def test_build_mode_allows_startup_without_api_key(self):
         import dotenv
         original_load_dotenv = dotenv.load_dotenv

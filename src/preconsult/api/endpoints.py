@@ -6,6 +6,7 @@ to trigger the lazy-loading of services in the agent_service module, ensuring
 the application starts quickly. Includes Redis-backed ephemeral state.
 """
 import asyncio
+import html
 import json
 import logging
 from datetime import date, timedelta
@@ -39,10 +40,10 @@ async def get_api_key(api_key_header: str = Security(API_KEY_HEADER)):
     raise HTTPException(status_code=403, detail="Could not validate credentials")
 
 def _sanitize_input(text: str) -> str:
-    """Strips leading/trailing whitespace from input."""
+    """Sanitizes user text: strips whitespace and escapes HTML entities."""
     if not isinstance(text, str):
         return ""
-    return text.strip()
+    return html.escape(text.strip())
 
 def get_client_ip(request: Request) -> str:
     """Extrai o IP real do cliente, considerando proxies como Cloudflare ou Cloud Run."""

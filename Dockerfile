@@ -57,4 +57,4 @@ WORKDIR /app/reflex_app
 
 # Run production backend using Gunicorn with Uvicorn workers and bind to the PORT env variable
 # 'exec' ensures signals (like SIGTERM for scale-down) are correctly sent to gunicorn
-CMD ["sh", "-c", "exec uv run gunicorn preconsult.preconsult:api --bind 0.0.0.0:${PORT:-8080} --worker-class uvicorn.workers.UvicornWorker --workers 1 --threads 8"]
+CMD ["sh", "-c", "exec uv run gunicorn preconsult.preconsult:api --bind 0.0.0.0:${PORT:-8080} --worker-class uvicorn.workers.UvicornWorker --workers 2 --threads 4"]

@@ -4,11 +4,15 @@ import httpx
 from httpx import ASGITransport
 from preconsult.main import app
 from preconsult.core.config import PRECONSULT_API_KEY
-import redis.asyncio as redis
-import os
 
 @pytest.mark.asyncio
 async def test_rate_limit_session_init():
+    import preconsult.services.session_service as srv
+    from preconsult.services.session_service import _memory_limiter
+
+    srv._redis_available = False
+    await _memory_limiter.clear()
+
     headers = {"X-API-KEY": PRECONSULT_API_KEY}
     payload = {
         "age_bracket": "26-35",
@@ -20,10 +24,6 @@ async def test_rate_limit_session_init():
         "smoking": "No",
         "alcohol": "No"
     }
-
-    # Clear redis for testing
-    async with redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0")) as r:
-        await r.flushdb()
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # First and second requests should succeed
@@ -38,8 +38,17 @@ async def test_rate_limit_session_init():
         assert resp3.status_code == 429
         assert "Too many session requests" in resp3.json()["detail"]
 
+    srv._redis_available = None
+    await _memory_limiter.clear()
+
 @pytest.mark.asyncio
 async def test_session_quota():
+    import preconsult.services.session_service as srv
+    from preconsult.services.session_service import _memory_limiter
+
+    srv._redis_available = False
+    await _memory_limiter.clear()
+
     headers = {"X-API-KEY": PRECONSULT_API_KEY}
     payload = {
         "age_bracket": "26-35",
@@ -52,27 +61,22 @@ async def test_session_quota():
         "alcohol": "No"
     }
 
-    from preconsult.services.session_service import _memory_limiter
-    await _memory_limiter.clear()
-
-    async with redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0")) as r:
-        await r.flushdb()
-
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            for i in range(20):
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for i in range(20):
+            resp = await client.post("/api/session/init", json=payload, headers=headers)
+            if resp.status_code == 429 and "Too many session requests" in resp.json()["detail"]:
+                await _memory_limiter.delete("rate_limit:init:127.0.0.1")
                 resp = await client.post("/api/session/init", json=payload, headers=headers)
-                if resp.status_code == 429 and "Too many session requests" in resp.json()["detail"]:
-                    await r.delete("rate_limit:init:127.0.0.1")
-                    await _memory_limiter.delete("rate_limit:init:127.0.0.1")
-                    resp = await client.post("/api/session/init", json=payload, headers=headers)
 
-                assert resp.status_code == 200, f"Falhou na iteracao {i}: {resp.status_code} - {resp.text}"
+            assert resp.status_code == 200, f"Falhou na iteracao {i}: {resp.status_code} - {resp.text}"
 
-            await r.delete("rate_limit:init:127.0.0.1")
-            await _memory_limiter.delete("rate_limit:init:127.0.0.1")
-            resp21 = await client.post("/api/session/init", json=payload, headers=headers)
-            assert resp21.status_code == 429
-            assert "Daily session limit reached" in resp21.json()["detail"]
+        await _memory_limiter.delete("rate_limit:init:127.0.0.1")
+        resp21 = await client.post("/api/session/init", json=payload, headers=headers)
+        assert resp21.status_code == 429
+        assert "Daily session limit reached" in resp21.json()["detail"]
+
+    srv._redis_available = None
+    await _memory_limiter.clear()
 
 
 @pytest.mark.asyncio

@@ -56,12 +56,12 @@ async def test_rate_limit_recovers_after_redis_comes_back():
     from preconsult.services.session_service import _memory_limiter, check_rate_limit
 
     srv._redis_available = False
-    _memory_limiter.clear()
+    await _memory_limiter.clear()
 
     assert await check_rate_limit("recovery-ip", limit=2, window=60) is True
 
     srv._redis_available = None
-    _memory_limiter.clear()
+    await _memory_limiter.clear()
 
 
 @pytest.mark.asyncio

@@ -79,7 +79,7 @@ async def test_google_api_error_during_startup_returns_502():
 async def test_generic_error_returns_500():
     import preconsult.services.session_service as srv
     srv._redis_available = False
-    srv._memory_limiter.clear()
+    await srv._memory_limiter.clear()
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/api/session/init", json={}, headers=HEADERS)

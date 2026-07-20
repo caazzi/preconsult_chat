@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import uuid
@@ -28,31 +29,36 @@ return count
 class MemoryRateLimitStore:
     def __init__(self):
         self._store: Dict[str, tuple[int, float]] = OrderedDict()
+        self._lock = asyncio.Lock()
 
-    def incr(self, key: str, window: int) -> int:
-        now = time.monotonic()
-        if key in self._store:
-            count, expiry = self._store[key]
-            if now < expiry:
-                new_count = count + 1
-                self._store[key] = (new_count, expiry)
-                return new_count
-        self._store[key] = (1, now + window)
-        return 1
+    async def incr(self, key: str, window: int) -> int:
+        async with self._lock:
+            now = time.monotonic()
+            if key in self._store:
+                count, expiry = self._store[key]
+                if now < expiry:
+                    new_count = count + 1
+                    self._store[key] = (new_count, expiry)
+                    return new_count
+            self._store[key] = (1, now + window)
+            return 1
 
-    def get(self, key: str) -> Optional[int]:
-        if key in self._store:
-            count, expiry = self._store[key]
-            if time.monotonic() < expiry:
-                return count
-            del self._store[key]
-        return None
+    async def get(self, key: str) -> Optional[int]:
+        async with self._lock:
+            if key in self._store:
+                count, expiry = self._store[key]
+                if time.monotonic() < expiry:
+                    return count
+                del self._store[key]
+            return None
 
-    def delete(self, key: str):
-        self._store.pop(key, None)
+    async def delete(self, key: str):
+        async with self._lock:
+            self._store.pop(key, None)
 
-    def clear(self):
-        self._store.clear()
+    async def clear(self):
+        async with self._lock:
+            self._store.clear()
 
 
 _memory_limiter = MemoryRateLimitStore()
@@ -153,7 +159,7 @@ async def check_rate_limit(ip: str, limit: int = 10, window: int = 60) -> bool:
         return count <= limit
 
     async def _fallback_check():
-        count = _memory_limiter.incr(key, window)
+        count = await _memory_limiter.incr(key, window)
         return count <= limit
 
     return await _try_redis(_redis_check, _fallback_check)
@@ -168,7 +174,7 @@ async def check_session_quota(ip: str, limit: int = 20) -> bool:
         return True
 
     async def _fallback_check():
-        count = _memory_limiter.get(key)
+        count = await _memory_limiter.get(key)
         if count and count >= limit:
             return False
         return True
@@ -182,6 +188,6 @@ async def increment_session_quota(ip: str, window: int = 86400) -> None:
         await client.eval(INCR_EXPIRE_SCRIPT, 1, key, window)
 
     async def _fallback_incr():
-        _memory_limiter.incr(key, window)
+        await _memory_limiter.incr(key, window)
 
     await _try_redis(_redis_incr, _fallback_incr)

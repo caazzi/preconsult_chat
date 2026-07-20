@@ -108,6 +108,7 @@ reflex_app/frontend.zip
 
 # Local scratch files
 scratch/
+.venv_test/
 
 # Secrets
 .env

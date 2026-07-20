@@ -96,13 +96,15 @@ def generate_pdf_report_in_memory(form: dict, qa_pairs: list, lang: str = 'en') 
 
     # --- Helper to draw a labeled section ---
     def draw_labeled_section(label, text, bold_label=True, padding=0.35 * inch):
+        import html
         nonlocal c, y_pos
         style_body = styles['BodyText']
         style_body.fontName = 'Helvetica'
         style_body.fontSize = 12
         style_body.leading = 16
 
-        full_text = f"<b>{label}:</b> {text}" if bold_label else f"{label}: {text}"
+        safe_text = html.escape(str(text))
+        full_text = f"<b>{label}:</b> {safe_text}" if bold_label else f"{label}: {safe_text}"
         p = Paragraph(full_text, style_body)
 
         p_width, p_height = p.wrapOn(c, width - 2 * inch, height)

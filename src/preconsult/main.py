@@ -29,7 +29,7 @@ if SENTRY_DSN:
             FastApiIntegration(),
             LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
         ],
-        traces_sample_rate=0.1,
+        traces_sample_rate=0.01,
     )
     logging.info("Sentry SDK inicializado.")
 

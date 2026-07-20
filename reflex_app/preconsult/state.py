@@ -449,6 +449,10 @@ class State(rx.State):
                 )
                 if resp.status_code == 200:
                     self.log_analytics_event("pdf_downloaded")
+                    yield rx.call_script(
+                        "if(window.dataLayer){dataLayer.push({'event':'pdf_downloaded'})}"
+                        "if(window.gtag){gtag('event','conversion',{'send_to':''})}"
+                    )
                     yield rx.download(
                         data=resp.content,
                         filename=f"PreConsult_Report{datetime.now().strftime('_%y%m%d%H%M')}.pdf"

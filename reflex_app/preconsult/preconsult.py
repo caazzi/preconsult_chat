@@ -518,6 +518,63 @@ def step_6_summary() -> rx.Component:
         ),
         width="100%", spacing="4", padding_y="0.75em"
     )
+
+def footer() -> rx.Component:
+    return rx.vstack(
+        rx.divider(),
+        rx.text(State.t["footer_disclaimer"], size="2", color_scheme="gray", text_align="center"),
+        rx.hstack(
+            rx.link(State.t["footer_privacy"], href="/privacy", color_scheme="cyan", size="2"),
+            rx.text("·", color_scheme="gray", size="2"),
+            rx.link(State.t["footer_terms"], href="/terms", color_scheme="cyan", size="2"),
+            spacing="2", align_items="center", justify="center",
+        ),
+        width="100%",
+        padding="1em",
+        spacing="3",
+        align_items="center",
+    )
+
+def faq_section() -> rx.Component:
+    questions = [
+        ("faq_q1", "faq_a1"),
+        ("faq_q2", "faq_a2"),
+        ("faq_q3", "faq_a3"),
+        ("faq_q4", "faq_a4"),
+        ("faq_q5", "faq_a5"),
+    ]
+    faq_items = []
+    for i, (q_key, a_key) in enumerate(questions):
+        faq_items.append(
+            rx.vstack(
+                rx.hstack(
+                    rx.text(State.t[q_key], weight="bold", size="3"),
+                    rx.spacer(),
+                    rx.icon("chevron_down", size=16),
+                    width="100%",
+                    padding="0.75em",
+                    border_radius="8px",
+                    _hover={"background": "rgba(0, 200, 255, 0.04)"},
+                    cursor="pointer",
+                    on_click=rx.call_script(f"document.getElementById('faq-answer-{i}').classList.toggle('rx-Flex')"),
+                ),
+                rx.text(State.t[a_key], size="2", color_scheme="gray", id=f"faq-answer-{i}", display="none"),
+                width="100%",
+                border="1px solid rgba(255,255,255,0.08)",
+                border_radius="8px",
+                spacing="1",
+            )
+        )
+    return rx.vstack(
+        rx.divider(),
+        rx.heading(State.t["faq_title"], size="5", text_align="center"),
+        rx.vstack(*faq_items, width="100%", spacing="2"),
+        width="100%",
+        padding_top="2em",
+        spacing="3",
+        align_items="center",
+    )
+
 def stepper_component() -> rx.Component:
     def stepper_item(idx: int):
         is_active = State.step == idx
@@ -622,6 +679,8 @@ def index() -> rx.Component:
                 display="flex",
                 justify_content="center"
             ),
+            rx.cond(State.step == 0, faq_section()),
+            footer(),
             width="100%", min_height="100vh",
             align_items="center",
             background=rx.cond(
@@ -725,6 +784,15 @@ if api_router:
             '    <xhtml:link rel="alternate" hreflang="pt" href="https://pre-consult.org/?lang=pt"/>\n'
             '    <xhtml:link rel="alternate" hreflang="x-default" href="https://pre-consult.org/"/>\n'
             '  </url>\n'
+            '  <url>\n'
+            '    <loc>https://pre-consult.org/?lang=pt</loc>\n'
+            f'    <lastmod>{today}</lastmod>\n'
+            '    <changefreq>weekly</changefreq>\n'
+            '    <priority>0.9</priority>\n'
+            '    <xhtml:link rel="alternate" hreflang="pt" href="https://pre-consult.org/?lang=pt"/>\n'
+            '    <xhtml:link rel="alternate" hreflang="en" href="https://pre-consult.org/?lang=en"/>\n'
+            '    <xhtml:link rel="alternate" hreflang="x-default" href="https://pre-consult.org/"/>\n'
+            '  </url>\n'
             '</urlset>\n'
         )
         return Response(
@@ -764,6 +832,37 @@ if api_router:
     app._api.add_route("/robots.txt", robots_txt, include_in_schema=False, methods=["GET"])
     app._api.add_route("/sitemap.xml", sitemap_xml, include_in_schema=False, methods=["GET"])
     app._api.add_route("/llms.txt", llms_txt, include_in_schema=False, methods=["GET"])
+
+    async def privacy_page(request):
+        from starlette.responses import HTMLResponse
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Privacy Policy - PreConsult</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:720px;margin:2em auto;padding:0 1em;line-height:1.6;color:#e2e8f0;background:#0a192f}}h1{{color:cyan}}a{{color:cyan}}p{{margin:1em 0}}</style>
+</head>
+<body><a href="/" style="font-size:0.9em">&larr; Back to PreConsult</a>
+<h1>Privacy Policy</h1>
+<p>PreConsult is committed to protecting your privacy. We do not store, sell, or share any personal health information you enter. All data is processed temporarily in memory and permanently deleted when you close the browser tab. No account creation, cookies for tracking, or persistent identifiers are used. We use Google Vertex AI (Gemini) to generate clinical questions based on the information you provide, but no conversation data is retained after your session ends.</p>
+</body></html>"""
+        return HTMLResponse(content=html)
+
+    async def terms_page(request):
+        from starlette.responses import HTMLResponse
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Terms of Service - PreConsult</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:720px;margin:2em auto;padding:0 1em;line-height:1.6;color:#e2e8f0;background:#0a192f}}h1{{color:cyan}}a{{color:cyan}}p{{margin:1em 0}}</style>
+</head>
+<body><a href="/" style="font-size:0.9em">&larr; Back to PreConsult</a>
+<h1>Terms of Service</h1>
+<p>By using PreConsult, you agree that this tool is for informational and organizational purposes only. It does not provide medical diagnosis, treatment recommendations, or emergency services. You should always consult a qualified healthcare professional for medical advice. If you are experiencing a medical emergency, call your local emergency number immediately. PreConsult is provided "as is" without warranties of any kind. The developers are not liable for any damages arising from the use of this tool.</p>
+</body></html>"""
+        return HTMLResponse(content=html)
+
+    app._api.add_route("/privacy", privacy_page, include_in_schema=False, methods=["GET"])
+    app._api.add_route("/terms", terms_page, include_in_schema=False, methods=["GET"])
 
 def admin_dashboard() -> rx.Component:
     def analytics_row(row):
@@ -1003,8 +1102,15 @@ class CustomStaticFiles(StaticFiles):
                     </style>
                     """
                     gtag_id = os.environ.get("GTAG_ID", "")
+                    gtm_id = os.environ.get("GTM_ID", "")
                     gtag_script = ""
-                    if gtag_id:
+                    if gtm_id:
+                        gtag_script = f"""
+                        <!-- Google Tag Manager -->
+                        <script>(function(w,d,s,l,i){{w[l]=w[l]||[];w[l].push({{'gtm.start':new Date().getTime(),event:'gtm.js'}});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);}})(window,document,'script','dataLayer','{gtm_id}');</script>
+                        <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={gtm_id}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+                        """
+                    elif gtag_id:
                         gtag_script = f"""
                         <!-- Google tag (gtag.js) -->
                         <script async src="https://www.googletagmanager.com/gtag/js?id={gtag_id}"></script>
@@ -1026,7 +1132,7 @@ class CustomStaticFiles(StaticFiles):
                     # Canonical tag — always points to root, ignoring ?lang= params
                     canonical_tag = '<link rel="canonical" href="https://pre-consult.org/"/>'
 
-                    # Schema.org JSON-LD — WebSite + MedicalWebPage
+                    # Schema.org JSON-LD — WebSite + WebPage
                     schema_jsonld = """
                     <script type="application/ld+json">
                     {
@@ -1042,7 +1148,7 @@ class CustomStaticFiles(StaticFiles):
                           "alternateName": "PreConsult — AI Patient Intake"
                         },
                         {
-                          "@type": "MedicalWebPage",
+                          "@type": "WebPage",
                           "@id": "https://pre-consult.org/#webpage",
                           "name": "PreConsult — Privacy-First Medical Intake Assistant",
                           "description": "Guided AI interview helper for patient intake with zero data persistence.",
@@ -1052,10 +1158,6 @@ class CustomStaticFiles(StaticFiles):
                           "about": {
                             "@type": "Thing",
                             "name": "Medical Intake Preparation"
-                          },
-                          "audience": {
-                            "@type": "MedicalAudience",
-                            "audienceType": "Patient"
                           }
                         }
                       ]

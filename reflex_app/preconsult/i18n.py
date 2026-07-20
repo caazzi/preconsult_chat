@@ -95,7 +95,28 @@ translations = {
         "err_download": "Failed to download PDF. Please try again.",
         "err_download_gen": "An unexpected error occurred during download.",
         "lang_select_sr": "Select language",
-        "gender_select_sr": "Select your gender"
+        "gender_select_sr": "Select your gender",
+
+        "footer_disclaimer": "PreConsult helps you prepare for medical appointments. It does not provide medical diagnosis, treatment, or emergency services. Always consult a qualified healthcare professional for medical advice. If you are experiencing a medical emergency, call your local emergency number immediately.",
+        "footer_privacy": "Privacy Policy",
+        "footer_terms": "Terms of Service",
+
+        "faq_title": "Frequently Asked Questions",
+        "faq_q1": "What is PreConsult?",
+        "faq_a1": "PreConsult is a privacy-first tool that helps you organize your symptoms and medical history into a structured PDF report before your doctor's appointment. It uses AI to ask relevant clinical questions based on what you share.",
+        "faq_q2": "Is my data stored or shared?",
+        "faq_a2": "No. All data is processed temporarily and permanently deleted when you close the browser tab. No account or sign-up is required. We do not sell or share your information.",
+        "faq_q3": "Do I need to create an account?",
+        "faq_a3": "No. PreConsult is completely anonymous. Just open the page and start.",
+        "faq_q4": "Is this a replacement for medical advice?",
+        "faq_a4": "No. PreConsult is an organizational tool to help you prepare for appointments. It does not provide diagnosis, treatment recommendations, or medical advice. Always consult a qualified healthcare professional.",
+        "faq_q5": "Who is this for?",
+        "faq_a5": "Anyone with an upcoming doctor's appointment who wants to arrive better prepared. It's useful for specialists, general practitioners, and check-ups.",
+
+        "privacy_title": "Privacy Policy",
+        "privacy_text": "PreConsult is committed to protecting your privacy. We do not store, sell, or share any personal health information you enter. All data is processed temporarily in memory and permanently deleted when you close the browser tab. No account creation, cookies for tracking, or persistent identifiers are used. We use Google Vertex AI (Gemini) to generate clinical questions based on the information you provide, but no conversation data is retained after your session ends.",
+        "terms_title": "Terms of Service",
+        "terms_text": "By using PreConsult, you agree that this tool is for informational and organizational purposes only. It does not provide medical diagnosis, treatment recommendations, or emergency services. You should always consult a qualified healthcare professional for medical advice. If you are experiencing a medical emergency, call your local emergency number immediately. PreConsult is provided \"as is\" without warranties of any kind. The developers are not liable for any damages arising from the use of this tool."
     },
     "pt": {
         "title": "PreConsult",
@@ -194,6 +215,27 @@ translations = {
         "err_download": "Falha ao baixar PDF. Tente novamente.",
         "err_download_gen": "Ocorreu um erro inesperado durante o download.",
         "lang_select_sr": "Selecionar idioma",
-        "gender_select_sr": "Selecione seu sexo biológico"
+        "gender_select_sr": "Selecione seu sexo biológico",
+
+        "footer_disclaimer": "O PreConsult ajuda você a se preparar para consultas médicas. Não fornece diagnóstico, tratamento ou serviços de emergência. Consulte sempre um profissional de saúde qualificado. Se você estiver passando por uma emergência médica, ligue imediatamente para o SAMU 192 (BR) ou seu serviço de emergência local.",
+        "footer_privacy": "Política de Privacidade",
+        "footer_terms": "Termos de Serviço",
+
+        "faq_title": "Perguntas Frequentes",
+        "faq_q1": "O que é o PreConsult?",
+        "faq_a1": "O PreConsult é uma ferramenta que ajuda você a organizar seus sintomas e histórico médico em um relatório PDF estruturado antes da sua consulta. Usa IA para fazer perguntas clínicas relevantes com base no que você compartilha.",
+        "faq_q2": "Meus dados são armazenados ou compartilhados?",
+        "faq_a2": "Não. Todos os dados são processados temporariamente e permanentemente excluídos quando você fecha a aba do navegador. Nenhum cadastro é necessário. Não vendemos ou compartilhamos suas informações.",
+        "faq_q3": "Preciso criar uma conta?",
+        "faq_a3": "Não. O PreConsult é completamente anônimo. Basta abrir a página e começar.",
+        "faq_q4": "Isso substitui uma consulta médica?",
+        "faq_a4": "Não. O PreConsult é uma ferramenta de organização para ajudar você a se preparar para consultas. Não fornece diagnóstico, recomendações de tratamento ou conselho médico. Consulte sempre um profissional de saúde qualificado.",
+        "faq_q5": "Para quem é indicado?",
+        "faq_a5": "Para qualquer pessoa com uma consulta médica marcada que queira chegar mais preparada. É útil para especialistas, clínica geral e check-ups.",
+
+        "privacy_title": "Política de Privacidade",
+        "privacy_text": "O PreConsult está comprometido com a proteção da sua privacidade. Não armazenamos, vendemos ou compartilhamos nenhuma informação pessoal de saúde que você inserir. Todos os dados são processados temporariamente em memória e permanentemente excluídos quando você fecha a aba do navegador. Não utilizamos criação de conta, cookies de rastreamento ou identificadores persistentes. Usamos o Google Vertex AI (Gemini) para gerar perguntas clínicas com base nas informações fornecidas, mas nenhum dado da conversa é retido após o término da sessão.",
+        "terms_title": "Termos de Serviço",
+        "terms_text": "Ao usar o PreConsult, você concorda que esta ferramenta é apenas para fins informativos e organizacionais. Ela não fornece diagnóstico médico, recomendações de tratamento ou serviços de emergência. Você deve sempre consultar um profissional de saúde qualificado para obter aconselhamento médico. Se você estiver passando por uma emergência médica, ligue imediatamente para o SAMU 192 (BR) ou seu serviço de emergência local. O PreConsult é fornecido \"no estado em que se encontra\" sem garantias de qualquer tipo. Os desenvolvedores não são responsáveis por danos decorrentes do uso desta ferramenta."
     }
 }

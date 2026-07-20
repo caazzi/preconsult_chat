@@ -5,6 +5,7 @@ This module defines the FastAPI routes. It leverages dependency injection
 to trigger the lazy-loading of services in the agent_service module, ensuring
 the application starts quickly. Includes Redis-backed ephemeral state.
 """
+import asyncio
 import json
 import logging
 from datetime import date, timedelta
@@ -179,10 +180,10 @@ async def generate_pdf_endpoint(request: GeneratePdfRequest):
         raise HTTPException(status_code=404, detail="Session expired or invalid")
 
     qa_pairs = [{"question": pair.question, "answer": pair.answer} for pair in request.qa_pairs]
-    pdf_bytes, filename = generate_pdf_report_in_memory(
-        form=session_data,
-        qa_pairs=qa_pairs,
-        lang=session_data.get("lang", "en")
+    loop = asyncio.get_running_loop()
+    pdf_bytes, filename = await loop.run_in_executor(
+        None, generate_pdf_report_in_memory,
+        session_data, qa_pairs, session_data.get("lang", "en")
     )
     headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
     return Response(content=pdf_bytes, media_type='application/pdf', headers=headers)

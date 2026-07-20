@@ -3,7 +3,7 @@ import json
 from unittest.mock import patch, AsyncMock
 import httpx
 from httpx import ASGITransport
-from preconsult.main import app
+from reflex_app.preconsult.preconsult import api as app
 
 HEADERS = {"X-API-KEY": "ci_test_key_123"}
 
@@ -287,9 +287,9 @@ async def test_health_reports_unavailable_when_redis_unknown():
 @pytest.mark.asyncio
 async def test_root_endpoint():
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/", headers=HEADERS)
+        resp = await client.get("/health", headers=HEADERS)
     assert resp.status_code == 200
-    assert "Welcome" in resp.json()["message"]
+    assert resp.json()["status"] == "healthy"
 
 
 @pytest.mark.asyncio

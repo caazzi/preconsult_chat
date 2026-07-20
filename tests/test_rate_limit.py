@@ -2,7 +2,7 @@ import asyncio
 import pytest
 import httpx
 from httpx import ASGITransport
-from preconsult.main import app
+from reflex_app.preconsult.preconsult import api as app
 from preconsult.core.config import PRECONSULT_API_KEY
 
 @pytest.mark.asyncio

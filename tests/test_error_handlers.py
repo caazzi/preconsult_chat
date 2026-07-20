@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch, AsyncMock
 import httpx
 from httpx import ASGITransport
-from preconsult.main import app
+from reflex_app.preconsult.preconsult import api as app
 from google.api_core.exceptions import GoogleAPIError
 from preconsult.core.errors import RedisUnavailableError
 

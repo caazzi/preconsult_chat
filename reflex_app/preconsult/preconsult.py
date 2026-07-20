@@ -667,11 +667,71 @@ app = rx.App(
 )
 
 if api_router:
+    from datetime import date
     from fastapi import FastAPI
+    from pydantic import ValidationError
+    from google.api_core.exceptions import GoogleAPIError
     from starlette.responses import Response
+    from preconsult.services.session_service import _redis_available
+    from preconsult.core.errors import (
+        RedisUnavailableError,
+        LLMUnavailableError,
+        redis_unavailable_handler,
+        llm_unavailable_handler,
+        validation_handler,
+        google_api_handler,
+        generic_handler,
+    )
     custom_api = FastAPI()
+    custom_api.add_exception_handler(RedisUnavailableError, redis_unavailable_handler)
+    custom_api.add_exception_handler(LLMUnavailableError, llm_unavailable_handler)
+    custom_api.add_exception_handler(ValidationError, validation_handler)
+    custom_api.add_exception_handler(GoogleAPIError, google_api_handler)
+    custom_api.add_exception_handler(Exception, generic_handler)
     custom_api.include_router(api_router)
     app._api.mount("/api", custom_api)
+
+    async def health(request):
+        from starlette.responses import JSONResponse
+        redis_status = "ok" if _redis_available is True else "unavailable"
+        return JSONResponse({"status": "healthy", "redis": redis_status})
+
+    async def robots_txt(request):
+        content = (
+            "User-agent: *\n"
+            "Disallow: /admin/\n"
+            "Disallow: /api/\n"
+            "Allow: /\n\n"
+            "Sitemap: https://pre-consult.org/sitemap.xml\n"
+        )
+        return Response(
+            content=content,
+            media_type="text/plain",
+            headers={"Cache-Control": "public, max-age=86400"}
+        )
+
+    async def sitemap_xml(request):
+        today = date.today().isoformat()
+        content = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"\n'
+            '        xmlns:xhtml="http://www.w3.org/1999/xhtml">\n'
+            '  <url>\n'
+            '    <loc>https://pre-consult.org/</loc>\n'
+            f'    <lastmod>{today}</lastmod>\n'
+            '    <changefreq>weekly</changefreq>\n'
+            '    <priority>1.0</priority>\n'
+            '    <xhtml:link rel="alternate" hreflang="en" href="https://pre-consult.org/?lang=en"/>\n'
+            '    <xhtml:link rel="alternate" hreflang="pt" href="https://pre-consult.org/?lang=pt"/>\n'
+            '    <xhtml:link rel="alternate" hreflang="x-default" href="https://pre-consult.org/"/>\n'
+            '  </url>\n'
+            '</urlset>\n'
+        )
+        return Response(
+            content=content,
+            media_type="application/xml",
+            headers={"Cache-Control": "public, max-age=86400"}
+        )
 
     async def llms_txt(request):
         content = (
@@ -700,7 +760,10 @@ if api_router:
             media_type="text/markdown",
             headers={"Cache-Control": "public, max-age=3600"}
         )
-    app._api.add_route("/llms.txt", llms_txt, include_in_schema=False)
+    app._api.add_route("/health", health, include_in_schema=False, methods=["GET"])
+    app._api.add_route("/robots.txt", robots_txt, include_in_schema=False, methods=["GET"])
+    app._api.add_route("/sitemap.xml", sitemap_xml, include_in_schema=False, methods=["GET"])
+    app._api.add_route("/llms.txt", llms_txt, include_in_schema=False, methods=["GET"])
 
 def admin_dashboard() -> rx.Component:
     def analytics_row(row):

@@ -392,6 +392,9 @@ class State(rx.State):
                                 
                             # Match lines like "1. Question", "2) Question", etc. Very permissive match
                             qs = [q.strip() for q in re.split(r'\n(?:\d+[\.\)]|\-)\s*', '\n' + self._qs_buffer) if q.strip()]
+                            # Fallback: if regex didn't split into multiple questions, split by any newline
+                            if len(qs) <= 1:
+                                qs = [q.strip() for q in self._qs_buffer.strip().split('\n') if q.strip()]
                             self.questions = qs
                             
                             while len(self.current_answers) < len(self.questions):

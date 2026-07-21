@@ -132,6 +132,10 @@ jobs:
     needs: deploy
     if: always() && needs.deploy.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: 'read'
+      id-token: 'write'
     steps:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
@@ -150,18 +154,110 @@ jobs:
             --format='value(status.url)')
           echo "url=${URL}" >> "$GITHUB_OUTPUT"
 
-      - name: Smoke test interview endpoint
+      - name: Run Multi-Stage Smoke Tests
         env:
           BASE_URL: ${{ steps.url.outputs.url }}
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST "${BASE_URL}/api/interview-questions-stream" \
-            -H "Content-Type: application/json" \
-            -H "X-API-Key: dummy_smoke_key" \
-            -d '{"session_id": "smoke-test","chief_complaint": "headache for 3 days","language": "en"}' \
-            --max-time 30)
-          echo "HTTP status: ${STATUS}"
-          if [ "${STATUS}" != "200" ]; then
-            echo "Smoke test FAILED: expected 200, got ${STATUS}"
+          # 1. Warm-up and Liveness check
+          echo "==== Stage 1: Liveness / Health Check ===="
+          HEALTH_URL="${BASE_URL}/health"
+          SUCCESS=false
+          for i in {1..5}; do
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" --max-time 10)
+            echo "Health ping $i: HTTP Status $HTTP_STATUS"
+            if [ "$HTTP_STATUS" = "200" ]; then
+              SUCCESS=true
+              break
+            fi
+            echo "Waiting 10 seconds for service to warm up..."
+            sleep 10
+          done
+
+          if [ "$SUCCESS" = "false" ]; then
+            echo "::error::Liveness check failed! Service is unreachable."
             exit 1
           fi
+
+          # 2. Get API Key from GCP Secret Manager
+          echo "==== Stage 2: Retrieve API Key ===="
+          API_KEY=$(gcloud secrets versions access latest --secret="SECUREMED_API_KEY")
+          if [ -z "$API_KEY" ]; then
+            echo "::error::Failed to retrieve SECUREMED_API_KEY from Secret Manager"
+            exit 1
+          fi
+          echo "API Key retrieved successfully."
+
+          # 3. Session Initialization Test
+          echo "==== Stage 3: Session Initialization ===="
+          INIT_PAYLOAD='{
+            "age_bracket": "26-35",
+            "sex": "Female",
+            "lang": "en",
+            "specialist": "Cardiology",
+            "chief_complaint": "Chest pain for smoke test",
+            "duration": "Days",
+            "complaint_detail": "Mild pain",
+            "conditions": [],
+            "medications": [],
+            "allergies": "",
+            "family_history": [],
+            "smoking": "Never",
+            "alcohol": "Rarely"
+          }'
+
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -X POST "${BASE_URL}/api/session/init" \
+            -H "Content-Type: application/json" \
+            -H "X-API-KEY: ${API_KEY}" \
+            -d "$INIT_PAYLOAD" \
+            --max-time 15)
+
+          RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1 | cut -d':' -f2)
+
+          echo "Init Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "::error::Session initialization failed!"
+            echo "Response Body: $RESPONSE_BODY"
+            exit 1
+          fi
+
+          SESSION_ID=$(echo "$RESPONSE_BODY" | jq -r '.session_id')
+          if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
+            echo "::error::Failed to parse session_id from response!"
+            echo "Response Body: $RESPONSE_BODY"
+            exit 1
+          fi
+          echo "Session initialized successfully with ID: $SESSION_ID"
+
+          # 4. Stream Validation Test
+          echo "==== Stage 4: AI Question Stream Validation ===="
+          STREAM_PAYLOAD=$(printf '{"session_id": "%s"}' "$SESSION_ID")
+          
+          STREAM_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -X POST "${BASE_URL}/api/interview-questions-stream" \
+            -H "Content-Type: application/json" \
+            -H "X-API-KEY: ${API_KEY}" \
+            -d "$STREAM_PAYLOAD" \
+            --max-time 20)
+
+          STREAM_BODY=$(echo "$STREAM_RESPONSE" | sed '$d')
+          STREAM_STATUS=$(echo "$STREAM_RESPONSE" | tail -n 1 | cut -d':' -f2)
+
+          echo "Stream HTTP Status: $STREAM_STATUS"
+          if [ "$STREAM_STATUS" != "200" ]; then
+            echo "::error::Stream endpoint failed!"
+            echo "Response Body: $STREAM_BODY"
+            exit 1
+          fi
+
+          if [[ "$STREAM_BODY" != *"data:"* ]]; then
+            echo "::error::Stream body is invalid! Missing 'data:' event format."
+            echo "Response Body: $STREAM_BODY"
+            exit 1
+          fi
+
+          echo "First 150 characters of stream payload:"
+          echo "${STREAM_BODY}" | head -c 150
+          echo ""
+          echo "==== Smoke Test Passed Successfully! ===="

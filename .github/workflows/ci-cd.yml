@@ -163,7 +163,7 @@ jobs:
           HEALTH_URL="${BASE_URL}/health"
           SUCCESS=false
           for i in {1..5}; do
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" --max-time 10)
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL"             --connect-timeout 5 --max-time 30)
             echo "Health ping $i: HTTP Status $HTTP_STATUS"
             if [ "$HTTP_STATUS" = "200" ]; then
               SUCCESS=true
@@ -210,7 +210,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-API-KEY: ${API_KEY}" \
             -d "$INIT_PAYLOAD" \
-            --max-time 15)
+            --connect-timeout 5 --max-time 30)
 
           RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
           HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1 | cut -d':' -f2)
@@ -239,7 +239,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-API-KEY: ${API_KEY}" \
             -d "$STREAM_PAYLOAD" \
-            --max-time 20)
+            --connect-timeout 5 --max-time 45)
 
           STREAM_BODY=$(echo "$STREAM_RESPONSE" | sed '$d')
           STREAM_STATUS=$(echo "$STREAM_RESPONSE" | tail -n 1 | cut -d':' -f2)

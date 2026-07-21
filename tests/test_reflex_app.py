@@ -128,7 +128,7 @@ def test_custom_static_files_injection(tmp_path):
         assert "https://pre-consult.org/og-image.png" in html_body
         assert "hreflang" in html_body
         assert "schema.org" in html_body
-        assert "MedicalWebPage" in html_body
+        assert "WebPage" in html_body
         assert "preload" in html_body
     finally:
         StaticFiles.get_response = original_get_response

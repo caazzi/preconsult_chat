@@ -23,4 +23,14 @@ if not PRECONSULT_API_KEY:
 
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 
-LLM_MODEL = "gemini-2.5-flash-lite"
+LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-flash-lite")
+
+# Validate Google Cloud Credentials path if configured
+gcp_creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+if gcp_creds:
+    if not os.path.exists(gcp_creds):
+        logging.warning(f"GOOGLE_APPLICATION_CREDENTIALS is set but file not found at: {gcp_creds}")
+    else:
+        logging.info(f"Using Google Cloud Credentials from: {gcp_creds}")
+else:
+    logging.info("GOOGLE_APPLICATION_CREDENTIALS not set; falling back to default ambient/WIF credentials.")

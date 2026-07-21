@@ -13,7 +13,9 @@ def get_llm() -> ChatVertexAI:
             temperature=0.2,
             project=PROJECT_ID,
             location=VERTEX_REGION,
-            streaming=True
+            streaming=True,
+            max_retries=3,
+            model_kwargs={"timeout": 30.0}
         )
         logging.info("Vertex AI LLM initialized successfully.")
     return _llm

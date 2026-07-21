@@ -144,9 +144,20 @@ async def get_initial_questions_streamed(
     await update_session(request.session_id, {"chief_complaint": sanitized_complaint})
     session_data["chief_complaint"] = sanitized_complaint
     
+    lang = session_data.get("lang", "en")
+    err_msg = (
+        "⚠️ ERROR: Service temporarily unavailable. Please try again."
+        if lang == "en"
+        else "⚠️ ERRO: Serviço temporariamente indisponível. Tente novamente."
+    )
+
     async def event_generator():
-        async for chunk in stream_interview_questions(session_data, session_data.get("lang", "en"), chain):
-            yield f"data: {json.dumps(chunk)}\n\n"
+        try:
+            async for chunk in stream_interview_questions(session_data, lang, chain):
+                yield f"data: {json.dumps(chunk)}\n\n"
+        except Exception as e:
+            logging.error(f"Error during streaming initial questions: {e}", exc_info=True)
+            yield f"data: {json.dumps(' ' + err_msg)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -166,10 +177,19 @@ async def get_interview_questions_streamed(
         raise HTTPException(status_code=404, detail="Session expired or invalid")
 
     lang = session_data.get("lang", "en")
+    err_msg = (
+        "⚠️ ERROR: Service temporarily unavailable. Please try again."
+        if lang == "en"
+        else "⚠️ ERRO: Serviço temporariamente indisponível. Tente novamente."
+    )
 
     async def event_generator():
-        async for chunk in stream_interview_questions(session_data, lang, chain):
-            yield f"data: {json.dumps(chunk)}\n\n"
+        try:
+            async for chunk in stream_interview_questions(session_data, lang, chain):
+                yield f"data: {json.dumps(chunk)}\n\n"
+        except Exception as e:
+            logging.error(f"Error during streaming interview questions: {e}", exc_info=True)
+            yield f"data: {json.dumps(' ' + err_msg)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

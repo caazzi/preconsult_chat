@@ -267,15 +267,46 @@ class State(rx.State):
             pass
         return key
 
+    def _scroll_top_script(self):
+        return rx.call_script("window.scrollTo({top: 0, behavior: 'smooth'})")
+
+    def _save_draft_script(self):
+        draft_data = {
+            "gender": self.gender,
+            "age_bracket": self.age_bracket,
+            "specialist": self.specialist,
+            "chief_complaint": self.chief_complaint,
+            "duration": self.duration,
+            "complaint_detail": self.complaint_detail,
+            "conditions": self.conditions,
+            "medications": self.medications,
+            "allergies_flag": self.allergies_flag,
+            "allergies_text": self.allergies_text,
+            "family_history": self.family_history,
+            "smoking": self.smoking,
+            "alcohol": self.alcohol,
+            "step": self.step,
+        }
+        try:
+            payload_str = json.dumps(draft_data).replace("'", "\\'")
+            return rx.call_script(f"try {{ localStorage.setItem('preconsult_draft', '{payload_str}'); }} catch(e) {{}}")
+        except Exception:
+            return rx.call_script("")
+
+    def _clear_draft_script(self):
+        return rx.call_script("try { localStorage.removeItem('preconsult_draft'); } catch(e) {}")
+
     def go_back(self):
         if self.step > 0:
             self.step -= 1
         self.error_message = ""
+        yield self._scroll_top_script()
 
     def start_intake(self):
         self.error_message = ""
         self.step = 1
         self.log_analytics_event("intake_started")
+        yield self._scroll_top_script()
 
     def go_to_step_2(self):
         if not self.gender.strip():
@@ -284,6 +315,8 @@ class State(rx.State):
         self.error_message = ""
         self.step = 2
         self.log_analytics_event("demographics_submitted")
+        yield self._scroll_top_script()
+        yield self._save_draft_script()
 
     def go_to_step_3(self):
         if not self.specialist.strip() or not self.chief_complaint.strip():
@@ -292,14 +325,20 @@ class State(rx.State):
         self.error_message = ""
         self.step = 3
         self.log_analytics_event("complaint_submitted")
+        yield self._scroll_top_script()
+        yield self._save_draft_script()
 
     def go_to_step_4(self):
         self.error_message = ""
         self.step = 4
         self.log_analytics_event("history_submitted")
+        yield self._scroll_top_script()
+        yield self._save_draft_script()
 
     def go_to_step_5(self):
         self.step = 5
+        yield self._scroll_top_script()
+        yield self._save_draft_script()
 
     async def init_session(self):
         """Step 4 -> Step 5: Initialize Redis session."""
@@ -425,6 +464,8 @@ class State(rx.State):
         )
         self.step = 6
         self.log_analytics_event("summary_generated")
+        yield rx.call_script("if(window.gtag_report_micro_conversion)gtag_report_micro_conversion()")
+        yield self._scroll_top_script()
 
     async def download_report(self):
         """Step 6: Securely fetch PDF with API Key and trigger download."""
@@ -450,6 +491,7 @@ class State(rx.State):
                 if resp.status_code == 200:
                     self.log_analytics_event("pdf_downloaded")
                     yield rx.call_script("if(window.gtag_report_conversion)gtag_report_conversion()")
+                    yield self._clear_draft_script()
                     yield rx.download(
                         data=resp.content,
                         filename=f"PreConsult_Report{datetime.now().strftime('_%y%m%d%H%M')}.pdf"

@@ -1055,6 +1055,10 @@ _MOCK_WEBSOCKET_SCRIPT = """
 
 class CustomStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope) -> Response:
+        path_lower = path.lower()
+        if any(path_lower.endswith(ext) for ext in (".php", ".asp", ".aspx", ".jsp", ".cgi")) or "wp-admin" in path_lower or "wp-content" in path_lower or ".env" in path_lower or "phpmyadmin" in path_lower:
+            return Response("Not Found", status_code=404, media_type="text/plain")
+
         response = await super().get_response(path, scope)
         
         if "assets/" in path or path.startswith("assets/"):
@@ -1103,6 +1107,7 @@ class CustomStaticFiles(StaticFiles):
                     """
                     gtag_id = os.environ.get("GTAG_ID", "")
                     gtm_id = os.environ.get("GTM_ID", "")
+                    gtag_micro_label = os.environ.get("GTAG_MICRO_CONVERSION_LABEL", "")
                     gtag_script = ""
                     if gtm_id:
                         gtag_script = f"""
@@ -1132,6 +1137,22 @@ class CustomStaticFiles(StaticFiles):
                                 'event_callback': callback
                             }});
                             return false;
+                          }}
+                          function gtag_report_micro_conversion() {{
+                            if (typeof gtag !== 'undefined') {{
+                              var micro_label = '{gtag_micro_label}';
+                              if (micro_label) {{
+                                gtag('event', 'conversion', {{
+                                    'send_to': '{gtag_id}/' + micro_label,
+                                    'value': 0.5,
+                                    'currency': 'BRL'
+                                }});
+                              }}
+                              gtag('event', 'summary_generated', {{
+                                  'event_category': 'engagement',
+                                  'event_label': 'intake_summary_completed'
+                              }});
+                            }}
                           }}
                         </script>
                         """

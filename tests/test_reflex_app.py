@@ -133,3 +133,30 @@ def test_custom_static_files_injection(tmp_path):
     finally:
         StaticFiles.get_response = original_get_response
 
+
+def test_bot_scanner_blocking(tmp_path):
+    from reflex_app.preconsult.preconsult import CustomStaticFiles
+    dummy_dir = tmp_path / "static"
+    dummy_dir.mkdir()
+    static_files = CustomStaticFiles(directory=str(dummy_dir), html=True)
+    import asyncio
+    scope = {"type": "http", "method": "GET"}
+    
+    response = asyncio.run(static_files.get_response("wp-admin/install.php", scope))
+    assert response.status_code == 404
+    assert response.body == b"Not Found"
+
+
+def test_state_scroll_and_draft_scripts():
+    state = State()
+    scroll_script = state._scroll_top_script()
+    assert "scrollTo" in repr(scroll_script) or "scrollTo" in str(scroll_script.args)
+
+    draft_script = state._save_draft_script()
+    assert "localStorage.setItem" in repr(draft_script) or "localStorage.setItem" in str(draft_script.args)
+
+    clear_script = state._clear_draft_script()
+    assert "localStorage.removeItem" in repr(clear_script) or "localStorage.removeItem" in str(clear_script.args)
+
+
+

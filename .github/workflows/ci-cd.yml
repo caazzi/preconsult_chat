@@ -9,7 +9,7 @@ on:
 
 env:
   PROJECT_ID: securemed-chat-494521
-  REGION: southamerica-east1
+  REGION: us-central1
   SERVICE_NAME: preconsult
   AR_REPO: securemed-repo
   WIF_PROVIDER: projects/811607528687/locations/global/workloadIdentityPools/github-pool/providers/github-provider
@@ -116,6 +116,8 @@ jobs:
           env_vars: |
             API_BASE_URL=https://pre-consult.org
             VERTEX_AI_REGION=us-central1
+            GOOGLE_CLOUD_PROJECT=securemed-chat-494521
+            LLM_MODEL=gemini-2.5-flash
           secrets: |
             REDIS_URL=REDIS_URL:latest
             PRECONSULT_API_KEY=SECUREMED_API_KEY:latest

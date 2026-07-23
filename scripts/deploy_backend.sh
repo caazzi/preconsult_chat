@@ -2,9 +2,9 @@
 
 # --- CONFIGURATION (UPDATE THESE) ---
 # --- CONFIGURATION (OVERRIDABLE VIA ENV) ---
-PROJECT_ID=${GOOGLE_CLOUD_PROJECT:-"ambassist-1771888311"} 
-REGION=${GOOGLE_CLOUD_REGION:-"southamerica-east1"}
-SERVICE_NAME=${SERVICE_NAME:-"preconsult-api"}
+PROJECT_ID=${GOOGLE_CLOUD_PROJECT:-"securemed-chat-494521"} 
+REGION=${GOOGLE_CLOUD_REGION:-"us-central1"}
+SERVICE_NAME=${SERVICE_NAME:-"preconsult"}
 # ------------------------------------
 
 echo "🚀 Starting Zero-Cost Backend Deployment for PreConsult..."
@@ -38,7 +38,7 @@ gcloud run deploy $SERVICE_NAME \
     --max-instances 5 \
     --concurrency 50 \
     --allow-unauthenticated \
-    --set-env-vars="PRECONSULT_API_KEY=$PRECONSULT_API_KEY"
+    --set-env-vars="PRECONSULT_API_KEY=$PRECONSULT_API_KEY,VERTEX_AI_REGION=us-central1"
 
 echo "✅ Backend Deployment Finished!"
 echo "🔗 Your API URL should be visible above."

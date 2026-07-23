@@ -35,7 +35,8 @@ if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ZONE_ID" ]; then
     exit 1
 fi
 
-TARGET_URL="securemed-chat-tcjbweemnq-rj.a.run.app"
+# Target Cloud Run domain (update with 'gcloud run services describe preconsult --region=us-central1 --format="value(status.url)"' hostname)
+TARGET_URL=${CLOUD_RUN_TARGET_URL:-"preconsult-811607528687.us-central1.run.app"}
 
 echo "🛰️ 1. Creating CNAME record for pre-consult.org -> $TARGET_URL (Proxied)..."
 DNS_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records" \

@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 # Load environment variables from .env file (if it exists)
 load_dotenv()
 
-PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "preconsult")
-REGION = os.environ.get("GOOGLE_CLOUD_REGION", "us-east1")
+PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT", "securemed-chat-494521")
+REGION = os.environ.get("GOOGLE_CLOUD_REGION", "us-central1")
 VERTEX_REGION = os.environ.get("VERTEX_AI_REGION", "us-central1")
 
 BUILD_MODE = os.environ.get("BUILD_MODE") == "true"
@@ -23,7 +23,7 @@ if not PRECONSULT_API_KEY:
 
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 
-LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-flash-lite")
+LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-flash")
 
 # Validate Google Cloud Credentials path if configured
 gcp_creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")

@@ -843,11 +843,11 @@ if api_router:
 
     async def privacy_page(request):
         from starlette.responses import HTMLResponse
-        html = f"""<!DOCTYPE html>
+        html = """<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Privacy Policy - PreConsult</title>
-<style>body{{font-family:system-ui,sans-serif;max-width:720px;margin:2em auto;padding:0 1em;line-height:1.6;color:#e2e8f0;background:#0a192f}}h1{{color:cyan}}a{{color:cyan}}p{{margin:1em 0}}</style>
+<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2em auto;padding:0 1em;line-height:1.6;color:#e2e8f0;background:#0a192f}h1{color:cyan}a{color:cyan}p{margin:1em 0}</style>
 </head>
 <body><a href="/" style="font-size:0.9em">&larr; Back to PreConsult</a>
 <h1>Privacy Policy</h1>
@@ -857,11 +857,11 @@ if api_router:
 
     async def terms_page(request):
         from starlette.responses import HTMLResponse
-        html = f"""<!DOCTYPE html>
+        html = """<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Terms of Service - PreConsult</title>
-<style>body{{font-family:system-ui,sans-serif;max-width:720px;margin:2em auto;padding:0 1em;line-height:1.6;color:#e2e8f0;background:#0a192f}}h1{{color:cyan}}a{{color:cyan}}p{{margin:1em 0}}</style>
+<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2em auto;padding:0 1em;line-height:1.6;color:#e2e8f0;background:#0a192f}h1{color:cyan}a{color:cyan}p{margin:1em 0}</style>
 </head>
 <body><a href="/" style="font-size:0.9em">&larr; Back to PreConsult</a>
 <h1>Terms of Service</h1>

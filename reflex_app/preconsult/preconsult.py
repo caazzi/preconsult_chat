@@ -845,28 +845,150 @@ if api_router:
         from starlette.responses import HTMLResponse
         html = """<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Privacy Policy - PreConsult</title>
-<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2em auto;padding:0 1em;line-height:1.6;color:#e2e8f0;background:#0a192f}h1{color:cyan}a{color:cyan}p{margin:1em 0}</style>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Privacy Policy — PreConsult</title>
+<meta name="description" content="PreConsult Privacy Policy. Learn about our zero-data persistence model, privacy-first AI intake processing, and data security standards."/>
+<link rel="canonical" href="https://pre-consult.org/privacy"/>
+<style>
+  :root { --bg: #0a192f; --card-bg: rgba(13, 27, 42, 0.85); --text: #e2e8f0; --muted: #94a3b8; --accent: #00f2fe; --border: rgba(255, 255, 255, 0.1); }
+  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2em 1em; line-height: 1.7; color: var(--text); background: radial-gradient(circle at top right, #0a192f, #001f3f, #001529); min-height: 100vh; }
+  .card { background: var(--card-bg); backdrop-filter: blur(15px); border: 1px solid var(--border); border-radius: 16px; padding: 2.5em; box-shadow: 0 8px 32px 0 rgba(0,0,0,0.37); }
+  h1 { color: var(--accent); font-size: 2em; margin-top: 0; margin-bottom: 0.2em; }
+  h2 { color: #ffffff; font-size: 1.3em; margin-top: 1.8em; margin-bottom: 0.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  p, li { color: var(--text); font-size: 0.98em; }
+  ul { padding-left: 1.4em; }
+  li { margin-bottom: 0.5em; }
+  a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  a:hover { text-decoration: underline; }
+  .back-link { display: inline-block; margin-bottom: 1.5em; font-size: 0.95em; }
+  .last-updated { color: var(--muted); font-size: 0.88em; margin-bottom: 2em; }
+  footer { margin-top: 2em; text-align: center; color: var(--muted); font-size: 0.85em; }
+</style>
 </head>
-<body><a href="/" style="font-size:0.9em">&larr; Back to PreConsult</a>
-<h1>Privacy Policy</h1>
-<p>PreConsult is committed to protecting your privacy. We do not store, sell, or share any personal health information you enter. All data is processed temporarily in memory and permanently deleted when you close the browser tab. No account creation, cookies for tracking, or persistent identifiers are used. We use Google Vertex AI (Gemini) to generate clinical questions based on the information you provide, but no conversation data is retained after your session ends.</p>
-</body></html>"""
+<body>
+<div class="card">
+  <a href="/" class="back-link">&larr; Back to PreConsult</a>
+  <h1>Privacy Policy</h1>
+  <div class="last-updated">Last Updated: July 2026</div>
+
+  <p>At <strong>PreConsult</strong> (accessible at <a href="https://pre-consult.org/">pre-consult.org</a>), user privacy and data security are our highest priorities. This Privacy Policy outlines how we handle information when you use our patient intake preparation service.</p>
+
+  <h2>1. Zero Data Persistence Architecture</h2>
+  <p>PreConsult is engineered from the ground up to operate with zero persistent storage of personal health information (PHI):</p>
+  <ul>
+    <li><strong>No User Accounts:</strong> You do not need to register, log in, or provide identifiable contact details (such as email, name, or phone number) to use PreConsult.</li>
+    <li><strong>Session-Only In-Memory Processing:</strong> Any information you enter during your session (symptoms, medical history, lifestyle factors) is held temporarily in volatile memory solely to generate your clinical questions and summary report.</li>
+    <li><strong>Immediate Data Wipe:</strong> When you finish downloading your summary report or close your browser tab/window, all session data is permanently erased from memory. No databases store your health inputs.</li>
+  </ul>
+
+  <h2>2. AI Question Generation & Third-Party Processing</h2>
+  <p>To provide relevant clinical follow-up questions, PreConsult utilizes Google Vertex AI (Gemini 2.5 Flash Lite):</p>
+  <ul>
+    <li>The clinical information you enter is transmitted via encrypted HTTPS connection to Google Vertex AI enterprise endpoints solely to generate contextual follow-up questions.</li>
+    <li>No personal identifiers (names, addresses, IDs) are sent to the AI service.</li>
+    <li>Data processed via enterprise Google Vertex AI is not retained by Google or used to train public machine learning models.</li>
+  </ul>
+
+  <h2>3. Cookies & Local Analytics</h2>
+  <p>PreConsult is designed to be privacy-first:</p>
+  <ul>
+    <li><strong>No Tracking Cookies:</strong> We do not use third-party advertising cookies or persistent tracking profiling.</li>
+    <li><strong>Language Preference:</strong> Your preferred interface language (English or Portuguese) may be stored in a minimal browser session state to improve your viewing experience.</li>
+    <li><strong>Aggregate Technical Logs:</strong> Standard web server logs may temporarily collect anonymous technical data (e.g., IP address, browser user-agent, request timestamp) for network security and rate-limiting purposes. These logs are automatically purged and contain no medical data.</li>
+  </ul>
+
+  <h2>4. Information Security</h2>
+  <p>We enforce strict security safeguards to protect data in transit:</p>
+  <ul>
+    <li>All web communication is encrypted using high-grade Transport Layer Security (TLS/HTTPS).</li>
+    <li>PDF report generation is processed in real time and delivered directly to your device browser.</li>
+  </ul>
+
+  <h2>5. Children's Privacy</h2>
+  <p>PreConsult is intended for general adult audiences and individuals preparing for healthcare consultations under adult guidance. We do not knowingly collect personal data from children under the age of 13.</p>
+
+  <h2>6. Changes to This Privacy Policy</h2>
+  <p>We may update this Privacy Policy periodically to reflect technological or legal updates. Any revisions will be published on this page with an updated timestamp.</p>
+
+  <h2>7. Contact Us</h2>
+  <p>If you have any questions or privacy concerns regarding PreConsult, please visit our homepage at <a href="https://pre-consult.org/">pre-consult.org</a> or consult our <a href="/terms">Terms of Service</a>.</p>
+</div>
+<footer>&copy; 2026 PreConsult — Privacy-First Patient Intake Preparation</footer>
+</body>
+</html>"""
         return HTMLResponse(content=html)
 
     async def terms_page(request):
         from starlette.responses import HTMLResponse
         html = """<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Terms of Service - PreConsult</title>
-<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2em auto;padding:0 1em;line-height:1.6;color:#e2e8f0;background:#0a192f}h1{color:cyan}a{color:cyan}p{margin:1em 0}</style>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Terms of Service — PreConsult</title>
+<meta name="description" content="PreConsult Terms of Service. Read our medical disclaimers, intended use guidelines, and terms of service."/>
+<link rel="canonical" href="https://pre-consult.org/terms"/>
+<style>
+  :root { --bg: #0a192f; --card-bg: rgba(13, 27, 42, 0.85); --text: #e2e8f0; --muted: #94a3b8; --accent: #00f2fe; --border: rgba(255, 255, 255, 0.1); }
+  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2em 1em; line-height: 1.7; color: var(--text); background: radial-gradient(circle at top right, #0a192f, #001f3f, #001529); min-height: 100vh; }
+  .card { background: var(--card-bg); backdrop-filter: blur(15px); border: 1px solid var(--border); border-radius: 16px; padding: 2.5em; box-shadow: 0 8px 32px 0 rgba(0,0,0,0.37); }
+  h1 { color: var(--accent); font-size: 2em; margin-top: 0; margin-bottom: 0.2em; }
+  h2 { color: #ffffff; font-size: 1.3em; margin-top: 1.8em; margin-bottom: 0.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  p, li { color: var(--text); font-size: 0.98em; }
+  ul { padding-left: 1.4em; }
+  li { margin-bottom: 0.5em; }
+  a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  a:hover { text-decoration: underline; }
+  .back-link { display: inline-block; margin-bottom: 1.5em; font-size: 0.95em; }
+  .last-updated { color: var(--muted); font-size: 0.88em; margin-bottom: 2em; }
+  .warning-box { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; padding: 1em 1.2em; margin: 1.5em 0; color: #fca5a5; }
+  footer { margin-top: 2em; text-align: center; color: var(--muted); font-size: 0.85em; }
+</style>
 </head>
-<body><a href="/" style="font-size:0.9em">&larr; Back to PreConsult</a>
-<h1>Terms of Service</h1>
-<p>By using PreConsult, you agree that this tool is for informational and organizational purposes only. It does not provide medical diagnosis, treatment recommendations, or emergency services. You should always consult a qualified healthcare professional for medical advice. If you are experiencing a medical emergency, call your local emergency number immediately. PreConsult is provided "as is" without warranties of any kind. The developers are not liable for any damages arising from the use of this tool.</p>
-</body></html>"""
+<body>
+<div class="card">
+  <a href="/" class="back-link">&larr; Back to PreConsult</a>
+  <h1>Terms of Service</h1>
+  <div class="last-updated">Last Updated: July 2026</div>
+
+  <div class="warning-box">
+    <strong>EMERGENCY NOTICE:</strong> PreConsult is NOT an emergency response tool. If you are experiencing a life-threatening medical emergency, call 911 (US), SAMU 192 (Brazil), or your local emergency response number immediately.
+  </div>
+
+  <h2>1. Acceptance of Terms</h2>
+  <p>By accessing or using <strong>PreConsult</strong> (<a href="https://pre-consult.org/">pre-consult.org</a>), you agree to be bound by these Terms of Service. If you do not agree to all terms, please do not use this application.</p>
+
+  <h2>2. Educational & Organizational Tool Only</h2>
+  <p>PreConsult is designed strictly as a self-preparation and communication aid for patients preparing to speak with licensed healthcare professionals. You understand and agree that:</p>
+  <ul>
+    <li>PreConsult does <strong>NOT</strong> provide medical diagnosis, clinical judgment, treatment plans, or prescription recommendations.</li>
+    <li>PreConsult does <strong>NOT</strong> create a doctor-patient or healthcare provider relationship between you and the developers or operators of PreConsult.</li>
+    <li>The summary report generated by PreConsult is based solely on user-entered details and AI questioning, intended only to help structure your thoughts for your doctor.</li>
+  </ul>
+
+  <h2>3. Always Consult a Professional Healthcare Provider</h2>
+  <p>Never delay seeking professional medical advice, disregard medical guidance, or discontinue medical treatment because of information generated by or presented on PreConsult. Always consult a qualified physician or healthcare provider regarding any health condition.</p>
+
+  <h2>4. User Responsibilities & Data Inputs</h2>
+  <p>You agree to provide accurate and truthful inputs to ensure the intake summary is helpful for your personal appointment preparation. Because PreConsult operates under a zero data persistence architecture, you are responsible for saving or downloading your PDF summary before closing the session.</p>
+
+  <h2>5. Disclaimer of Warranties</h2>
+  <p>PreConsult is provided on an <strong>"AS IS"</strong> and <strong>"AS AVAILABLE"</strong> basis without warranties of any kind, whether express, implied, or statutory, including but not limited to warranties of merchantability, fitness for a particular purpose, non-infringement, or accuracy of clinical questions.</p>
+
+  <h2>6. Limitation of Liability</h2>
+  <p>To the fullest extent permitted by applicable law, the creators, developers, and operators of PreConsult shall not be liable for any direct, indirect, incidental, consequential, special, or punitive damages arising out of or in connection with your access to, use of, or inability to use this service.</p>
+
+  <h2>7. Changes & Service Modifications</h2>
+  <p>We reserve the right to modify, suspend, or discontinue any aspect of PreConsult at any time without prior notice. Terms may be updated periodically, and continued use of the application constitutes acceptance of modified terms.</p>
+
+  <h2>8. Governing Law</h2>
+  <p>These Terms shall be governed by and construed in accordance with applicable general consumer and internet service principles, without regard to conflict of law rules.</p>
+</div>
+<footer>&copy; 2026 PreConsult — Privacy-First Patient Intake Preparation</footer>
+</body>
+</html>"""
         return HTMLResponse(content=html)
 
     app._api.add_route("/privacy", privacy_page, include_in_schema=False, methods=["GET"])

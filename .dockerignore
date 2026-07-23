@@ -34,7 +34,12 @@ __pycache__/
 *.pyo
 *.pyd
 .pytest_cache/
+.ruff_cache/
 .coverage
+.states/
+.web/
+.venv_test/
+scratch/
 htmlcov/
 .tox/
 .nox/

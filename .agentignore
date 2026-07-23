@@ -4,8 +4,13 @@ __pycache__/
 .ipynb_checkpoints/
 .git/
 .pytest_cache/
+.ruff_cache/
 .venv/
+.venv_test/
+.tmp/
+scratch/
 .claude/
+.gemini/
 
 # Large binary / data files
 knowledge_base/

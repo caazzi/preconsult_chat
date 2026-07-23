@@ -13,7 +13,7 @@ dependencies = [
     "reportlab==5.0.0",
     "uvicorn[standard]==0.34.0",
     "google-cloud-aiplatform==1.117.0",
-    "python-dotenv==1.1.1",
+    "python-dotenv==1.2.2",
     "redis==6.4.0",
     "reflex==0.9.6.post1",
     "sentry-sdk==2.65.0",

@@ -843,7 +843,87 @@ if api_router:
 
     async def privacy_page(request):
         from starlette.responses import HTMLResponse
-        html = """<!DOCTYPE html>
+        lang = request.query_params.get("lang") or request.cookies.get("preconsult_lang", "en")
+        lang = "pt" if lang.lower().startswith("pt") else "en"
+
+        if lang == "pt":
+            html = """<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Política de Privacidade — PreConsult</title>
+<meta name="description" content="Política de Privacidade do PreConsult. Saiba mais sobre nosso modelo de persistência zero de dados, processamento de anamnese com IA e padrões de segurança."/>
+<link rel="canonical" href="https://pre-consult.org/privacy"/>
+<style>
+  :root { --bg: #0a192f; --card-bg: rgba(13, 27, 42, 0.85); --text: #e2e8f0; --muted: #94a3b8; --accent: #00f2fe; --border: rgba(255, 255, 255, 0.1); }
+  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2em 1em; line-height: 1.7; color: var(--text); background: radial-gradient(circle at top right, #0a192f, #001f3f, #001529); min-height: 100vh; }
+  .card { background: var(--card-bg); backdrop-filter: blur(15px); border: 1px solid var(--border); border-radius: 16px; padding: 2.5em; box-shadow: 0 8px 32px 0 rgba(0,0,0,0.37); }
+  h1 { color: var(--accent); font-size: 2em; margin-top: 0; margin-bottom: 0.2em; }
+  h2 { color: #ffffff; font-size: 1.3em; margin-top: 1.8em; margin-bottom: 0.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  p, li { color: var(--text); font-size: 0.98em; }
+  ul { padding-left: 1.4em; }
+  li { margin-bottom: 0.5em; }
+  a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  a:hover { text-decoration: underline; }
+  .back-link { display: inline-block; margin-bottom: 1.5em; font-size: 0.95em; }
+  .last-updated { color: var(--muted); font-size: 0.88em; margin-bottom: 2em; }
+  footer { margin-top: 2em; text-align: center; color: var(--muted); font-size: 0.85em; }
+</style>
+</head>
+<body>
+<div class="card">
+  <a href="/?lang=pt" class="back-link">&larr; Voltar ao PreConsult</a>
+  <h1>Política de Privacidade</h1>
+  <div class="last-updated">Última atualização: Julho de 2026</div>
+
+  <p>No <strong>PreConsult</strong> (acessível em <a href="https://pre-consult.org/?lang=pt">pre-consult.org</a>), a privacidade e a segurança dos dados do usuário são nossas maiores prioridades. Esta Política de Privacidade descreve como tratamos as informações quando você utiliza nosso serviço de preparação para consultas médicas.</p>
+
+  <h2>1. Arquitetura de Persistência Zero de Dados</h2>
+  <p>O PreConsult foi projetado desde o início para operar sem armazenamento permanente de informações pessoais de saúde (PHI):</p>
+  <ul>
+    <li><strong>Sem Contas de Usuário:</strong> Você não precisa se cadastrar, fazer login ou fornecer dados de contato identificáveis (como e-mail, nome ou telefone) para usar o PreConsult.</li>
+    <li><strong>Processamento Temporário em Memória:</strong> Qualquer informação inserida durante a sessão (sintomas, histórico médico, estilo de vida) é mantida temporariamente em memória volátil exclusivamente para gerar suas perguntas clínicas e relatório.</li>
+    <li><strong>Exclusão Imediata de Dados:</strong> Assim que você baixa seu relatório em PDF ou fecha a aba do navegador, todos os dados da sessão são permanentemente apagados da memória. Nenhum banco de dados armazena suas informações.</li>
+  </ul>
+
+  <h2>2. Geração de Perguntas por IA e Processamento</h2>
+  <p>Para fornecer perguntas clínicas de acompanhamento relevantes, o PreConsult utiliza o Google Vertex AI (Gemini 2.5 Flash Lite):</p>
+  <ul>
+    <li>As informações clínicas inseridas são transmitidas via conexão criptografada HTTPS para os endpoints corporativos do Google Vertex AI exclusivamente para gerar perguntas de acompanhamento contextuais.</li>
+    <li>Nenhum identificador pessoal (nomes, endereços, documentos) é enviado ao serviço de IA.</li>
+    <li>Os dados processados via Google Vertex AI não são retidos pelo Google nem utilizados para treinar modelos públicos de aprendizado de máquina.</li>
+  </ul>
+
+  <h2>3. Cookies e Métricas Locais</h2>
+  <p>O PreConsult foi desenvolvido com foco total em privacidade:</p>
+  <ul>
+    <li><strong>Sem Cookies de Rastreamento:</strong> Não utilizamos cookies de publicidade de terceiros ou perfilamento contínuo.</li>
+    <li><strong>Preferência de Idioma:</strong> Seu idioma de interface preferido (inglês ou português) pode ser salvo no estado de sessão do navegador para melhorar sua experiência.</li>
+    <li><strong>Registros Técnicos Agregados:</strong> Logs padrão do servidor web podem coletar temporariamente dados técnicos anônimos (ex: endereço IP, user-agent do navegador) para segurança da rede e limitação de taxa de requisições. Esses registros são descartados automaticamente e não contêm dados médicos.</li>
+  </ul>
+
+  <h2>4. Segurança da Informação</h2>
+  <p>Aplicamos rígidas salvaguardas de segurança para proteger os dados em trânsito:</p>
+  <ul>
+    <li>Toda a comunicação web é criptografada usando Transport Layer Security (TLS/HTTPS) de alto nível.</li>
+    <li>A geração do relatório PDF ocorre em tempo real e é entregue diretamente ao navegador do seu dispositivo.</li>
+  </ul>
+
+  <h2>5. Privacidade de Menores</h2>
+  <p>O PreConsult destina-se ao público adulto geral e a pessoas que se preparam para consultas de saúde sob orientação de um adulto. Não coletamos intencionalmente dados pessoais de crianças menores de 13 anos.</p>
+
+  <h2>6. Alterações a esta Política de Privacidade</h2>
+  <p>Podemos atualizar esta Política de Privacidade periodicamente para refletir atualizações tecnológicas ou legais. Quaisquer revisões serão publicadas nesta página com uma data atualizada.</p>
+
+  <h2>7. Contato</h2>
+  <p>Se você tiver dúvidas ou preocupações sobre privacidade em relação ao PreConsult, visite nossa página inicial em <a href="https://pre-consult.org/?lang=pt">pre-consult.org</a> ou consulte nossos <a href="/terms?lang=pt">Termos de Serviço</a>.</p>
+</div>
+<footer>&copy; 2026 PreConsult — Preparação de Consultas Médicas com Privacidade Total</footer>
+</body>
+</html>"""
+        else:
+            html = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
@@ -869,7 +949,7 @@ if api_router:
 </head>
 <body>
 <div class="card">
-  <a href="/" class="back-link">&larr; Back to PreConsult</a>
+  <a href="/?lang=en" class="back-link">&larr; Back to PreConsult</a>
   <h1>Privacy Policy</h1>
   <div class="last-updated">Last Updated: July 2026</div>
 
@@ -922,7 +1002,79 @@ if api_router:
 
     async def terms_page(request):
         from starlette.responses import HTMLResponse
-        html = """<!DOCTYPE html>
+        lang = request.query_params.get("lang") or request.cookies.get("preconsult_lang", "en")
+        lang = "pt" if lang.lower().startswith("pt") else "en"
+
+        if lang == "pt":
+            html = """<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Termos de Serviço — PreConsult</title>
+<meta name="description" content="Termos de Serviço do PreConsult. Leia nossos avisos médicos, diretrizes de uso e termos de serviço."/>
+<link rel="canonical" href="https://pre-consult.org/terms"/>
+<style>
+  :root { --bg: #0a192f; --card-bg: rgba(13, 27, 42, 0.85); --text: #e2e8f0; --muted: #94a3b8; --accent: #00f2fe; --border: rgba(255, 255, 255, 0.1); }
+  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 2em 1em; line-height: 1.7; color: var(--text); background: radial-gradient(circle at top right, #0a192f, #001f3f, #001529); min-height: 100vh; }
+  .card { background: var(--card-bg); backdrop-filter: blur(15px); border: 1px solid var(--border); border-radius: 16px; padding: 2.5em; box-shadow: 0 8px 32px 0 rgba(0,0,0,0.37); }
+  h1 { color: var(--accent); font-size: 2em; margin-top: 0; margin-bottom: 0.2em; }
+  h2 { color: #ffffff; font-size: 1.3em; margin-top: 1.8em; margin-bottom: 0.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+  p, li { color: var(--text); font-size: 0.98em; }
+  ul { padding-left: 1.4em; }
+  li { margin-bottom: 0.5em; }
+  a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  a:hover { text-decoration: underline; }
+  .back-link { display: inline-block; margin-bottom: 1.5em; font-size: 0.95em; }
+  .last-updated { color: var(--muted); font-size: 0.88em; margin-bottom: 2em; }
+  .warning-box { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; padding: 1em 1.2em; margin: 1.5em 0; color: #fca5a5; }
+  footer { margin-top: 2em; text-align: center; color: var(--muted); font-size: 0.85em; }
+</style>
+</head>
+<body>
+<div class="card">
+  <a href="/?lang=pt" class="back-link">&larr; Voltar ao PreConsult</a>
+  <h1>Termos de Serviço</h1>
+  <div class="last-updated">Última atualização: Julho de 2026</div>
+
+  <div class="warning-box">
+    <strong>AVISO DE EMERGÊNCIA:</strong> O PreConsult NÃO é uma ferramenta de emergência médica. Se você estiver passando por uma emergência de risco à vida, ligue imediatamente para o SAMU 192 (Brasil), 911 (EUA) ou para o serviço de emergência local.
+  </div>
+
+  <h2>1. Aceitação dos Termos</h2>
+  <p>Ao acessar ou utilizar o <strong>PreConsult</strong> (<a href="https://pre-consult.org/?lang=pt">pre-consult.org</a>), você concorda com estes Termos de Serviço. Se você não concordar com todos os termos, não utilize esta aplicação.</p>
+
+  <h2>2. Ferramenta Exclusivamente Organizacional e Educacional</h2>
+  <p>O PreConsult foi projetado exclusivamente como auxílio de auto-preparação e comunicação para pacientes que vão se consultar com profissionais de saúde licenciados. Você entende e concorda que:</p>
+  <ul>
+    <li>O PreConsult <strong>NÃO</strong> fornece diagnóstico médico, julgamento clínico, planos de tratamento ou recomendações de prescrição.</li>
+    <li>O PreConsult <strong>NÃO</strong> cria uma relação médico-paciente nem de prestador de serviços de saúde entre você e os desenvolvedores ou operadores do serviço.</li>
+    <li>O relatório de resumo gerado baseia-se exclusivamente nas informações fornecidas pelo usuário e em perguntas de IA, visando apenas ajudar a estruturar seus pensamentos para seu médico.</li>
+  </ul>
+
+  <h2>3. Sempre Consulte um Profissional de Saúde</h2>
+  <p>Nunca atrase a busca por aconselhamento médico profissional, não desconsidere orientações médicas e nem interrompa tratamentos devido a informações geradas pelo PreConsult. Consulte sempre um médico qualificado sobre qualquer condição de saúde.</p>
+
+  <h2>4. Responsabilidades do Usuário e Dados Inseridos</h2>
+  <p>Você concorda em fornecer dados precisos e verdadeiros para garantir que o resumo seja útil para a sua consulta. Como o PreConsult opera sob uma arquitetura de persistência zero de dados, você é responsável por salvar ou baixar seu relatório PDF antes de encerrar a sessão.</p>
+
+  <h2>5. Isenção de Garantias</h2>
+  <p>O PreConsult é fornecido <strong>"NO ESTADO EM QUE SE ENCONTRA"</strong> e <strong>"CONFORME DISPONÍVEL"</strong>, sem garantias de qualquer tipo, expressas, implícitas ou legais, incluindo garantias de comercialização, adequação a uma finalidade específica ou exatidão das perguntas clínicas.</p>
+
+  <h2>6. Limitação de Responsabilidade</h2>
+  <p>Na extensão máxima permitida pela lei aplicável, os criadores, desenvolvedores e operadores do PreConsult não serão responsáveis por quaisquer danos diretos, indiretos, incidentais ou consequentes decorrentes do seu acesso, uso ou incapacidade de usar este serviço.</p>
+
+  <h2>7. Alterações e Modificações do Serviço</h2>
+  <p>Reservamo-nos o direito de modificar, suspender ou descontinuar qualquer aspecto do PreConsult a qualquer momento, sem aviso prévio. Os termos podem ser atualizados periodicamente, e o uso continuado da aplicação constitui aceitação dos termos modificados.</p>
+
+  <h2>8. Legislação Aplicável</h2>
+  <p>Estes Termos serão regidos e interpretados de acordo com os princípios gerais aplicáveis de defesa do consumidor e serviços de internet.</p>
+</div>
+<footer>&copy; 2026 PreConsult — Preparação de Consultas Médicas com Privacidade Total</footer>
+</body>
+</html>"""
+        else:
+            html = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
@@ -949,7 +1101,7 @@ if api_router:
 </head>
 <body>
 <div class="card">
-  <a href="/" class="back-link">&larr; Back to PreConsult</a>
+  <a href="/?lang=en" class="back-link">&larr; Back to PreConsult</a>
   <h1>Terms of Service</h1>
   <div class="last-updated">Last Updated: July 2026</div>
 

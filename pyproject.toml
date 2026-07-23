@@ -14,7 +14,7 @@ dependencies = [
     "uvicorn[standard]==0.34.0",
     "google-cloud-aiplatform==1.117.0",
     "python-dotenv==1.1.1",
-    "redis==6.4.0",
+    "redis==8.0.1",
     "reflex==0.9.6.post1",
     "sentry-sdk==2.65.0",
     "cachetools==5.5.2",

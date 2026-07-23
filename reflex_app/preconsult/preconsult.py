@@ -520,19 +520,23 @@ def step_6_summary() -> rx.Component:
     )
 
 def footer() -> rx.Component:
-    return rx.vstack(
-        rx.divider(),
-        rx.text(State.t["footer_disclaimer"], size="2", color_scheme="gray", text_align="center"),
-        rx.hstack(
-            rx.link(State.t["footer_privacy"], href="/privacy", color_scheme="cyan", size="2"),
-            rx.text("·", color_scheme="gray", size="2"),
-            rx.link(State.t["footer_terms"], href="/terms", color_scheme="cyan", size="2"),
-            spacing="2", align_items="center", justify="center",
+    return rx.container(
+        rx.vstack(
+            rx.divider(),
+            rx.text(State.t["footer_disclaimer"], size="2", color_scheme="gray", text_align="center"),
+            rx.hstack(
+                rx.link(State.t["footer_privacy"], href="/privacy", color_scheme="cyan", size="2"),
+                rx.text("·", color_scheme="gray", size="2"),
+                rx.link(State.t["footer_terms"], href="/terms", color_scheme="cyan", size="2"),
+                spacing="2", align_items="center", justify="center",
+            ),
+            width="100%",
+            padding="1em",
+            spacing="3",
+            align_items="center",
         ),
+        max_width={"initial": "95%", "sm": "90%", "md": "720px"},
         width="100%",
-        padding="1em",
-        spacing="3",
-        align_items="center",
     )
 
 def faq_section() -> rx.Component:
@@ -565,14 +569,18 @@ def faq_section() -> rx.Component:
                 spacing="1",
             )
         )
-    return rx.vstack(
-        rx.divider(),
-        rx.heading(State.t["faq_title"], size="5", text_align="center"),
-        rx.vstack(*faq_items, width="100%", spacing="2"),
+    return rx.container(
+        rx.vstack(
+            rx.divider(),
+            rx.heading(State.t["faq_title"], size="5", text_align="center"),
+            rx.vstack(*faq_items, width="100%", spacing="2"),
+            width="100%",
+            padding_top="2em",
+            spacing="3",
+            align_items="center",
+        ),
+        max_width={"initial": "95%", "sm": "90%", "md": "720px"},
         width="100%",
-        padding_top="2em",
-        spacing="3",
-        align_items="center",
     )
 
 def stepper_component() -> rx.Component:

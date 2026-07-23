@@ -589,10 +589,18 @@ def stepper_component() -> rx.Component:
         
         return rx.hstack(
             rx.center(
-                rx.cond(is_completed, rx.icon("check", size=16), rx.text(str(idx + 1))),
-                width="30px", height="30px", border_radius="50%", background=bg_color,
+                rx.cond(
+                    is_completed,
+                    rx.icon("check", size=14),
+                    rx.text(str(idx + 1), size="2", line_height="1", weight="bold", text_align="center")
+                ),
+                width="32px", height="32px",
+                min_width="32px", min_height="32px",
+                flex_shrink="0",
+                border_radius="50%", background=bg_color,
                 border="2px solid", border_color=border_color,
-                color=rx.cond(is_active | is_completed, "cyan", "gray"), font_weight="bold",
+                color=rx.cond(is_active | is_completed, "cyan", "gray"),
+                align_items="center", justify_content="center",
             ),
             # Use safe item fetching from step names array
             rx.cond(
@@ -601,7 +609,7 @@ def stepper_component() -> rx.Component:
                         weight=rx.cond(is_active, "bold", "regular"), display={"initial": "none", "md": "block"}),
                 rx.text("")
             ),
-            spacing="2", align_items="center"
+            spacing="2", align_items="center", flex_shrink="0"
         )
         
     desktop_stepper = rx.hstack(

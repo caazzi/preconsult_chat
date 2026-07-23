@@ -452,14 +452,6 @@ def step_5_interview_qs() -> rx.Component:
                 ),
             ),
         ),
-        rx.grid(
-            rx.button(State.t["back_btn"], on_click=State.go_back,
-                color_scheme="gray", variant="outline", size="4", width="100%", min_height="48px"),
-            rx.button(State.t["submit_continue"],
-                on_click=State.submit_answers, loading=State.loading,
-                color_scheme="cyan", size="4", width="100%", min_height="48px"),
-            columns="2", spacing="4", width="100%",
-        ),
         width="100%", spacing="4",
     )
     return form_step_layout(

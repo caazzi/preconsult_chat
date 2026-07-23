@@ -14,11 +14,11 @@ PreConsult bridges that gap with a guided AI interview that generates a structur
 
 ## How It Works
 
-1. Patient arrives at a welcome screen explaining the process with a clear privacy reassurance
-2. Patient fills out demographics (age, sex) and their chief complaint with duration
-3. The AI generates targeted follow-up questions using clinical frameworks (OPQRST + SAMPLE)
-4. Answers are compiled into a structured summary the patient can download as a PDF
-5. Session data is destroyed — nothing is retained on the server
+1. **Landing & Privacy Choice**: Patient reviews privacy guarantees, chooses language (EN/PT), and starts intake.
+2. **Demographics & Chief Complaint**: Patient fills age, sex, specialist, chief complaint, and duration.
+3. **Medical History & Lifestyle**: Patient selects pre-existing conditions (or "None"), medications, allergies, family history, and smoking/alcohol habits.
+4. **Clinical Assessment**: The AI generates targeted follow-up questions using clinical frameworks (OPQRST + SAMPLE).
+5. **PDF Report & Destruction**: Answers are compiled into a structured summary downloadable as a PDF — all session data is destroyed when closed.
 
 ---
 
@@ -48,7 +48,7 @@ No health data is ever written to disk. Every design decision flows from this co
 
 - **No database** — session state lives in Redis with a 30-minute TTL.
 - **No user accounts** — complete anonymity, no registration required.
-- **In-memory PDF generation** — reports are built in RAM and streamed directly to the browser.
+- **In-memory PDF generation** — reports are built in RAM with ReportLab and streamed directly to the browser.
 - **No data in transit to disk** — even if Redis fails, rate limiting falls back to in-memory counters (no clinical data).
 - **No model training** — API calls use contracts that exclude session data from training.
 
@@ -58,13 +58,13 @@ No health data is ever written to disk. Every design decision flows from this co
 
 | Layer | Technology |
 |---|---|
-| Core | Reflex 0.9.1 (Unified Frontend & API Host) |
-| Backend | FastAPI (Integrated into Reflex backend) |
-| Session | Redis (Hashes, ephemeral, 30-min TTL, RedisUnavailable → 503) |
-| AI | Vertex AI Gemini 2.5 Flash Lite (via LangChain) |
-| PDF | ReportLab (in-memory, deterministic, no LLM call) |
+| Core | Reflex 0.9.6 (Unified Frontend & API Host) |
+| Backend | FastAPI (0.136.1, integrated into Reflex backend) |
+| Session | Redis (6.4.0, ephemeral, 30-min TTL, in-memory fallback for rate limiting) |
+| AI | Vertex AI Gemini 2.5 Flash Lite (`langchain-google-vertexai` 2.1.2) |
+| PDF | ReportLab 5.0.0 (in-memory, deterministic, localized EN/PT) |
 | UI/UX | Glassmorphism, mobile-first, 48px touch targets, prefers-reduced-motion, EN/PT i18n |
-| Monitoring | Sentry (error tracking) + `GET /health` endpoint |
+| Monitoring | Sentry SDK (2.65.0) + `GET /health` endpoint |
 | Deployment | GCP Cloud Run (1.0 CPU, 1Gi RAM, 0-5 instances) |
 | CI/CD | GitHub Actions (tests + WIF auth + Cloud Run deploy) |
 
@@ -72,15 +72,15 @@ No health data is ever written to disk. Every design decision flows from this co
 
 ## Key Design Decision: Prompt Engineering over RAG
 
-Early versions used ChromaDB and a VM-based RAG pipeline. We replaced it with specialized clinical prompt engineering using established frameworks (OPQRST for symptom assessment, SAMPLE for medical history).
+Early versions evaluated ChromaDB and VM-based RAG pipelines. We replaced them with specialized clinical prompt engineering using established frameworks (OPQRST for symptom assessment, SAMPLE for medical history).
 
-Foundation models already contain the necessary medical knowledge. Structured prompting yields cleaner, faster results at a fraction of the infrastructure cost — eliminating ~$100/month in cloud spend.
+Foundation models already contain the necessary medical knowledge. Structured prompting yields cleaner, faster results at a fraction of the infrastructure cost — eliminating unnecessary database overhead and cloud spend.
 
 ---
 
 ## Local Setup
 
-The project uses `uv` for dependency management.
+The project uses `uv` for fast dependency management.
 
 ### Prerequisites
 
@@ -117,14 +117,14 @@ uv sync --extra test
 uv run python -m pytest tests/ -v
 ```
 
-The suite has **50 tests** covering:
-- Agent service (LLM chains, language, emergency detection)
-- API integration (session init, streaming, PDF generation, analytics)
-- PDF generation (i18n, pagination, empty states)
-- Rate limiting (Redis + in-memory fallback, concurrency)
-- Security (API key enforcement, error sanitization, BUILD_MODE)
-- Session service (CRUD, Redis recovery after failure)
-- i18n (fallback, key consistency, `get_localized_value`)
+The test suite contains **104 passing tests** covering:
+- **Agent Service**: LLM chains, multi-language prompt formatting, emergency condition detection.
+- **API Integration**: Session initialization, SSE question streaming, PDF generation, daily quotas & analytics endpoints.
+- **PDF Generation**: Localized ReportLab layouts, pagination, wrapped text, empty/missing field resilience.
+- **Rate Limiting & Quotas**: Redis-backed limits, fallback memory counters, concurrent creation locks.
+- **Security**: API key enforcement, HTML input sanitization, error response stripping, `BUILD_MODE` bypass tests.
+- **Session Service**: Ephemeral storage CRUD operations and automatic recovery upon Redis reconnection.
+- **Reflex Frontend & i18n**: Component rendering, multi-step state transitions, language switcher, bot scanner blocking, Privacy & Terms modal routing.
 
 ---
 
@@ -133,12 +133,13 @@ The suite has **50 tests** covering:
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/` | Root — welcome message |
-| `GET` | `/health` | Liveness probe (returns `{"status": "healthy", "redis": "ok"}`) |
-| `POST` | `/api/session/init` | Create session with full form data (rate limited: 2/min) |
+| `GET` | `/health` | Liveness & readiness probe (returns status + Redis check) |
+| `POST` | `/api/session/init` | Create session with full form data (Rate limited: 2/min, 20/day per IP) |
 | `POST` | `/api/interview-questions-stream` | SSE stream of LLM-generated clinical questions |
-| `POST` | `/api/generate-pdf` | Deterministic PDF from form + Q&A (no LLM call) |
-| `POST` | `/api/analytics/event` | Log analytics event |
-| `GET` | `/api/analytics/stats` | 7-day funnel stats (token-gated) |
+| `POST` | `/api/initial-questions-stream` | SSE stream for initial complaint follow-ups |
+| `POST` | `/api/generate-pdf` | Deterministic PDF report from form + Q&A (no LLM call) |
+| `POST` | `/api/analytics/event` | Log anonymous funnel analytics event |
+| `GET` | `/api/analytics/stats` | 7-day funnel stats |
 
 ---
 
@@ -161,63 +162,46 @@ gcloud run deploy preconsult \
 
 ### Custom Domain (Cloudflare)
 
-The app is served at **pre-consult.org** via a Cloudflare Worker that proxies requests to the Cloud Run endpoint, rewriting the `Host` header to match GCP's requirements.
+The app is served at **pre-consult.org** via Cloudflare Worker proxying to Cloud Run with `Host` header rewriting.
 
 ---
 
 ## Project Structure
 
 ```
-preconsult_chat/
-├── src/preconsult/          # Backend package
-│   ├── api/endpoints.py     # FastAPI routes
-│   ├── core/config.py       # Environment config
-│   ├── core/errors.py       # Exception handlers
-│   ├── core/llm.py          # Vertex AI singleton
-│   ├── main.py              # FastAPI app + Sentry + health
+app-preconsult/
+├── src/preconsult/          # FastAPI Backend package
+│   ├── api/endpoints.py     # FastAPI routes & SSE streaming
+│   ├── core/config.py       # Environment config & secrets
+│   ├── core/errors.py       # Exception handlers & error sanitization
+│   ├── core/llm.py          # Vertex AI Gemini singleton
+│   ├── main.py              # FastAPI app + Sentry + health check
 │   └── services/
-│       ├── agent_service.py  # LangChain prompts + streaming
-│       ├── pdf_service.py    # ReportLab PDF generation
-│       └── session_service.py# Redis + in-memory rate limiting
-├── reflex_app/preconsult/   # Reflex frontend
-│   ├── preconsult.py        # UI components + app setup (7 step wizard)
-│   ├── state.py             # Reflex state + API calls
-│   ├── analytics.py         # Analytics via HTTP
-│   └── i18n.py              # EN/PT translations (190+ keys)
-├── tests/                   # 50+ tests
-├── Dockerfile               # Multi-stage build
-├── docker-compose.yml       # Local Redis
+│       ├── agent_service.py  # LangChain prompts + OPQRST streaming
+│       ├── pdf_service.py    # In-memory ReportLab PDF generation
+│       └── session_service.py# Redis state + quota & rate limiting
+├── reflex_app/preconsult/   # Reflex Frontend
+│   ├── preconsult.py        # UI components, wizard flow & modals
+│   ├── state.py             # Reflex state management & API streaming
+│   ├── analytics.py         # HTTP event tracking
+│   └── i18n.py              # EN/PT translations & legal content
+├── tests/                   # 104 tests
+├── Dockerfile               # Multi-stage container build
+├── docker-compose.yml       # Local Redis service
+├── pyproject.toml           # Dependencies & build configuration
 └── .github/workflows/ci-cd.yml
 ```
 
 ---
 
-## Phases Completed
-
-| Phase | Focus | Commits |
-|---|---|---|
-| 0 | Security: race condition, API_BASE_URL, BUILD_MODE, Sentry | 1 |
-| 1 | Resilience: Redis fallback, error handlers, sanitized errors, analytics HTTP | 2 |
-| 1.5 | Test coverage: mock cleanup, 7 new tests | 1 |
-| 2 | Maintenance: gender-neutral, PDF i18n, Dependabot | 1 |
-| 3 | Coverage: concurrency tests, i18n edge cases | 1 |
-| 4 | Infra: healthcheck, MockWebSocket extraction | 1 |
-| 5 | UI/UX: mobile-first layout, inline errors via callout, streaming timeout | 2 |
-| 6 | UI/UX: landing split, privacy trust, accessibility for fragile users | 1 |
-| 7 | UI/UX: chief complaint reorder, "none" toggle, emergency dialog, skeleton | 1 |
-| 8 | UI/UX: prefers-reduced-motion, conditional lang selector, error callout | 1 |
-| | **Total** | **50+ tests** |
-
----
-
 ## UX Principles
 
-The UI was redesigned with three core principles:
+The UI is built around three core design principles:
 
-- **Mobile-first**: All touch targets are 48px minimum, spacing is generous (16px+), and grids collapse to 2 columns on mobile for easier tapping
-- **Privacy as trust**: A privacy badge appears on the landing page and each step, reassuring users that no data is stored
-- **Fragile-user friendly**: Font sizes start at 16px for body text, animations respect `prefers-reduced-motion`, skeletons replace spinners during loading, and error callouts use high-contrast solid styling
+- **Mobile-first**: 48px minimum touch targets, generous padding (16px+), and responsive layouts optimized for mobile devices.
+- **Privacy as trust**: Persistent privacy badges and notices throughout intake, Privacy Policy & Terms of Service modals, and clear zero-retention assurances.
+- **Accessibility & Safety**: Minimum 16px font sizes, support for `prefers-reduced-motion`, high-contrast error callouts, loading skeletons, and interactive Emergency Warning dialogues.
 
 ---
 
-> **Disclaimer**: PreConsult is an organizational tool, not a medical device. It does not provide diagnoses or medical advice. Always consult a qualified healthcare provider.
+> **Disclaimer**: PreConsult is an organizational tool designed to assist patients in organizing symptom information prior to medical consultations. It does not provide medical diagnoses, treatment recommendations, or emergency services. Always consult a qualified healthcare provider for medical advice.

@@ -125,6 +125,14 @@ class State(rx.State):
     is_emergency: bool = False
     question_index: int = 0
     
+    # --- Campaign & Attribution State ---
+    gad_source: str = ""
+    gad_campaignid: str = ""
+    gclid: str = ""
+    gbraid: str = ""
+    utm_source: str = ""
+    utm_campaign: str = ""
+
     # --- UI State ---
     step: int = 0  # 0: Landing, 1: Demographics, 2-5: Form, 6: Q&A, 7: Summary
     loading: bool = False
@@ -132,11 +140,18 @@ class State(rx.State):
 
     def detect_lang(self):
         try:
+            query_params = self.router.page.params
+            self.gad_source = query_params.get("gad_source", "")
+            self.gad_campaignid = query_params.get("gad_campaignid", "")
+            self.gclid = query_params.get("gclid", "")
+            self.gbraid = query_params.get("gbraid", "")
+            self.utm_source = query_params.get("utm_source", "")
+            self.utm_campaign = query_params.get("utm_campaign", "")
+
             lang_cookie = self.get_cookie("preconsult_lang")
             if lang_cookie in ("pt", "en"):
                 self.lang = lang_cookie
                 return
-            query_params = self.router.page.params
             lang_param = query_params.get("lang", "").lower()
             if lang_param in ("pt", "en"):
                 self.lang = lang_param

@@ -20,8 +20,8 @@ FULL_PAYLOAD = {
 
 
 @pytest.mark.asyncio
-async def test_validation_error_missing_field_returns_422():
-    payload = {k: v for k, v in FULL_PAYLOAD.items() if k != "age_bracket"}
+async def test_validation_error_invalid_type_returns_422():
+    payload = {**FULL_PAYLOAD, "conditions": "invalid_type_not_a_list"}
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post("/api/session/init", json=payload, headers=HEADERS)
     assert response.status_code == 422
@@ -82,7 +82,7 @@ async def test_generic_error_returns_500():
     await srv._memory_limiter.clear()
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post("/api/session/init", json={}, headers=HEADERS)
+        response = await client.post("/api/session/init", json={"conditions": "invalid"}, headers=HEADERS)
     assert response.status_code in (422, 500)
 
 

@@ -36,7 +36,9 @@ gcloud run deploy $SERVICE_NAME \
     --region $REGION \
     --min-instances 0 \
     --max-instances 5 \
-    --concurrency 50 \
+    --concurrency 80 \
+    --timeout 300s \
+    --use-http2 \
     --allow-unauthenticated \
     --set-env-vars="PRECONSULT_API_KEY=$PRECONSULT_API_KEY,VERTEX_AI_REGION=us-central1"
 

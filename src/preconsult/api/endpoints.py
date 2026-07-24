@@ -56,22 +56,22 @@ def get_client_ip(request: Request) -> str:
 # --- Data Models (Ephemeral State Design) ---
 class SessionInitRequest(BaseModel):
     # Step 1 — Demographics
-    age_bracket: str
-    sex: str
-    lang: str
+    age_bracket: str = ""
+    sex: str = ""
+    lang: str = "en"
     # Step 2 — Chief Complaint
-    specialist: str
-    chief_complaint: str
-    duration: str
+    specialist: str = ""
+    chief_complaint: str = ""
+    duration: str = ""
     complaint_detail: str = ""
     # Step 3 — Medical History
-    conditions: list[str] = []
-    medications: list[str] = []
+    conditions: list[str] = Field(default_factory=list)
+    medications: list[str] = Field(default_factory=list)
     allergies: str = ""
     # Step 4 — Lifestyle & Family
-    family_history: list[str] = []
-    smoking: str
-    alcohol: str
+    family_history: list[str] = Field(default_factory=list)
+    smoking: str = ""
+    alcohol: str = ""
 
 class InitialRequest(BaseModel):
     session_id: str

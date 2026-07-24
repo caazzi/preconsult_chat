@@ -576,67 +576,171 @@ def faq_section() -> rx.Component:
     )
 
 def stepper_component() -> rx.Component:
-    def stepper_item(idx: int):
+    def desktop_step_item(idx: int):
         is_active = State.step == idx
         is_completed = State.step > idx
         
         bg_color = rx.cond(
             is_active, 
-            "rgba(0, 200, 255, 0.2)", 
-            rx.cond(is_completed, "rgba(0, 200, 255, 0.4)", "transparent")
+            "rgba(0, 242, 254, 0.25)", 
+            rx.cond(is_completed, "rgba(0, 242, 254, 0.4)", "rgba(255,255,255,0.03)")
         )
-        border_color = rx.cond(is_active | is_completed, "cyan", "rgba(255,255,255,0.2)")
+        border_color = rx.cond(
+            is_active, 
+            "#00f2fe", 
+            rx.cond(is_completed, "#00c8ff", "rgba(255,255,255,0.18)")
+        )
+        box_shadow = rx.cond(
+            is_active,
+            "0 0 12px rgba(0, 242, 254, 0.4)",
+            "none"
+        )
+        text_color = rx.cond(is_active | is_completed, "#00f2fe", "rgba(255,255,255,0.5)")
         
-        return rx.hstack(
-            rx.center(
-                rx.cond(
-                    is_completed,
-                    rx.icon("check", size=14),
-                    rx.text(str(idx + 1), size="2", line_height="1", weight="bold", text_align="center")
-                ),
-                width="32px", height="32px",
-                min_width="32px", min_height="32px",
-                flex_shrink="0",
-                border_radius="50%", background=bg_color,
-                border="2px solid", border_color=border_color,
-                color=rx.cond(is_active | is_completed, "cyan", "gray"),
-                align_items="center", justify_content="center",
-            ),
-            # Use safe item fetching from step names array
+        circle_badge = rx.box(
             rx.cond(
-                State.step_names.length() > idx,
-                rx.text(State.step_names[idx], color=rx.cond(is_active, "white", "gray"), 
-                        weight=rx.cond(is_active, "bold", "regular"), display={"initial": "none", "md": "block"}),
-                rx.text("")
+                is_completed,
+                rx.icon("check", size=14, stroke_width=3),
+                rx.text(str(idx + 1), size="2", line_height="1", weight="bold", text_align="center")
             ),
-            spacing="2", align_items="center", flex_shrink="0"
+            width="32px",
+            height="32px",
+            min_width="32px",
+            min_height="32px",
+            max_width="32px",
+            max_height="32px",
+            style={
+                "aspect_ratio": "1 / 1",
+                "flex_shrink": 0,
+                "display": "flex",
+                "align_items": "center",
+                "justify_content": "center",
+            },
+            border_radius="50%",
+            background=bg_color,
+            border="2px solid",
+            border_color=border_color,
+            box_shadow=box_shadow,
+            color=text_color,
+            transition="all 0.2s ease-in-out",
         )
         
+        # Connecting line to next step (if not last step)
+        connecting_line = rx.cond(
+            idx < 6,
+            rx.box(
+                flex="1",
+                height="2px",
+                min_width="12px",
+                background=rx.cond(
+                    State.step > idx,
+                    "linear-gradient(90deg, #00c8ff, #00f2fe)",
+                    "rgba(255, 255, 255, 0.12)"
+                ),
+                margin_x="4px",
+                transition="all 0.3s ease",
+            ),
+            rx.box()
+        )
+        
+        step_label = rx.cond(
+            State.step_names.length() > idx,
+            rx.text(
+                State.step_names[idx],
+                color=rx.cond(is_active, "white", rx.cond(is_completed, "#e2e8f0", "rgba(255,255,255,0.4)")),
+                weight=rx.cond(is_active, "bold", "regular"),
+                size="2",
+                white_space="nowrap",
+            ),
+            rx.text("")
+        )
+
+        return rx.hstack(
+            rx.hstack(
+                circle_badge,
+                step_label,
+                spacing="2",
+                align_items="center",
+                flex_shrink="0",
+            ),
+            connecting_line,
+            align_items="center",
+            flex=rx.cond(idx < 6, "1", "0"),
+            spacing="1",
+        )
+
     desktop_stepper = rx.hstack(
-        *[stepper_item(i) for i in range(7)],
-        spacing={"initial": "2", "sm": "4"}, justify="center", width="100%",
+        *[desktop_step_item(i) for i in range(7)],
+        width="100%",
+        align_items="center",
+        justify="between",
+        padding_x="0.5em",
     )
-    
+
+    def mobile_step_dot(i: int):
+        is_active = State.step == i
+        is_completed = State.step > i
+        return rx.box(
+            height="6px",
+            width=rx.cond(is_active, "24px", "10px"),
+            border_radius="999px",
+            background=rx.cond(
+                is_active,
+                "#00f2fe",
+                rx.cond(is_completed, "rgba(0, 242, 254, 0.5)", "rgba(255, 255, 255, 0.15)")
+            ),
+            box_shadow=rx.cond(is_active, "0 0 8px rgba(0, 242, 254, 0.6)", "none"),
+            transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        )
+
     mobile_progress = rx.vstack(
         rx.hstack(
-            rx.text(f"Step {State.step + 1} of 7", weight="bold", size="2"),
+            rx.hstack(
+                rx.text("Step", size="2", color_scheme="gray"),
+                rx.text(f"{State.step + 1}", size="2", weight="bold", color="cyan"),
+                rx.text("of 7", size="2", color_scheme="gray"),
+                spacing="1",
+                align_items="center",
+            ),
             rx.spacer(),
             rx.cond(
                 State.step_names.length() > State.step,
-                rx.text(State.step_names[State.step], color="cyan", size="2", weight="bold"),
+                rx.box(
+                    rx.text(State.step_names[State.step], color="#00f2fe", size="2", weight="bold"),
+                    padding="2px 10px",
+                    background="rgba(0, 242, 254, 0.1)",
+                    border="1px solid rgba(0, 242, 254, 0.25)",
+                    border_radius="999px",
+                ),
                 rx.text("")
             ),
             width="100%",
+            align_items="center",
         ),
-        rx.progress(value=State.step_progress, width="100%", height="8px", color_scheme="cyan", aria_label="Overall progress"),
+        rx.progress(
+            value=State.step_progress,
+            width="100%",
+            height="6px",
+            color_scheme="cyan",
+            aria_label="Overall intake progress",
+            border_radius="999px",
+        ),
+        rx.hstack(
+            *[mobile_step_dot(i) for i in range(7)],
+            spacing="2",
+            justify="center",
+            width="100%",
+            padding_top="2px",
+        ),
         width="100%",
-        spacing="1",
+        spacing="2",
     )
-    
+
     return rx.box(
-        rx.box(mobile_progress, display={"initial": "block", "sm": "none"}),
-        rx.box(desktop_stepper, display={"initial": "none", "sm": "block"}),
-        padding_bottom="1em", width="100%",
+        rx.box(mobile_progress, display={"initial": "block", "md": "none"}),
+        rx.box(desktop_stepper, display={"initial": "none", "md": "block"}),
+        padding_bottom="1.25em",
+        width="100%",
     )
 
 def index() -> rx.Component:

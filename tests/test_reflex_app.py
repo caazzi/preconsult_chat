@@ -62,7 +62,16 @@ def test_step_6_summary_rendering():
 def test_state_step_progress():
     state = State()
     state.step = 0
-    assert state.step_progress == 14  # int(1/7 * 100) = 14
+    assert state.step_progress == 0
+    
+    state.step = 1
+    assert state.step_progress == 20
+    
+    state.step = 3
+    assert state.step_progress == 60
+    
+    state.step = 5
+    assert state.step_progress == 100
     
     state.step = 6
     assert state.step_progress == 100

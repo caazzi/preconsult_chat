@@ -91,8 +91,42 @@ class State(rx.State):
         return [{"id": k, "label": label} for k, label in zip(keys, labels)]
 
     @rx.var
+    def active_step_index(self) -> int:
+        """Returns 0-based active step index (0..4) for steps 1..5."""
+        if self.step <= 0:
+            return 0
+        if self.step >= 6:
+            return 4
+        return self.step - 1
+
+    @rx.var
+    def active_step_number(self) -> int:
+        """Returns 1-based display number (1..5) for active step."""
+        if self.step <= 0:
+            return 1
+        if self.step >= 6:
+            return 5
+        return self.step
+
+    @rx.var
+    def total_active_steps(self) -> int:
+        return 5
+
+    @rx.var
+    def active_step_name(self) -> str:
+        names = self.step_names
+        idx = self.active_step_index
+        if idx < len(names):
+            return names[idx]
+        return ""
+
+    @rx.var
     def step_progress(self) -> int:
-        return int(((self.step + 1) / 7) * 100)
+        if self.step <= 0:
+            return 0
+        if self.step >= 6:
+            return 100
+        return int((self.step / 5) * 100)
     
     # --- General Form State ---
     gender: str = ""

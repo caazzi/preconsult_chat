@@ -577,8 +577,8 @@ def faq_section() -> rx.Component:
 
 def stepper_component() -> rx.Component:
     def desktop_step_item(idx: int):
-        is_active = State.step == idx
-        is_completed = State.step > idx
+        is_active = (State.active_step_index == idx) & (State.step < 6)
+        is_completed = (State.active_step_index > idx) | (State.step == 6)
         
         bg_color = rx.cond(
             is_active, 
@@ -607,8 +607,6 @@ def stepper_component() -> rx.Component:
             height="32px",
             min_width="32px",
             min_height="32px",
-            max_width="32px",
-            max_height="32px",
             style={
                 "aspect_ratio": "1 / 1",
                 "flex_shrink": 0,
@@ -627,13 +625,13 @@ def stepper_component() -> rx.Component:
         
         # Connecting line to next step (if not last step)
         connecting_line = rx.cond(
-            idx < 6,
+            idx < 4,
             rx.box(
                 flex="1",
                 height="2px",
                 min_width="12px",
                 background=rx.cond(
-                    State.step > idx,
+                    (State.active_step_index > idx) | (State.step == 6),
                     "linear-gradient(90deg, #00c8ff, #00f2fe)",
                     "rgba(255, 255, 255, 0.12)"
                 ),
@@ -665,49 +663,34 @@ def stepper_component() -> rx.Component:
             ),
             connecting_line,
             align_items="center",
-            flex=rx.cond(idx < 6, "1", "0"),
+            flex=rx.cond(idx < 4, "1", "0"),
             spacing="1",
         )
 
     desktop_stepper = rx.hstack(
-        *[desktop_step_item(i) for i in range(7)],
+        *[desktop_step_item(i) for i in range(5)],
         width="100%",
         align_items="center",
         justify="between",
         padding_x="0.5em",
     )
 
-    def mobile_step_dot(i: int):
-        is_active = State.step == i
-        is_completed = State.step > i
-        return rx.box(
-            height="6px",
-            width=rx.cond(is_active, "24px", "10px"),
-            border_radius="999px",
-            background=rx.cond(
-                is_active,
-                "#00f2fe",
-                rx.cond(is_completed, "rgba(0, 242, 254, 0.5)", "rgba(255, 255, 255, 0.15)")
-            ),
-            box_shadow=rx.cond(is_active, "0 0 8px rgba(0, 242, 254, 0.6)", "none"),
-            transition="all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-        )
-
     mobile_progress = rx.vstack(
         rx.hstack(
             rx.hstack(
-                rx.text("Step", size="2", color_scheme="gray"),
-                rx.text(f"{State.step + 1}", size="2", weight="bold", color="cyan"),
-                rx.text("of 7", size="2", color_scheme="gray"),
+                rx.text(State.t["step_indicator"], size="2", color_scheme="gray"),
+                rx.text(f"{State.active_step_number}", size="2", weight="bold", color="cyan"),
+                rx.text(State.t["of_indicator"], size="2", color_scheme="gray"),
+                rx.text(f"{State.total_active_steps}", size="2", color_scheme="gray"),
                 spacing="1",
                 align_items="center",
             ),
             rx.spacer(),
             rx.cond(
-                State.step_names.length() > State.step,
+                State.active_step_name != "",
                 rx.box(
                     rx.text(
-                        State.step_names[State.step],
+                        State.active_step_name,
                         color="#00f2fe",
                         size="2",
                         weight="bold",
@@ -719,7 +702,7 @@ def stepper_component() -> rx.Component:
                     background="rgba(0, 242, 254, 0.1)",
                     border="1px solid rgba(0, 242, 254, 0.25)",
                     border_radius="999px",
-                    max_width={"initial": "140px", "xs": "180px", "sm": "240px"},
+                    max_width={"initial": "160px", "xs": "200px", "sm": "260px"},
                 ),
                 rx.text("")
             ),
@@ -734,13 +717,6 @@ def stepper_component() -> rx.Component:
             aria_label="Overall intake progress",
             border_radius="999px",
         ),
-        rx.hstack(
-            *[mobile_step_dot(i) for i in range(7)],
-            spacing="2",
-            justify="center",
-            width="100%",
-            padding_top="2px",
-        ),
         width="100%",
         spacing="2",
     )
@@ -748,10 +724,11 @@ def stepper_component() -> rx.Component:
     return rx.box(
         rx.box(mobile_progress, display={"initial": "block", "md": "none"}, width="100%", overflow="hidden"),
         rx.box(desktop_stepper, display={"initial": "none", "md": "flex"}, width="100%", overflow="hidden"),
-        padding_bottom="1.25em",
+        padding_bottom="1em",
         width="100%",
         overflow="hidden",
     )
+
 
 def index() -> rx.Component:
     return rx.center(

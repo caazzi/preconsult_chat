@@ -81,7 +81,9 @@ translations = {
         "copy_success": "Copied to clipboard!",
         "start_new": "Start New Session",
         
-        "step_names": ["Welcome", "Patient Intake", "Chief Complaint", "Medical History", "Lifestyle & Family", "Clinical Assessment", "Summary"],
+        "step_names": ["Patient Intake", "Chief Complaint", "Medical History", "Lifestyle & Family", "Clinical Assessment"],
+        "step_indicator": "Step",
+        "of_indicator": "of",
         
         "err_gender": "Please select a biological sex.",
         "err_chief_complaint": "Please enter a chief complaint.",
@@ -201,7 +203,9 @@ translations = {
         "copy_success": "Copiado!",
         "start_new": "Iniciar Nova Sessão",
 
-        "step_names": ["Boas-Vindas", "Triagem", "Queixa Principal", "Histórico Médico", "Estilo de Vida", "Avaliação Clínica", "Resumo"],
+        "step_names": ["Triagem", "Queixa Principal", "Histórico Médico", "Estilo de Vida", "Avaliação Clínica"],
+        "step_indicator": "Passo",
+        "of_indicator": "de",
 
         "err_gender": "Por favor, selecione um sexo biológico.",
         "err_chief_complaint": "Por favor, insira uma queixa principal.",

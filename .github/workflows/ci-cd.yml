@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
+    inputs:
+      deploy_profile:
+        description: 'Deployment Profile (high_performance = 2 CPU/2GB/min=2/no-throttle, standard = 1 CPU/1GB/min=1)'
+        required: true
+        default: 'high_performance'
+        type: choice
+        options:
+          - high_performance
+          - standard
 
 env:
   PROJECT_ID: securemed-chat-494521
@@ -14,6 +23,7 @@ env:
   AR_REPO: securemed-repo
   WIF_PROVIDER: projects/811607528687/locations/global/workloadIdentityPools/github-pool/providers/github-provider
   SERVICE_ACCOUNT: github-deploy-sa@securemed-chat-494521.iam.gserviceaccount.com
+  DEPLOY_PROFILE: ${{ inputs.deploy_profile || 'high_performance' }}
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -107,6 +117,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Set Deployment Flags for Profile
+        id: profile
+        run: |
+          PROFILE="${{ env.DEPLOY_PROFILE }}"
+          echo "🚀 Selected Deployment Profile: $PROFILE"
+          if [ "$PROFILE" = "high_performance" ]; then
+            echo "flags=--allow-unauthenticated --max-instances=10 --min-instances=2 --concurrency=40 --cpu=2 --memory=2Gi --no-cpu-throttling" >> "$GITHUB_OUTPUT"
+          else
+            echo "flags=--allow-unauthenticated --max-instances=5 --min-instances=1 --concurrency=80 --cpu=1 --memory=1Gi" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v3
         with:
@@ -121,13 +142,7 @@ jobs:
           secrets: |
             REDIS_URL=REDIS_URL:latest
             PRECONSULT_API_KEY=SECUREMED_API_KEY:latest
-          flags: |
-            --allow-unauthenticated
-            --max-instances=5
-            --min-instances=1
-            --concurrency=80
-            --cpu=1
-            --memory=1Gi
+          flags: ${{ steps.profile.outputs.flags }}
 
   smoke-test:
     name: Smoke Test Deployed Endpoint

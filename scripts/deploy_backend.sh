@@ -7,7 +7,8 @@ REGION=${GOOGLE_CLOUD_REGION:-"us-central1"}
 SERVICE_NAME=${SERVICE_NAME:-"preconsult"}
 # ------------------------------------
 
-echo "🚀 Starting Zero-Cost Backend Deployment for PreConsult..."
+PROFILE=${1:-${DEPLOY_PROFILE:-"high_performance"}}
+echo "🚀 Starting Backend Deployment for PreConsult (Profile: $PROFILE)..."
 
 # Check if logged in
 if ! gcloud auth list --format="value(account)" | grep -q "@"; then
@@ -18,25 +19,24 @@ fi
 # Set the active project
 gcloud config set project $PROJECT_ID
 
-# Deploy the API to Cloud Run
-# --source . : Builds and pushes the container automatically
-# --min-instances 0 : Essential for zero cost
-# --no-cpu-throttling : Optional but recommended for better latency
-# Require the API key to be set in the environment before deploying
 if [ -z "$PRECONSULT_API_KEY" ]; then
     echo "❌ Error: PRECONSULT_API_KEY environment variable is not set."
     echo "   Set it before running this script: export PRECONSULT_API_KEY=<your-secret-key>"
     exit 1
 fi
 
-echo "🐳 Building and deploying container to Cloud Run..."
+if [ "$PROFILE" = "high_performance" ]; then
+    PROFILE_FLAGS="--min-instances 2 --max-instances 10 --concurrency 40 --cpu 2 --memory 2Gi --no-cpu-throttling"
+else
+    PROFILE_FLAGS="--min-instances 1 --max-instances 5 --concurrency 80 --cpu 1 --memory 1Gi"
+fi
+
+echo "🐳 Building and deploying container to Cloud Run ($PROFILE)..."
 gcloud run deploy $SERVICE_NAME \
     --source . \
     --platform managed \
     --region $REGION \
-    --min-instances 0 \
-    --max-instances 5 \
-    --concurrency 80 \
+    $PROFILE_FLAGS \
     --timeout 300s \
     --use-http2 \
     --allow-unauthenticated \

@@ -65,7 +65,7 @@ No health data is ever written to disk. Every design decision flows from this co
 | PDF | ReportLab 5.0.0 (in-memory, deterministic, localized EN/PT) |
 | UI/UX | Glassmorphism, mobile-first, 48px touch targets, prefers-reduced-motion, EN/PT i18n |
 | Monitoring | Sentry SDK (2.65.0) + `GET /health` endpoint |
-| Deployment | GCP Cloud Run (1.0 CPU, 1Gi RAM, 0-5 instances) |
+| Deployment | GCP Cloud Run, us-central1 (two profiles: `high_performance` / `standard`, selectable via CI/CD) |
 | CI/CD | GitHub Actions (tests + WIF auth + Cloud Run deploy) |
 
 ---
@@ -153,16 +153,17 @@ The app deploys as a single consolidated container via GitHub Actions CI/CD.
 gcloud run deploy preconsult \
   --source . \
   --project=securemed-chat-494521 \
-  --region=southamerica-east1 \
-  --memory=1Gi --cpu=1 \
-  --min-instances=0 --max-instances=5 \
-  --concurrency=80 \
-  --set-secrets=PRECONSULT_API_KEY=PRECONSULT_API_KEY:latest,REDIS_URL=REDIS_URL:latest
+  --region=us-central1 \
+  --memory=2Gi --cpu=2 \
+  --min-instances=2 --max-instances=10 \
+  --no-cpu-throttling \
+  --concurrency=40 \
+  --set-secrets=PRECONSULT_API_KEY=SECUREMED_API_KEY:latest,REDIS_URL=REDIS_URL:latest
 ```
 
-### Custom Domain (Cloudflare)
+### Custom Domain (Cloudflare DNS → Cloud Run Domain Mapping)
 
-The app is served at **pre-consult.org** via Cloudflare Worker proxying to Cloud Run with `Host` header rewriting.
+The app is served at **pre-consult.org** via Cloud Run domain mapping. Cloudflare is used as a DNS-only provider (proxy disabled) — DNS A records point to Google's IPs (`216.239.{32,34,36,38}.21`), and Google handles SSL termination.
 
 ---
 

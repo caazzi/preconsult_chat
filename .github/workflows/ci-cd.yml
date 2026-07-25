@@ -123,9 +123,9 @@ jobs:
           PROFILE="${{ env.DEPLOY_PROFILE }}"
           echo "🚀 Selected Deployment Profile: $PROFILE"
           if [ "$PROFILE" = "high_performance" ]; then
-            echo "flags=--allow-unauthenticated --max-instances=10 --min-instances=2 --concurrency=40 --cpu=2 --memory=2Gi --no-cpu-throttling" >> "$GITHUB_OUTPUT"
+            echo "flags=--allow-unauthenticated --session-affinity --max-instances=10 --min-instances=2 --concurrency=40 --cpu=2 --memory=2Gi --no-cpu-throttling" >> "$GITHUB_OUTPUT"
           else
-            echo "flags=--allow-unauthenticated --max-instances=5 --min-instances=1 --concurrency=80 --cpu=1 --memory=1Gi" >> "$GITHUB_OUTPUT"
+            echo "flags=--allow-unauthenticated --session-affinity --max-instances=5 --min-instances=1 --concurrency=80 --cpu=1 --memory=1Gi" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy to Cloud Run

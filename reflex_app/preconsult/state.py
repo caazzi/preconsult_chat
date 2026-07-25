@@ -17,6 +17,21 @@ def _api_url(path: str) -> str:
         return f"{base}/api{path}"
     return f"/api{path}"
 
+
+def _get_router_params(router) -> dict:
+    if not router:
+        return {}
+    url_params = getattr(getattr(router, "url", None), "query_parameters", None)
+    if url_params:
+        return dict(url_params)
+    if hasattr(router, "_page"):
+        return getattr(router._page, "params", {})
+    try:
+        return getattr(router.page, "params", {})
+    except Exception:
+        return {}
+
+
 class State(rx.State):
     """The app state."""
 
@@ -174,7 +189,7 @@ class State(rx.State):
 
     def detect_lang(self):
         try:
-            query_params = self.router.page.params
+            query_params = _get_router_params(self.router)
             self.gad_source = query_params.get("gad_source", "")
             self.gad_campaignid = query_params.get("gad_campaignid", "")
             self.gclid = query_params.get("gclid", "")
@@ -588,7 +603,7 @@ class AdminState(rx.State):
     analytics_data: List[Dict[str, Any]] = []
     
     async def load_analytics(self):
-        query_params = self.router.page.params
+        query_params = _get_router_params(self.router)
         token_val = query_params.get("token", "")
         
         expected_token = os.environ.get("ADMIN_DASHBOARD_TOKEN")

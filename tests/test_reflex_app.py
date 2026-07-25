@@ -190,6 +190,40 @@ def test_mobile_ui_layout_responsiveness():
     assert interview is not None
 
 
+def test_rxconfig_redis_url(monkeypatch):
+    import os
+    import reflex_app.rxconfig as rxconfig
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    assert rxconfig.config.redis_url == os.environ.get("REDIS_URL")
+
+
+def test_get_router_params_helper():
+    from reflex_app.preconsult.state import _get_router_params
+    
+    # Test None
+    assert _get_router_params(None) == {}
+
+    # Test Router with url query_parameters
+    class MockURL:
+        query_parameters = {"lang": "pt", "gad_source": "test"}
+
+    class MockRouterWithURL:
+        url = MockURL()
+
+    assert _get_router_params(MockRouterWithURL()) == {"lang": "pt", "gad_source": "test"}
+
+    # Test Router with _page params
+    class MockPage:
+        params = {"token": "secret123"}
+
+    class MockRouterWithPage:
+        url = None
+        _page = MockPage()
+
+    assert _get_router_params(MockRouterWithPage()) == {"token": "secret123"}
+
+
+
 
 
 

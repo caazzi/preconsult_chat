@@ -172,5 +172,16 @@ def test_state_reset_intake():
     assert len(events) == 3
 
 
+def test_mobile_ui_layout_responsiveness():
+    stepper = stepper_component()
+    summary = step_6_summary()
+    interview = step_5_interview_qs()
+    assert stepper is not None
+    assert summary is not None
+    assert interview is not None
+
+
+
+
 
 

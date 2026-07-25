@@ -423,7 +423,7 @@ def step_5_interview_qs() -> rx.Component:
                 rx.vstack(rx.foreach(State.questions, lambda q, i: question_item(q, i)), width="100%"),
                 question_skeleton()
             ),
-            width="100%", max_height={"sm": "320px"},
+            width="100%", max_height={"initial": "340px", "sm": "380px"},
             overflow_y="auto", padding_right="0.5em",
         ),
         rx.dialog.root(
@@ -492,7 +492,7 @@ def step_6_summary() -> rx.Component:
                     width="100%", min_height="48px",
                     _hover={"transform": "scale(1.02)"}, transition="all 0.2s ease"
                 ),
-                columns="2", spacing="3", width="100%",
+                columns={"initial": "1", "sm": "2"}, spacing="3", width="100%",
             ),
             width="100%", spacing="3", animation="fadeInUp 0.4s ease-out 0.1s both"
         ),
@@ -706,11 +706,20 @@ def stepper_component() -> rx.Component:
             rx.cond(
                 State.step_names.length() > State.step,
                 rx.box(
-                    rx.text(State.step_names[State.step], color="#00f2fe", size="2", weight="bold"),
+                    rx.text(
+                        State.step_names[State.step],
+                        color="#00f2fe",
+                        size="2",
+                        weight="bold",
+                        white_space="nowrap",
+                        overflow="hidden",
+                        text_overflow="ellipsis",
+                    ),
                     padding="2px 10px",
                     background="rgba(0, 242, 254, 0.1)",
                     border="1px solid rgba(0, 242, 254, 0.25)",
                     border_radius="999px",
+                    max_width={"initial": "140px", "xs": "180px", "sm": "240px"},
                 ),
                 rx.text("")
             ),
@@ -737,10 +746,11 @@ def stepper_component() -> rx.Component:
     )
 
     return rx.box(
-        rx.box(mobile_progress, display={"initial": "block", "md": "none"}),
-        rx.box(desktop_stepper, display={"initial": "none", "md": "block"}),
+        rx.box(mobile_progress, display={"initial": "block", "md": "none"}, width="100%", overflow="hidden"),
+        rx.box(desktop_stepper, display={"initial": "none", "md": "flex"}, width="100%", overflow="hidden"),
         padding_bottom="1.25em",
         width="100%",
+        overflow="hidden",
     )
 
 def index() -> rx.Component:
@@ -784,6 +794,7 @@ def index() -> rx.Component:
                     ),
                     max_width={"initial": "95%", "sm": "90%", "md": "720px"},
                     width="100%",
+                    overflow_x="hidden",
                     padding_top={"initial": "0.5em", "sm": "1.5em"},
                     padding_bottom={"initial": "0.5em", "sm": "1.5em"}
                 ),

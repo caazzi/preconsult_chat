@@ -74,7 +74,7 @@ No health data is ever written to disk. Every design decision flows from this co
 
 Early versions evaluated ChromaDB and VM-based RAG pipelines. We replaced them with specialized clinical prompt engineering using established frameworks (OPQRST for symptom assessment, SAMPLE for medical history).
 
-Foundation models already contain the necessary medical knowledge. Structured prompting yields cleaner, faster results at a fraction of the infrastructure cost — eliminating unnecessary database overhead and cloud spend.
+Foundation models already contain the necessary medical knowledge. Using a 2026 structured XML prompting architecture (`<role>`, `<clinical_framework>`, `<safety_guardrails>`, `<output_format>`, `<language_setting>`), the system explicitly anchors LLM reasoning to OPQRST/SAMPLE methodologies, adapts intake focus to the requested medical specialty (`{specialist}`), enforces strict non-physician bounds, and triggers emergency red-flag protocols — yielding cleaner, faster, and safer results at a fraction of the infrastructure cost.
 
 ---
 
@@ -117,8 +117,8 @@ uv sync --extra test
 uv run python -m pytest tests/ -v
 ```
 
-The test suite contains **104 passing tests** covering:
-- **Agent Service**: LLM chains, multi-language prompt formatting, emergency condition detection.
+The test suite contains **108 passing tests** covering:
+- **Agent Service**: XML prompt structure, OPQRST & SAMPLE clinical frameworks, multi-language prompt formatting, emergency condition detection.
 - **API Integration**: Session initialization, SSE question streaming, PDF generation, daily quotas & analytics endpoints.
 - **PDF Generation**: Localized ReportLab layouts, pagination, wrapped text, empty/missing field resilience.
 - **Rate Limiting & Quotas**: Redis-backed limits, fallback memory counters, concurrent creation locks.

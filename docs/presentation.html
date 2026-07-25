@@ -67,14 +67,14 @@
             left: 0;
             width: 100%;
             height: 100%;
-            padding: 28px 48px 28px 48px;
+            padding: 24px 44px;
             opacity: 0;
             visibility: hidden;
             transform: scale(0.96) translateY(10px);
             transition: opacity 0.4s ease, transform 0.4s ease, visibility 0.4s;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
+            justify-content: flex-start;
             overflow: hidden;
         }
 
@@ -89,9 +89,9 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             border-bottom: 1px solid var(--border-color);
-            padding-bottom: 14px;
+            padding-bottom: 12px;
             flex-shrink: 0;
         }
 
@@ -123,7 +123,7 @@
         .slide-body {
             flex: 1;
             display: flex;
-            gap: 24px;
+            gap: 20px;
             align-items: stretch;
             min-height: 0;
         }
@@ -134,19 +134,23 @@
             flex-direction: column;
             gap: 16px;
             min-height: 0;
+            min-width: 0;
         }
 
-        .col-2 { flex: 2; }
-        .col-3 { flex: 3; }
+        .col-2 { flex: 2; display: flex; flex-direction: column; gap: 16px; min-height: 0; min-width: 0; }
+        .col-3 { flex: 3; display: flex; flex-direction: column; gap: 16px; min-height: 0; min-width: 0; }
 
         /* Card Component */
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: 16px;
-            padding: 24px;
+            padding: 22px 26px;
             box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
             transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
         }
 
         .card:hover {
@@ -161,9 +165,9 @@
         .card-purple { border-left: 5px solid var(--accent-purple); }
 
         .card-title {
-            font-size: clamp(1.4rem, 2.8vh, 1.8rem);
+            font-size: clamp(1.35rem, 2.7vh, 1.75rem);
             font-weight: 700;
-            margin-bottom: 14px;
+            margin-bottom: 12px;
             color: var(--primary);
             display: flex;
             align-items: center;
@@ -171,13 +175,47 @@
         }
 
         .card p, .card li {
-            font-size: clamp(1.15rem, 2.2vh, 1.35rem);
+            font-size: clamp(1.18rem, 2.3vh, 1.4rem);
             color: var(--text-muted);
-            line-height: 1.6;
+            line-height: 1.55;
         }
 
         .card strong {
             color: var(--text-main);
+        }
+
+        /* Grid Cards Layout Helpers */
+        .grid-2x2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            flex: 1;
+        }
+
+        .grid-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .grid-card-title {
+            font-size: clamp(1.2rem, 2.4vh, 1.45rem);
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .grid-card p {
+            font-size: clamp(1.05rem, 2.1vh, 1.25rem);
+            color: var(--text-muted);
+            line-height: 1.5;
         }
 
         ul.feature-list {
@@ -190,8 +228,8 @@
         ul.feature-list li {
             position: relative;
             padding-left: 32px;
-            font-size: clamp(1.15rem, 2.2vh, 1.35rem);
-            line-height: 1.6;
+            font-size: clamp(1.18rem, 2.3vh, 1.4rem);
+            line-height: 1.55;
         }
 
         ul.feature-list li::before {
@@ -201,8 +239,7 @@
             font-size: 1.4rem;
             position: absolute;
             left: 0;
-            top: 0;
-            font-size: 1.15rem;
+            top: -2px;
         }
 
         /* Large Feature Highlight Block */
@@ -238,17 +275,18 @@
             display: flex;
             flex-direction: column;
             height: 100%;
+            min-width: 0;
         }
 
         .code-header {
             background-color: rgba(255, 255, 255, 0.04);
-            padding: 9px 16px;
+            padding: 10px 18px;
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
             justify-content: space-between;
             color: var(--text-muted);
-            font-size: 0.82rem;
+            font-size: 0.95rem;
             flex-shrink: 0;
         }
 
@@ -270,8 +308,8 @@
             background: transparent;
             border: 1px solid var(--border-color);
             color: var(--text-muted);
-            font-size: 0.78rem;
-            padding: 3px 10px;
+            font-size: 0.85rem;
+            padding: 4px 12px;
             border-radius: 5px;
             cursor: pointer;
             transition: background 0.2s, color 0.2s;
@@ -283,14 +321,29 @@
             border-color: var(--primary);
         }
 
+        pre {
+            min-width: 0;
+            margin: 0;
+        }
+
         pre code {
             display: block;
-            padding: 16px 18px;
+            padding: 18px 22px;
             overflow-x: auto;
             color: #F1F5F9;
             line-height: 1.5;
             white-space: pre;
-            font-size: clamp(0.95rem, 1.9vh, 1.12rem);
+            font-size: clamp(1.2rem, 2.5vh, 1.55rem);
+            font-weight: 500;
+        }
+
+        p code, li code {
+            background: rgba(14, 165, 233, 0.12);
+            color: var(--primary);
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 1.05em;
+            font-weight: 500;
         }
 
         /* Code Highlight Colors */
@@ -304,42 +357,74 @@
         .stepper-flow {
             display: grid;
             grid-template-columns: repeat(6, 1fr);
-            gap: 12px;
+            gap: 16px;
             width: 100%;
-            margin-top: 12px;
+            margin: 24px 0;
+            flex: 1;
+            align-content: center;
         }
 
         .step-box {
             background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 14px 10px;
+            border: 1.5px solid var(--border-color);
+            border-radius: 14px;
+            padding: 26px 14px;
             text-align: center;
             position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .step-box:hover {
+            transform: translateY(-3px);
+            border-color: var(--primary);
+            box-shadow: 0 8px 25px rgba(14, 165, 233, 0.25);
         }
 
         .step-box.highlight {
             border-color: var(--primary);
-            background: rgba(14, 165, 233, 0.08);
+            background: rgba(14, 165, 233, 0.12);
+        }
+
+        .step-box:not(:last-child)::after {
+            content: "";
+            position: absolute;
+            right: -16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%230EA5E9' stroke-width='3'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M8.25 4.5l7.5 7.5-7.5 7.5' /%3E%3C/svg%3E");
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: 0.9;
+            z-index: 5;
+            filter: drop-shadow(0 0 6px rgba(14, 165, 233, 0.8));
+            pointer-events: none;
         }
 
         .step-number {
-            font-size: 0.9rem;
+            font-size: 1.2rem;
             font-weight: 700;
             color: var(--primary);
             text-transform: lowercase;
+            font-family: var(--font-mono);
         }
 
         .step-title {
-            font-size: 1.3rem;
-            font-weight: 700;
-            margin: 6px 0;
+            font-size: clamp(1.6rem, 3.0vh, 2.0rem);
+            font-weight: 800;
+            margin: 10px 0 6px 0;
             color: var(--text-main);
         }
 
         .step-desc {
-            font-size: 0.88rem;
+            font-size: clamp(1.2rem, 2.4vh, 1.45rem);
             color: var(--text-muted);
+            line-height: 1.4;
         }
 
         /* Metric Grid */
@@ -537,7 +622,7 @@
         .arch-diagram {
             width: 100%;
             height: auto;
-            max-height: 350px;
+            max-height: 440px;
             object-fit: contain;
         }
 
@@ -563,20 +648,28 @@
                 font-size: 1.2rem;
             }
             pre code {
-                font-size: 0.8rem;
-                padding: 10px 12px;
+                font-size: clamp(1.05rem, 2.2vh, 1.3rem);
+                padding: 14px 16px;
             }
             .stepper-flow {
-                gap: 8px;
+                gap: 12px;
             }
             .step-box {
-                padding: 8px 6px;
+                padding: 14px 10px;
+            }
+            .step-box:not(:last-child)::after {
+                right: -13px;
+                width: 13px;
+                height: 13px;
+            }
+            .step-number {
+                font-size: 1.1rem;
             }
             .step-title {
-                font-size: 0.82rem;
+                font-size: 1.35rem;
             }
             .step-desc {
-                font-size: 0.7rem;
+                font-size: 1.1rem;
             }
         }
 
@@ -595,6 +688,9 @@
             .stepper-flow {
                 grid-template-columns: repeat(3, 1fr);
             }
+            .step-box:nth-child(3n)::after {
+                display: none;
+            }
         }
     </style>
 </head>
@@ -610,7 +706,7 @@
         <div class="slide active" data-notes="[5 min] apresentação da palestra por Claudio Azzi. boas-vindas à Python Sudeste 2026! explicar que vamos contar a história real de construção, arquitetura e operação de um assistente de saúde privacy-first feito 100% em Python.">
             <div class="cover-slide">
                 <div class="cover-badge">
-                    <span>🐍 Python Sudeste 2026 • 26/07/26</span>
+                    <span>Python Sudeste 2026 • 26/07/26</span>
                 </div>
                 <h1 class="cover-title">um assistente de saúde privacy-first</h1>
                 
@@ -632,7 +728,7 @@
         <!-- ==========================================
              SLIDE 2: O INCÔMODO PRÉ-CONSULTA
              ========================================== -->
-        <div class="slide" data-notes="[5 min] BLOCO 1A: o incômodo motivador. quantas vezes você foi ao médico e esqueceu o dia exato que a dor começou, ou o nome do remédio em uso? em consultas de 15 minutos, a ansiedade atrapalha a comunicação. o paciente sai sem contar detalhes cruciais.">
+        <div class="slide" data-notes="[5 min] BLOCO 1A: o incômodo motivador. Em consultas ambulatoriais curtas (média de 15 min segundo revisão sistemática de Irving et al., BMJ Open 2017), a falta de preparação prévia faz com que 89% dos pacientes deixem de relatar queixas e sintomas cruciais ao médico (estudo de Barry et al., BMJ 2000).">
             <div class="slide-header">
                 <div>
                     <div class="slide-tag">bloco 1 • motivação</div>
@@ -640,24 +736,54 @@
                 </div>
             </div>
             <div class="slide-body">
-                <div class="col">
-                    <div class="card card-rose" style="height: 100%;">
-                        <div class="card-title">a experiência do paciente no consultório</div>
-                        <p style="margin-top: 12px;">você marca uma consulta médica esperada há semanas. ao sentar na frente do médico:</p>
-                        <ul class="feature-list" style="margin-top: 18px;">
-                            <li><strong>ansiedade e bloqueio:</strong> difícil lembrar o histórico completo sob pressão.</li>
-                            <li><strong>linha do tempo confusa:</strong> "começou faz 3 semanas ou 2 meses?"</li>
-                            <li><strong>nomes e doses:</strong> esquecimento de medicações em uso e dosagens exatas.</li>
-                            <li><strong>consultas curtas (15-20 min):</strong> o médico tem pouco tempo para extrair tudo.</li>
-                        </ul>
+                <div class="col-2">
+                    <div class="card card-rose" style="flex: 1;">
+                        <div class="card-title">a dor do paciente no consultório</div>
+                        <p style="margin-bottom: 14px;">ao sentar na frente do médico após semanas de espera, 4 fatores prejudicam a consulta:</p>
+                        <div class="grid-2x2">
+                            <div class="grid-card">
+                                <div class="grid-card-title">ansiedade & bloqueio</div>
+                                <p>pressão do momento faz esquecer detalhes importantes do histórico e sintomas.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">linha do tempo confusa</div>
+                                <p>dificuldade de precisar quando o problema começou ("3 semanas ou 2 meses?").</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">nomes e dosagens</div>
+                                <p>esquecimento de medicações em uso contínuo, doses exatas e alergias prévias.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">consultas curtas</div>
+                                <p>em 15 a 20 minutos, o médico tem pouco tempo para extrair todo o relato clínico.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="col">
-                    <div class="card card-amber" style="height: 100%;">
-                        <div class="card-title">a necessidade de preparação</div>
-                        <p style="margin-top: 12px;">e se o paciente pudesse <strong>organizar a própria anamnese</strong> minutos antes da consulta, chegando com um resumo estruturado e profissional em mãos?</p>
-                        <div style="margin-top: 24px; background: rgba(245, 158, 11, 0.1); border: 1px solid var(--accent-amber); padding: 18px; border-radius: 12px;">
-                            <strong style="color: var(--accent-amber); font-size: 1.3rem;">o objetivo:</strong> transformar relatos desorganizados de sintomas em um documento clínico claro para acelerar e qualificar o atendimento médico.
+                    <div class="card card-amber" style="flex: 1; justify-content: space-between;">
+                        <div>
+                            <div class="card-title">a necessidade de preparação</div>
+                            <p style="margin-top: 10px;">e se o paciente pudesse <strong>organizar a própria anamnese</strong> minutos antes da consulta, chegando com um resumo estruturado e profissional em mãos?</p>
+                        </div>
+
+                        <div style="background: rgba(245, 158, 11, 0.12); border: 1.5px solid var(--accent-amber); padding: 20px; border-radius: 14px; margin: 16px 0;">
+                            <strong style="color: var(--accent-amber); font-size: 1.35rem; display: block; margin-bottom: 6px;">o objetivo do projeto:</strong>
+                            <p style="font-size: 1.15rem; color: var(--text-main); line-height: 1.5;">transformar relatos desorganizados em um documento clínico de alta qualidade para acelerar e otimizar o atendimento médico.</p>
+                        </div>
+
+                        <div>
+                            <div style="display: flex; gap: 12px;">
+                                <div style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); padding: 12px; border-radius: 10px; text-align: center;">
+                                    <div style="font-family: var(--font-mono); font-size: 1.6rem; font-weight: 700; color: var(--accent-rose);">15 min</div>
+                                    <div style="font-size: 0.85rem; color: var(--text-muted);">tempo médio de consulta</div>
+                                </div>
+                                <div style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); padding: 12px; border-radius: 10px; text-align: center;">
+                                    <div style="font-family: var(--font-mono); font-size: 1.6rem; font-weight: 700; color: var(--accent-amber);">89%</div>
+                                    <div style="font-size: 0.85rem; color: var(--text-muted);">queixas omitidas sem roteiro</div>
+                                </div>
+                            </div>
+                            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px; text-align: right;">*Fontes: Irving et al. (BMJ Open, 2017) & Barry et al. (BMJ, 2000)</div>
                         </div>
                     </div>
                 </div>
@@ -676,22 +802,41 @@
             </div>
             <div class="slide-body">
                 <div class="col">
-                    <div class="card card-rose" style="height: 100%;">
+                    <div class="card card-rose" style="flex: 1;">
                         <div class="card-title">o peso da regulamentação (LGPD / HIPAA)</div>
-                        <p style="margin-top: 10px;">dados de saúde são classificados como <strong>dados pessoais sensíveis</strong> no artigo 5º da LGPD.</p>
-                        <ul class="feature-list" style="margin-top: 16px;">
-                            <li><strong>risco de vazamento:</strong> um banco de dados de saúde vazado causa danos irreversíveis aos usuários.</li>
-                            <li><strong>responsabilidade civil:</strong> multas pesadas da ANPD e processos individuais.</li>
-                            <li><strong>complexidade de compliance:</strong> direito ao esquecimento, logs de auditoria, criptografia de banco.</li>
-                        </ul>
+                        <p style="margin-bottom: 14px;">dados de saúde são <strong>dados pessoais sensíveis</strong> (art. 5º LGPD). Guardá-los atrai enormes riscos:</p>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 12px; flex: 1;">
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-rose);">
+                                <div class="grid-card-title" style="color: var(--accent-rose);">risco de vazamento</div>
+                                <p>um banco de dados de saúde vazado causa danos morais e materiais irreversíveis aos usuários.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-rose);">
+                                <div class="grid-card-title" style="color: var(--accent-rose);">responsabilidade civil & multas</div>
+                                <p>sanções pesadas da ANPD (até R$ 50 mi por infração) e judicialização individual.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-rose);">
+                                <div class="grid-card-title" style="color: var(--accent-rose);">custo brutal de compliance</div>
+                                <p>necessidade de direito ao esquecimento, logs de auditoria, criptografia em repouso e suporte 24/7.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="col">
-                    <div class="card card-purple" style="height: 100%;">
-                        <div class="card-title">onde a maioria dos projetos trava</div>
-                        <p style="margin-top: 10px;">criadores desistem de lançar serviços de saúde por receio da infraestrutura de banco de dados e custódia de prontuários.</p>
-                        <div style="margin-top: 24px; background: rgba(139, 92, 246, 0.1); border: 1px solid var(--accent-purple); padding: 18px; border-radius: 12px;">
-                            <strong style="color: var(--accent-purple); font-size: 1.3rem;">pergunta provocativa:</strong> é possível criar um assistente inteligente de anamnese sem guardar NENHUM dado de saúde do usuário?
+                    <div class="card card-purple" style="flex: 1; justify-content: space-between;">
+                        <div>
+                            <div class="card-title">onde a maioria dos projetos trava</div>
+                            <p style="margin-top: 10px;">criadores e startups desistem de serviços de saúde por receio da infraestrutura de banco de dados e custódia de prontuários.</p>
+                        </div>
+
+                        <div style="background: rgba(139, 92, 246, 0.14); border: 1.5px solid var(--accent-purple); padding: 22px; border-radius: 14px; margin: 16px 0;">
+                            <strong style="color: var(--accent-purple); font-size: 1.35rem; display: block; margin-bottom: 8px;">pergunta provocativa:</strong>
+                            <p style="font-size: 1.25rem; color: #FFFFFF; font-weight: 600; line-height: 1.4;">é possível criar um assistente inteligente de anamnese sem guardar NENHUM dado de saúde do usuário em disco?</p>
+                        </div>
+
+                        <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-color); padding: 14px 18px; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;">
+                            <span style="font-size: 1.05rem; color: var(--text-muted);">solução tradicional: <strong>banco de dados & contas</strong></span>
+                            <span style="font-family: var(--font-mono); color: var(--accent-rose); font-weight: 700;">alto risco</span>
                         </div>
                     </div>
                 </div>
@@ -710,30 +855,40 @@
             </div>
             <div class="slide-body">
                 <div class="col-2">
-                    <div class="big-highlight">
-                        <h3>💡 "a melhor forma de proteger dados médicos em uma aplicação de saúde é NUNCA salvá-los em disco."</h3>
-                        <p style="margin-top: 14px;">arquitetamos o sistema desde o primeiro dia para operar como um pipeline efêmero de transformação de memória.</p>
+                    <div class="big-highlight" style="padding: 24px;">
+                        <h3 style="font-size: clamp(1.6rem, 3.2vh, 2.1rem);">"a melhor forma de proteger dados médicos em uma aplicação de saúde é NUNCA salvá-los em disco."</h3>
+                        <p style="margin-top: 10px;">arquitetamos o sistema desde o primeiro dia para operar como um pipeline efêmero de transformação de memória.</p>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 16px;">
-                        <div class="card card-green">
-                            <div class="card-title">zero database</div>
-                            <p>sem PostgreSQL, MySQL, SQLite ou MongoDB. nenhuma tabela médica existe.</p>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 4px; flex: 1;">
+                        <div class="card card-green" style="justify-content: center;">
+                            <div class="card-title" style="font-size: 1.4rem;">zero database</div>
+                            <p>sem PostgreSQL, MySQL, SQLite ou MongoDB. nenhuma tabela médica existe no servidor.</p>
                         </div>
-                        <div class="card card-green">
-                            <div class="card-title">zero logins</div>
-                            <p>sem contas de usuário, senhas ou armazenamento de perfis pessoais.</p>
+                        <div class="card card-green" style="justify-content: center;">
+                            <div class="card-title" style="font-size: 1.4rem;">zero logins</div>
+                            <p>sem contas de usuário, senhas, tokens persistentes ou armazenamento de perfis.</p>
                         </div>
                     </div>
                 </div>
                 <div class="col">
-                    <div class="card card-accent" style="height: 100%;">
+                    <div class="card card-accent" style="flex: 1; justify-content: space-between;">
                         <div class="card-title">como funciona na prática?</div>
-                        <ul class="feature-list" style="margin-top: 12px;">
-                            <li><strong>memória temporária (Redis TTL):</strong> estado mantido por no máximo 30 minutos enquanto o usuário preenche o wizard.</li>
-                            <li><strong>relatório gerado em RAM:</strong> o PDF é montado na memória RAM do servidor (`io.BytesIO`).</li>
-                            <li><strong>auto-destruição:</strong> ao baixar o PDF ou fechar a aba, a sessão é apagada sem deixar rastros.</li>
-                        </ul>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 14px; flex: 1; margin-top: 10px;">
+                            <div class="grid-card" style="border-left: 4px solid var(--primary);">
+                                <div class="grid-card-title" style="color: var(--primary);">1. memória temporária (Redis TTL)</div>
+                                <p>estado mantido por no máximo 30 minutos em RAM enquanto o usuário preenche a anamnese.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-green);">
+                                <div class="grid-card-title" style="color: var(--accent-green);">2. relatório gerado em RAM</div>
+                                <p>o PDF é montado na memória RAM do servidor (`io.BytesIO`) e transmitido como stream.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-amber);">
+                                <div class="grid-card-title" style="color: var(--accent-amber);">3. auto-destruição automática</div>
+                                <p>ao baixar o PDF ou fechar a aba, a sessão é completamente descartada sem deixar rastros.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -745,32 +900,51 @@
         <div class="slide" data-notes="[5 min] BLOCO 2A: convidar a plateia a testar o projeto no celular! acessar pre-consult.org ou escanear o QR code. pedir para sentirem como o fluxo é fluido e rápido.">
             <div class="slide-header">
                 <div>
-                    <div class="slide-tag">bloco 2 • live demo (5 min)</div>
+                    <div class="slide-tag">bloco 2 • live demo</div>
                     <h2 class="slide-title">experimente ao vivo: pre-consult.org</h2>
                 </div>
             </div>
             <div class="slide-body">
-                <div class="col" style="align-items: center; justify-content: center;">
-                    <div class="card card-accent" style="text-align: center; padding: 26px; width: 100%;">
-                        <div class="card-title" style="justify-content: center; font-size: 1.6rem;">abra no navegador do celular</div>
+                <div class="col" style="align-items: center;">
+                    <div class="card card-accent" style="text-align: center; padding: 22px; width: 100%; flex: 1; justify-content: space-between; align-items: center;">
+                        <div class="card-title" style="justify-content: center; font-size: 1.5rem; margin-bottom: 4px;">abra no navegador do celular</div>
                         
-                        <div style="background: white; padding: 18px; border-radius: 16px; display: inline-block; margin: 18px 0;">
-                            <svg width="240" height="240" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h33v33H0z"/><path stroke="#0B0F17" d="M4 4.5h7m2 0h2m2 0h1m2 0h1m1 0h7M4 5.5h1m5 0h1m3 0h1m3 0h3m1 0h1m5 0h1M4 6.5h1m1 0h3m1 0h1m1 0h1m2 0h2m2 0h2m1 0h1m1 0h3m1 0h1M4 7.5h1m1 0h3m1 0h1m1 0h1m2 0h6m1 0h1m1 0h3m1 0h1M4 8.5h1m1 0h3m1 0h1m1 0h3m3 0h1m1 0h1m1 0h1m1 0h3m1 0h1M4 9.5h1m5 0h1m1 0h2m2 0h1m1 0h3m1 0h1m5 0h1M4 10.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M12 11.5h5M4 12.5h1m1 0h5m4 0h3m1 0h2m1 0h5M5 13.5h1m2 0h1m3 0h1m2 0h3m2 0h2m1 0h1m3 0h1M6 14.5h1m3 0h1m1 0h8m2 0h1m2 0h1m1 0h2M5 15.5h5m3 0h3m4 0h1m7 0h1M5 16.5h1m2 0h3m1 0h1m2 0h4m2 0h4m1 0h3M4 17.5h1m1 0h1m1 0h2m2 0h2m3 0h1m2 0h1m2 0h1m1 0h1m1 0h1M4 18.5h1m1 0h2m2 0h1m1 0h1m1 0h12m1 0h2M4 19.5h1m1 0h1m1 0h2m4 0h2m2 0h1m1 0h5m3 0h1M4 20.5h1m1 0h1m3 0h4m1 0h1m1 0h2m1 0h5m1 0h1M12 21.5h3m1 0h1m1 0h3m3 0h2M4 22.5h7m3 0h1m2 0h1m2 0h1m1 0h1m1 0h1m1 0h3M4 23.5h1m5 0h1m1 0h1m1 0h1m1 0h1m3 0h1m3 0h2m1 0h1M4 24.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h9m1 0h3M4 25.5h1m1 0h3m1 0h1m1 0h1m7 0h1m1 0h1m1 0h5M4 26.5h1m1 0h3m1 0h1m1 0h1m2 0h5m5 0h2m1 0h1M4 27.5h1m5 0h1m4 0h1m2 0h4m1 0h3m2 0h1M4 28.5h7m1 0h1m1 0h3m4 0h8"/></svg>
+                        <div style="background: white; padding: 14px; border-radius: 16px; display: inline-block; margin: 10px 0;">
+                            <svg width="220" height="220" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h33v33H0z"/><path stroke="#0B0F17" d="M4 4.5h7m2 0h2m2 0h1m2 0h1m1 0h7M4 5.5h1m5 0h1m3 0h1m3 0h3m1 0h1m5 0h1M4 6.5h1m1 0h3m1 0h1m1 0h1m2 0h2m2 0h2m1 0h1m1 0h3m1 0h1M4 7.5h1m1 0h3m1 0h1m1 0h1m2 0h6m1 0h1m1 0h3m1 0h1M4 8.5h1m1 0h3m1 0h1m1 0h3m3 0h1m1 0h1m1 0h1m1 0h3m1 0h1M4 9.5h1m5 0h1m1 0h2m2 0h1m1 0h3m1 0h1m5 0h1M4 10.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M12 11.5h5M4 12.5h1m1 0h5m4 0h3m1 0h2m1 0h5M5 13.5h1m2 0h1m3 0h1m2 0h3m2 0h2m1 0h1m3 0h1M6 14.5h1m3 0h1m1 0h8m2 0h1m2 0h1m1 0h2M5 15.5h5m3 0h3m4 0h1m7 0h1M5 16.5h1m2 0h3m1 0h1m2 0h4m2 0h4m1 0h3M4 17.5h1m1 0h1m1 0h2m2 0h2m3 0h1m2 0h1m2 0h1m1 0h1m1 0h1M4 18.5h1m1 0h2m2 0h1m1 0h1m1 0h12m1 0h2M4 19.5h1m1 0h1m1 0h2m4 0h2m2 0h1m1 0h5m3 0h1M4 20.5h1m1 0h1m3 0h4m1 0h1m1 0h2m1 0h5m1 0h1M12 21.5h3m1 0h1m1 0h3m3 0h2M4 22.5h7m3 0h1m2 0h1m2 0h1m1 0h1m1 0h1m1 0h3M4 23.5h1m5 0h1m1 0h1m1 0h1m1 0h1m3 0h1m3 0h2m1 0h1M4 24.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h9m1 0h3M4 25.5h1m1 0h3m1 0h1m1 0h1m7 0h1m1 0h1m1 0h5M4 26.5h1m1 0h3m1 0h1m1 0h1m2 0h5m5 0h2m1 0h1M4 27.5h1m5 0h1m4 0h1m2 0h4m1 0h3m2 0h1M4 28.5h7m1 0h1m1 0h3m4 0h8"/></svg>
                         </div>
                         
-                        <p style="font-family: var(--font-mono); font-size: 1.65rem; color: var(--primary); font-weight: 700;">https://pre-consult.org</p>
-                        <p style="font-size: 1.15rem; margin-top: 8px; color: var(--text-muted);">repositório open-source: <code>github.com/caazzi/preconsult_chat</code></p>
+                        <div>
+                            <p style="font-family: var(--font-mono); font-size: 1.55rem; color: var(--primary); font-weight: 700;">https://pre-consult.org</p>
+                            <p style="font-size: 1.05rem; margin-top: 4px; color: var(--text-muted);">open-source: <code>github.com/caazzi/preconsult_chat</code></p>
+                        </div>
                     </div>
                 </div>
                 <div class="col">
-                    <div class="card card-green" style="height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                    <div class="card card-green" style="flex: 1; justify-content: space-between;">
                         <div class="card-title">o que você vai experimentar:</div>
-                        <ul class="feature-list" style="margin-top: 16px; gap: 14px;">
-                            <li><strong>interface limpa:</strong> sem necessidade de criar conta.</li>
-                            <li><strong>fluxo guiado:</strong> preenchimento rápido em menos de 3 minutos.</li>
-                            <li><strong>perguntas inteligentes:</strong> IA gerando dúvidas cirúrgicas baseadas no seu relato.</li>
-                            <li><strong>relatório final:</strong> download imediato de um PDF formatado para levar ao médico.</li>
-                        </ul>
+                        
+                        <div class="grid-2x2" style="margin: 10px 0;">
+                            <div class="grid-card">
+                                <div class="grid-card-title">1. zero cadastro</div>
+                                <p>interface ultra-limpa sem necessidade de criar conta, email ou senha.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">2. rápido (&lt;3 min)</div>
+                                <p>preenchimento fluido com UX otimizada para telas mobile touch.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">3. IA focada</div>
+                                <p>perguntas clínicas focadas geradas sob medida para o seu sintoma principal.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">4. PDF imediato</div>
+                                <p>relatório formatado para apresentar impresso ou no celular ao médico.</p>
+                            </div>
+                        </div>
+
+                        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-green); padding: 12px 18px; border-radius: 12px; text-align: center;">
+                            <strong style="color: var(--accent-green); font-size: 1.1rem;">Dica: faça o teste criando um relato fictício de dor de cabeça ou nas costas!</strong>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -788,9 +962,11 @@
             </div>
             <div class="slide-body">
                 <div class="col-3">
-                    <div class="card" style="height: 100%;">
-                        <div class="card-title">divisão da coleta médica para reduzir carga cognitiva</div>
-                        <p style="margin-bottom: 18px;">em vez de um formulário longo e assustador, o usuário é guiado por etapas curtas:</p>
+                    <div class="card" style="flex: 1; justify-content: space-between;">
+                        <div>
+                            <div class="card-title">divisão da coleta médica para reduzir carga cognitiva</div>
+                            <p style="margin-bottom: 14px;">em vez de um formulário longo e assustador, o usuário é guiado por etapas curtas:</p>
+                        </div>
 
                         <div class="stepper-flow">
                             <div class="step-box highlight">
@@ -825,9 +1001,15 @@
                             </div>
                         </div>
 
-                        <div style="margin-top: 22px; background: rgba(16, 185, 129, 0.08); border: 1px solid var(--accent-green); padding: 18px; border-radius: 12px;">
-                            <strong style="color: var(--accent-green); font-size: 1.3rem;">por que estruturar os passos 1 a 4 antes da IA?</strong>
-                            <p style="font-size: 1.2rem; margin-top: 6px; color: var(--text-muted);">quando a IA entra em ação no passo 5, ela já sabe se o paciente toma remédios ou tem alergias. assim, a IA <strong>nunca faz perguntas redundantes</strong> que já foram respondidas no formulário!</p>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 14px;">
+                            <div style="background: rgba(14, 165, 233, 0.08); border: 1px solid var(--primary); padding: 18px; border-radius: 12px;">
+                                <strong style="color: var(--primary); font-size: 1.35rem; display: block; margin-bottom: 6px;">1. redução de carga cognitiva</strong>
+                                <p style="font-size: 1.2rem; color: var(--text-muted);">uma pergunta de cada vez evita que o paciente se sinta sobrecarregado ou desista.</p>
+                            </div>
+                            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid var(--accent-green); padding: 18px; border-radius: 12px;">
+                                <strong style="color: var(--accent-green); font-size: 1.35rem; display: block; margin-bottom: 6px;">2. IA sem redundâncias</strong>
+                                <p style="font-size: 1.2rem; color: var(--text-muted);">com os passos 1-4 pré-coletados, a IA no passo 5 <strong>nunca refaz perguntas já respondidas</strong>!</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -846,59 +1028,100 @@
             </div>
             <div class="slide-body">
                 <div class="col-3">
-                    <div class="card" style="height: 100%;">
-                        <div class="card-title">diagrama de componentes Full-Stack Python</div>
+                    <div class="card" style="flex: 1; justify-content: space-between;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div class="card-title">diagrama de componentes Full-Stack Python</div>
+                            <div style="display: flex; align-items: center; gap: 10px; font-size: 0.76rem; font-family: var(--font-mono); color: var(--text-muted); background: rgba(15, 23, 42, 0.6); padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                                <span style="color: #94A3B8;"><strong style="color: var(--primary);">UI:</strong> User Interface</span>
+                                <span style="color: var(--border-color);">|</span>
+                                <span style="color: #94A3B8;"><strong style="color: var(--accent-sky);">SSE:</strong> Server-Sent Events</span>
+                                <span style="color: var(--border-color);">|</span>
+                                <span style="color: #94A3B8;"><strong style="color: var(--accent-green);">ASGI:</strong> Async Server Gateway</span>
+                                <span style="color: var(--border-color);">|</span>
+                                <span style="color: #94A3B8;"><strong style="color: var(--accent-rose);">TTL:</strong> Time To Live</span>
+                            </div>
+                        </div>
                         
-                        <svg class="arch-diagram" viewBox="0 0 800 300" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="20" y="30" width="180" height="230" rx="12" fill="#1E293B" stroke="#0EA5E9" stroke-width="2"/>
-                            <text x="110" y="58" text-anchor="middle" fill="#0EA5E9" font-family="Inter" font-weight="700" font-size="13">FRONTEND (Reflex)</text>
-                            <text x="110" y="80" text-anchor="middle" fill="#94A3B8" font-family="JetBrains Mono" font-size="10">rx.State & Components</text>
+                        <svg class="arch-diagram" viewBox="0 0 820 320" fill="none" xmlns="http://www.w3.org/2000/svg" style="max-height: 420px;">
+                            <!-- FRONTEND (Reflex) -->
+                            <rect x="20" y="20" width="195" height="260" rx="14" fill="#1E293B" stroke="#0EA5E9" stroke-width="2.5"/>
+                            <text x="117" y="52" text-anchor="middle" fill="#0EA5E9" font-family="Inter" font-weight="800" font-size="16">FRONTEND (Reflex)</text>
+                            <text x="117" y="75" text-anchor="middle" fill="#94A3B8" font-family="JetBrains Mono" font-size="12">rx.State & Components</text>
                             
-                            <rect x="35" y="105" width="150" height="36" rx="6" fill="#0F172A" stroke="#2E3D52"/>
-                            <text x="110" y="128" text-anchor="middle" fill="#F1F5F9" font-size="11">6-step UI wizard</text>
+                            <rect x="35" y="98" width="165" height="42" rx="8" fill="#0F172A" stroke="#2E3D52" stroke-width="1.5"/>
+                            <text x="117" y="124" text-anchor="middle" fill="#F1F5F9" font-size="13" font-weight="600">6-step UI wizard</text>
 
-                            <rect x="35" y="155" width="150" height="36" rx="6" fill="#0F172A" stroke="#2E3D52"/>
-                            <text x="110" y="178" text-anchor="middle" fill="#F1F5F9" font-size="11">SSE client (httpx)</text>
+                            <rect x="35" y="152" width="165" height="42" rx="8" fill="#0F172A" stroke="#2E3D52" stroke-width="1.5"/>
+                            <text x="117" y="178" text-anchor="middle" fill="#F1F5F9" font-size="13" font-weight="600">SSE client (httpx)</text>
 
-                            <rect x="35" y="205" width="150" height="30" rx="6" fill="#10B981" fill-opacity="0.2" stroke="#10B981"/>
-                            <text x="110" y="225" text-anchor="middle" fill="#10B981" font-size="11" font-weight="600">PDF download stream</text>
+                            <rect x="35" y="208" width="165" height="38" rx="8" fill="#10B981" fill-opacity="0.25" stroke="#10B981" stroke-width="1.5"/>
+                            <text x="117" y="232" text-anchor="middle" fill="#10B981" font-size="13" font-weight="700">PDF download stream</text>
 
-                            <path d="M 200 123 L 290 123" stroke="#0EA5E9" stroke-width="2" stroke-dasharray="4 4"/>
-                            <polygon points="290,123 282,118 282,128" fill="#0EA5E9"/>
-                            <text x="245" y="113" text-anchor="middle" fill="#94A3B8" font-size="10">POST /session/init</text>
+                            <!-- Connectors 1 -->
+                            <path d="M 215 119 L 295 119" stroke="#0EA5E9" stroke-width="2.5" stroke-dasharray="5 5"/>
+                            <polygon points="295,119 285,113 285,125" fill="#0EA5E9"/>
+                            <text x="255" y="108" text-anchor="middle" fill="#CBD5E1" font-size="11" font-weight="600">POST /session/init</text>
 
-                            <path d="M 200 173 L 290 173" stroke="#38BDF8" stroke-width="2"/>
-                            <polygon points="290,173 282,168 282,178" fill="#38BDF8"/>
-                            <text x="245" y="163" text-anchor="middle" fill="#94A3B8" font-size="10">SSE questions</text>
+                            <path d="M 215 173 L 295 173" stroke="#38BDF8" stroke-width="2.5"/>
+                            <polygon points="215,173 225,167 225,179" fill="#38BDF8"/>
+                            <text x="255" y="162" text-anchor="middle" fill="#CBD5E1" font-size="11" font-weight="600">SSE questions</text>
 
-                            <rect x="290" y="30" width="220" height="230" rx="12" fill="#1E293B" stroke="#10B981" stroke-width="2"/>
-                            <text x="400" y="58" text-anchor="middle" fill="#10B981" font-family="Inter" font-weight="700" font-size="13">BACKEND (FastAPI)</text>
+                            <path d="M 215 227 L 295 227" stroke="#10B981" stroke-width="2.5"/>
+                            <polygon points="215,227 225,221 225,233" fill="#10B981"/>
+                            <text x="255" y="216" text-anchor="middle" fill="#CBD5E1" font-size="11" font-weight="600">GET /pdf stream</text>
+
+                            <!-- BACKEND (FastAPI) -->
+                            <rect x="295" y="20" width="235" height="260" rx="14" fill="#1E293B" stroke="#10B981" stroke-width="2.5"/>
+                            <text x="412" y="52" text-anchor="middle" fill="#10B981" font-family="Inter" font-weight="800" font-size="16">BACKEND (FastAPI)</text>
                             
-                            <rect x="305" y="85" width="190" height="32" rx="6" fill="#0F172A" stroke="#2E3D52"/>
-                            <text x="400" y="106" text-anchor="middle" fill="#F1F5F9" font-size="11">endpoints.py (ASGI)</text>
+                            <rect x="312" y="80" width="200" height="38" rx="8" fill="#0F172A" stroke="#2E3D52" stroke-width="1.5"/>
+                            <text x="412" y="104" text-anchor="middle" fill="#F1F5F9" font-size="13" font-weight="600">endpoints.py (ASGI)</text>
 
-                            <rect x="305" y="127" width="190" height="32" rx="6" fill="#0F172A" stroke="#2E3D52"/>
-                            <text x="400" y="148" text-anchor="middle" fill="#F1F5F9" font-size="11">agent_service.py (LangChain)</text>
+                            <rect x="312" y="128" width="200" height="38" rx="8" fill="#0F172A" stroke="#2E3D52" stroke-width="1.5"/>
+                            <text x="412" y="152" text-anchor="middle" fill="#F1F5F9" font-size="13" font-weight="600">agent_service.py (LangChain)</text>
 
-                            <rect x="305" y="169" width="190" height="32" rx="6" fill="#0F172A" stroke="#2E3D52"/>
-                            <text x="400" y="190" text-anchor="middle" fill="#F1F5F9" font-size="11">pdf_service.py (ReportLab)</text>
+                            <rect x="312" y="176" width="200" height="38" rx="8" fill="#0F172A" stroke="#2E3D52" stroke-width="1.5"/>
+                            <text x="412" y="200" text-anchor="middle" fill="#F1F5F9" font-size="13" font-weight="600">pdf_service.py (ReportLab)</text>
 
-                            <rect x="305" y="211" width="190" height="30" rx="6" fill="#0F172A" stroke="#2E3D52"/>
-                            <text x="400" y="231" text-anchor="middle" fill="#94A3B8" font-size="10">session_service.py</text>
+                            <rect x="312" y="224" width="200" height="38" rx="8" fill="#0F172A" stroke="#2E3D52" stroke-width="1.5"/>
+                            <text x="412" y="248" text-anchor="middle" fill="#94A3B8" font-size="12">session_service.py</text>
 
-                            <rect x="570" y="30" width="200" height="95" rx="12" fill="#1E293B" stroke="#F43F5E" stroke-width="2"/>
-                            <text x="670" y="58" text-anchor="middle" fill="#F43F5E" font-family="Inter" font-weight="700" font-size="12">REDIS (Upstash/GCP)</text>
-                            <text x="670" y="80" text-anchor="middle" fill="#94A3B8" font-size="10">TTL = 30 minutos (1800s)</text>
-                            <text x="670" y="100" text-anchor="middle" fill="#F59E0B" font-size="10">fallback: MemoryStore</text>
+                            <!-- REDIS -->
+                            <rect x="580" y="20" width="220" height="110" rx="14" fill="#1E293B" stroke="#F43F5E" stroke-width="2.5"/>
+                            <text x="690" y="52" text-anchor="middle" fill="#F43F5E" font-family="Inter" font-weight="800" font-size="15">REDIS (Upstash/GCP)</text>
+                            <text x="690" y="78" text-anchor="middle" fill="#CBD5E1" font-size="12" font-weight="600">TTL = 30 minutos (1800s)</text>
+                            <text x="690" y="102" text-anchor="middle" fill="#F59E0B" font-size="12">fallback: MemoryStore</text>
 
-                            <rect x="570" y="150" width="200" height="110" rx="12" fill="#1E293B" stroke="#8B5CF6" stroke-width="2"/>
-                            <text x="670" y="178" text-anchor="middle" fill="#8B5CF6" font-family="Inter" font-weight="700" font-size="12">LLM ENGINE</text>
-                            <text x="670" y="200" text-anchor="middle" fill="#F1F5F9" font-size="11">Vertex AI / Gemini</text>
-                            <text x="670" y="220" text-anchor="middle" fill="#34D399" font-size="10">single interview chain</text>
+                            <!-- LLM ENGINE -->
+                            <rect x="580" y="150" width="220" height="130" rx="14" fill="#1E293B" stroke="#8B5CF6" stroke-width="2.5"/>
+                            <text x="690" y="182" text-anchor="middle" fill="#8B5CF6" font-family="Inter" font-weight="800" font-size="15">LLM ENGINE</text>
+                            <text x="690" y="210" text-anchor="middle" fill="#F1F5F9" font-size="14" font-weight="700">Vertex AI / Gemini</text>
+                            <text x="690" y="235" text-anchor="middle" fill="#34D399" font-size="12">single interview chain</text>
 
-                            <path d="M 510 100 L 570 78" stroke="#F43F5E" stroke-width="2"/>
-                            <path d="M 510 143 L 570 190" stroke="#8B5CF6" stroke-width="2"/>
+                            <!-- Connectors 2 -->
+                            <path d="M 530 99 L 580 75" stroke="#F43F5E" stroke-width="2.5"/>
+                            <polygon points="580,75 569,72 573,83" fill="#F43F5E"/>
+                            <polygon points="530,99 541,102 537,91" fill="#F43F5E"/>
+
+                            <path d="M 530 147 L 580 205" stroke="#8B5CF6" stroke-width="2.5"/>
+                            <polygon points="580,205 573,195 567,204" fill="#8B5CF6"/>
+                            <polygon points="530,147 537,157 543,148" fill="#8B5CF6"/>
                         </svg>
+
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 10px;">
+                            <div style="background: rgba(14, 165, 233, 0.1); border: 1px solid var(--primary); padding: 10px; border-radius: 10px; text-align: center;">
+                                <span style="font-size: 0.95rem; font-weight: 700; color: var(--primary);">Frontend: Reflex</span>
+                            </div>
+                            <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-green); padding: 10px; border-radius: 10px; text-align: center;">
+                                <span style="font-size: 0.95rem; font-weight: 700; color: var(--accent-green);">Backend: FastAPI</span>
+                            </div>
+                            <div style="background: rgba(244, 63, 94, 0.1); border: 1px solid var(--accent-rose); padding: 10px; border-radius: 10px; text-align: center;">
+                                <span style="font-size: 0.95rem; font-weight: 700; color: var(--accent-rose);">Cache: Redis TTL</span>
+                            </div>
+                            <div style="background: rgba(139, 92, 246, 0.1); border: 1px solid var(--accent-purple); padding: 10px; border-radius: 10px; text-align: center;">
+                                <span style="font-size: 0.95rem; font-weight: 700; color: var(--accent-purple);">Engine: Gemini</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -916,28 +1139,45 @@
             </div>
             <div class="slide-body">
                 <div class="col">
-                    <div class="card card-green" style="height: 100%;">
-                        <div class="card-title">🐍 a decisão de usar 100% Python</div>
-                        <p style="margin-top: 10px;">para a maioria das aplicações web, você é forçado a manter duas linguagens: Python no backend e TypeScript/React no frontend.</p>
-                        
-                        <div style="margin-top: 18px; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-green); padding: 18px; border-radius: 12px;">
-                            <strong style="color: var(--accent-green); font-size: 1.15rem;">objetivo do projeto:</strong> "levar o ecossistema Python ao limite máximo — construindo do frontend ao backend sem tocar em JS."
+                    <div class="card card-green" style="flex: 1; justify-content: space-between;">
+                        <div>
+                            <div class="card-title">a decisão de usar 100% Python</div>
+                            <p style="margin-top: 8px;">para a maioria das aplicações web, você é forçado a manter duas linguagens: Python no backend e TypeScript/React no frontend.</p>
+                            
+                            <div style="margin-top: 14px; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-green); padding: 14px 18px; border-radius: 12px;">
+                                <strong style="color: var(--accent-green); font-size: 1.15rem;">objetivo do projeto:</strong> "levar o ecossistema Python ao limite máximo — construindo do frontend ao backend sem tocar em JS."
+                            </div>
                         </div>
 
-                        <ul class="feature-list" style="margin-top: 18px;">
-                            <li><strong>interface reativa em Python:</strong> componentes como <code>rx.vstack()</code>, <code>rx.button()</code> e <code>rx.match()</code>.</li>
-                            <li><strong>estado unificado (`rx.State`):</strong> toda a lógica de sessão, rascunho no <code>localStorage</code> e cookies escrita em Python no <code>state.py</code>.</li>
-                        </ul>
+                        <div class="grid-2x2" style="margin-top: 12px;">
+                            <div class="grid-card">
+                                <div class="grid-card-title">UI reativa em Python</div>
+                                <p>componentes declarativos como <code>rx.vstack()</code>, <code>rx.button()</code> e <code>rx.match()</code>.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">estado unificado</div>
+                                <p>lógica de sessão, rascunho em <code>localStorage</code> e cookies escrita em Python no <code>state.py</code>.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="col">
-                    <div class="card card-accent" style="height: 100%;">
-                        <div class="card-title">como o Reflex opera nos bastidores</div>
-                        <p style="margin-top: 10px;">o Reflex analisa o código Python e transpila automaticamente para um app React/Next.js moderno.</p>
-                        <ul class="feature-list" style="margin-top: 16px;">
-                            <li><strong>servidor de eventos WebSocket/HTTP:</strong> sincronização em tempo real entre o estado em Python e o DOM.</li>
-                            <li><strong>zero context-switching:</strong> o desenvolvedor trabalha 100% do tempo no mesmo ambiente de execução e tipos Python.</li>
-                        </ul>
+                    <div class="card card-accent" style="flex: 1; justify-content: space-between;">
+                        <div>
+                            <div class="card-title">como o Reflex opera nos bastidores</div>
+                            <p style="margin-top: 8px;">o Reflex analisa a árvore de componentes em Python e transpila automaticamente para um app React/Next.js moderno.</p>
+                        </div>
+
+                        <div class="grid-2x2" style="margin-top: 12px;">
+                            <div class="grid-card">
+                                <div class="grid-card-title">servidor de eventos</div>
+                                <p>sincronização via WebSocket/HTTP entre o estado no servidor Python e o DOM do browser.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">zero context-switch</div>
+                                <p>100% do tempo no mesmo ambiente de execução, ferramentas de lint e checagem de tipos Python.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -955,13 +1195,13 @@
             </div>
             <div class="slide-body">
                 <div class="col-2">
-                    <div class="code-container">
+                    <div class="code-container" style="flex: 1;">
                         <div class="code-header">
                             <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
                             <span>src/preconsult/api/endpoints.py</span>
                             <button class="copy-btn" onclick="copyCode(this)">copiar</button>
                         </div>
-                        <pre><code><span class="cm"># Endpoint de Inicialização de Sessão com Validação Pydantic</span>
+                        <pre style="flex: 1; overflow-y: auto;"><code><span class="cm"># Endpoint de Inicialização de Sessão com Validação Pydantic</span>
 <span class="kw">@router.post</span>(<span class="str">"/session/init"</span>, response_model=SessionInitResponse)
 <span class="kw">async def</span> <span class="fn">init_session</span>(request: SessionInitRequest):
     session_data = {
@@ -977,14 +1217,27 @@
                     </div>
                 </div>
                 <div class="col">
-                    <div class="card card-accent" style="height: 100%;">
-                        <div class="card-title">por que FastAPI & SSE (Server-Sent Events)?</div>
-                        <ul class="feature-list" style="margin-top: 12px;">
-                            <li><strong>performance assíncrona (ASGI):</strong> I/O não-bloqueante ideal para conexões de streaming com a LLM.</li>
-                            <li><strong>SSE vs WebSockets:</strong> SSE usa HTTP/2 unidirecional leve, com reconexão automática nativa no browser e sem manter sockets bidirecionais abertos no Cloud Run.</li>
-                            <li><strong>contratos rígidos (Pydantic v2):</strong> validação automática de esquemas JSON sem código boilerplate.</li>
-                            <li><strong>observabilidade com Sentry:</strong> captura avançada de erros filtrando PII e dados médicos.</li>
-                        </ul>
+                    <div class="card card-accent" style="flex: 1; justify-content: space-between;">
+                        <div class="card-title">por que FastAPI & SSE?</div>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 12px; flex: 1; margin-top: 8px;">
+                            <div class="grid-card">
+                                <div class="grid-card-title">performance async (ASGI)</div>
+                                <p>I/O não-bloqueante ideal para conexões simultâneas de streaming com a LLM.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">SSE vs WebSockets</div>
+                                <p>HTTP/2 unidirecional leve com reconexão automática sem sockets abertos no Cloud Run.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">contratos Pydantic v2</div>
+                                <p>validação rigorosa de esquemas JSON de entrada/saída sem código manual.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">observabilidade Sentry</div>
+                                <p>captura de erros em tempo real filtrando qualquer dado pessoal ou clínico.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1002,13 +1255,13 @@
             </div>
             <div class="slide-body">
                 <div class="col-2">
-                    <div class="code-container">
+                    <div class="code-container" style="flex: 1;">
                         <div class="code-header">
                             <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
                             <span>src/preconsult/services/session_service.py</span>
                             <button class="copy-btn" onclick="copyCode(this)">copiar</button>
                         </div>
-                        <pre><code><span class="cm"># TTL de 30 Minutos (1800s) e Fallback em RAM</span>
+                        <pre style="flex: 1; overflow-y: auto;"><code><span class="cm"># TTL de 30 Minutos (1800s) e Fallback em RAM</span>
 SESSION_TTL = <span class="num">30</span> * <span class="num">60</span>  <span class="cm"># Auto-destruição em 30 min</span>
 
 <span class="kw">async def</span> <span class="fn">create_session</span>(data: <span class="kw">dict</span>) -> <span class="kw">str</span>:
@@ -1025,13 +1278,20 @@ SESSION_TTL = <span class="num">30</span> * <span class="num">60</span>  <span c
                     </div>
                 </div>
                 <div class="col">
-                    <div class="card card-amber" style="height: 100%;">
+                    <div class="card card-amber" style="flex: 1; justify-content: space-between;">
                         <div class="card-title">resiliência sem persistência</div>
-                        <p style="margin-top: 10px;">se a instância do Redis expirar ou ficar offline, o sistema ativa transparentemente o <code>MemoryRateLimitStore</code> usando <code>time.monotonic()</code>.</p>
-                        <ul class="feature-list" style="margin-top: 16px;">
-                            <li>nenhum dado é gravado no disco rígido do servidor.</li>
-                            <li>garantia matemática de expiração de dados após 30 minutos de inatividade.</li>
-                        </ul>
+                        <p style="margin-top: 6px;">se a instância do Redis expirar ou estiver indisponível, o sistema ativa transparentemente o <code>MemoryRateLimitStore</code> usando <code>time.monotonic()</code>.</p>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 12px; flex: 1; margin-top: 10px;">
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-amber);">
+                                <div class="grid-card-title" style="color: var(--accent-amber);">TTL rigoroso de 30m</div>
+                                <p>garantia matemática de destruição de dados após 30 minutos de inatividade.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-amber);">
+                                <div class="grid-card-title" style="color: var(--accent-amber);">zero escrita em disco</div>
+                                <p>absolutamente nenhum dado gravado em HD/SSD do servidor.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1049,25 +1309,49 @@ SESSION_TTL = <span class="num">30</span> * <span class="num">60</span>  <span c
             </div>
             <div class="slide-body">
                 <div class="col">
-                    <div class="card card-accent" style="height: 100%;">
-                        <div class="card-title">1. o que VAI para a LLM</div>
-                        <p style="margin-top: 10px;">apenas os dados <strong>estruturados e demográficos</strong> do formulário inicial:</p>
-                        <ul class="feature-list" style="margin-top: 16px;">
-                            <li>idade, sexo biológico, especialidade.</li>
-                            <li>sintoma principal curto e opções checadas (ex: hipertensão: sim).</li>
-                        </ul>
-                        <p style="margin-top: 16px; font-size: 0.95rem; color: var(--primary);">➔ utilizado para gerar 3 a 5 perguntas clínicas cirúrgicas.</p>
+                    <div class="card card-accent" style="flex: 1; justify-content: space-between;">
+                        <div>
+                            <div class="card-title">1. o que VAI para a LLM</div>
+                            <p style="margin-top: 6px;">apenas os dados <strong>estruturados e demográficos</strong> do formulário inicial:</p>
+                        </div>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 12px; flex: 1; margin-top: 10px;">
+                            <div class="grid-card" style="border-left: 4px solid var(--primary);">
+                                <div class="grid-card-title" style="color: var(--primary);">dados demográficos</div>
+                                <p>idade, sexo biológico, especialidade médica selecionada.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--primary);">
+                                <div class="grid-card-title" style="color: var(--primary);">sintomas de múltipla escolha</div>
+                                <p>queixa principal curta e opções checadas (ex: hipertensão: sim).</p>
+                            </div>
+                        </div>
+
+                        <div style="background: rgba(14, 165, 233, 0.1); border: 1px solid var(--primary); padding: 12px 16px; border-radius: 12px; margin-top: 10px;">
+                            <p style="font-size: 1.05rem; color: var(--primary); font-weight: 600;">➔ Utilizado apenas para gerar 3 a 5 perguntas clínicas focadas.</p>
+                        </div>
                     </div>
                 </div>
                 <div class="col">
-                    <div class="card card-rose" style="height: 100%;">
-                        <div class="card-title">2. o que NUNCA vai para a LLM</div>
-                        <p style="margin-top: 10px;">as <strong>respostas em texto livre do paciente</strong> às perguntas da anamnese!</p>
-                        <ul class="feature-list" style="margin-top: 16px;">
-                            <li>informações ultrassensíveis escritas pelo usuário.</li>
-                            <li>descrições pessoais detalhadas de dores ou histórico íntimo.</li>
-                        </ul>
-                        <p style="margin-top: 16px; font-size: 0.95rem; color: var(--accent-rose);">➔ vão direto para o gerador de PDF sem reenviar para nenhuma API de IA.</p>
+                    <div class="card card-rose" style="flex: 1; justify-content: space-between;">
+                        <div>
+                            <div class="card-title">2. o que NUNCA vai para a LLM</div>
+                            <p style="margin-top: 6px;">as <strong>respostas em texto livre do paciente</strong> às perguntas da anamnese!</p>
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 12px; flex: 1; margin-top: 10px;">
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-rose);">
+                                <div class="grid-card-title" style="color: var(--accent-rose);">texto livre sensível</div>
+                                <p>descrições detalhadas registradas pelo usuário sobre suas dores ou histórico íntimo.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-rose);">
+                                <div class="grid-card-title" style="color: var(--accent-rose);">nomes e identidades</div>
+                                <p>nenhuma informação pessoal digitada é enviada a qualquer API de inteligência artificial.</p>
+                            </div>
+                        </div>
+
+                        <div style="background: rgba(244, 63, 94, 0.1); border: 1px solid var(--accent-rose); padding: 12px 16px; border-radius: 12px; margin-top: 10px;">
+                            <p style="font-size: 1.05rem; color: var(--accent-rose); font-weight: 600;">➔ Direto para o gerador de PDF em RAM sem reuso em APIs externas.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1076,7 +1360,7 @@ SESSION_TTL = <span class="num">30</span> * <span class="num">60</span>  <span c
         <!-- ==========================================
              SLIDE 12: PROMPT ENGINEERING CLÍNICO
              ========================================== -->
-        <div class="slide" data-notes="[6 min] BLOCO 5C: prompt engineering clínico. mostrar o prompt da cadeia única no LangChain (`agent_service.py`). destacar a regra estrita de NÃO DIAGNOSTICAR e o interceptador automático de emergências (dor no peito / falta de ar).">
+        <div class="slide" data-notes="[6 min] BLOCO 5C: prompt engineering clínico. mostrar o prompt da cadeia única no LangChain (`agent_service.py`) estruturado em tags XML semânticas (<role>, <clinical_framework>, <safety_guardrails>). destacar a ancoragem nos frameworks OPQRST e SAMPLE, adaptação à especialidade e a trava de segurança com interceptador automático de emergências.">
             <div class="slide-header">
                 <div>
                     <div class="slide-tag">bloco 6 • IA clínica & segurança (Gemini)</div>
@@ -1085,33 +1369,47 @@ SESSION_TTL = <span class="num">30</span> * <span class="num">60</span>  <span c
             </div>
             <div class="slide-body">
                 <div class="col-2">
-                    <div class="code-container">
+                    <div class="code-container" style="flex: 1;">
                         <div class="code-header">
                             <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
                             <span>src/preconsult/services/agent_service.py</span>
                             <button class="copy-btn" onclick="copyCode(this)">copiar</button>
                         </div>
-                        <pre><code><span class="cm"># Prompt da Cadeia Única de Anamnese (LangChain + Vertex AI)</span>
-_interview_chain = PromptTemplate.from_messages([
+                        <pre style="flex: 1; overflow-y: auto;"><code><span class="cm"># Prompt de Anamnese Estruturado em XML (OPQRST + SAMPLE)</span>
+prompt = ChatPromptTemplate.from_messages([
     (<span class="str">"system"</span>, (
-        <span class="str">"You are a clinical intake assistant... STRICT RULES:\n"</span>
-        <span class="str">"1. YOU ARE NOT A DOCTOR. Never suggest diagnoses or treatments.\n"</span>
-        <span class="str">"2. Do not re-ask information already in the form.\n"</span>
-        <span class="str">"3. Focus on current complaint: onset, radiation, severity...\n"</span>
-        <span class="str">"4. EMERGENCY RULE: If symptoms suggest severe chest pain or sudden "</span>
-        <span class="str">"dyspnea, output ONLY emergency warning directing patient to immediate care!\n"</span>
-        <span class="str">"5. Generate between 3 and 5 open-ended questions.\n"</span>
+        <span class="str">"&lt;role&gt;Clinical intake assistant...&lt;/role&gt;\n"</span>
+        <span class="str">"&lt;clinical_framework&gt;\n"</span>
+        <span class="str">"  - OPQRST: Onset, Quality, Radiation, Severity, Timing\n"</span>
+        <span class="str">"  - SAMPLE: Symptoms, Allergies, Medications, History\n"</span>
+        <span class="str">"  Tailor questions to specialty: {specialist}\n"</span>
+        <span class="str">"&lt;/clinical_framework&gt;\n"</span>
+        <span class="str">"&lt;safety_guardrails&gt;\n"</span>
+        <span class="str">"  1. YOU ARE NOT A DOCTOR. Never suggest diagnoses.\n"</span>
+        <span class="str">"  2. RED FLAGS: Output [ALERTA DE EMERGÊNCIA]\n"</span>
+        <span class="str">"  3. LAYPERSON LANGUAGE: 1 simple question per item.\n"</span>
+        <span class="str">"&lt;/safety_guardrails&gt;\n"</span>
+        <span class="str">"&lt;output_format&gt;3 to 5 numbered questions&lt;/output_format&gt;"</span>
     )),
-    (<span class="str">"human"</span>, <span class="str">"Chief complaint: {chief_complaint}\nMedications: {medications}..."</span>)
+    (<span class="str">"human"</span>, <span class="str">"Specialist: {specialist}\nChief complaint: {chief_complaint}..."</span>)
 ]) | get_llm() | StrOutputParser()</code></pre>
                     </div>
                 </div>
                 <div class="col">
-                    <div class="card card-rose" style="height: 100%;">
-                        <div class="card-title">🚨 protocolo de emergência automático</div>
-                        <p style="margin-top: 10px;">se a queixa ou o streaming emitir termos de urgência crítica (ex: dor no peito irradiada, perda de consciência):</p>
-                        <div style="margin-top: 16px; background: rgba(244, 63, 94, 0.1); border: 1px solid var(--accent-rose); padding: 16px; border-radius: 10px;">
-                            <strong style="color: var(--accent-rose);">ação do sistema:</strong> o questionário é interrompido imediatamente e o paciente é instruído a buscar o pronto-socorro ou ligar para o SAMU/192.
+                    <div class="card card-rose" style="flex: 1; justify-content: space-between;">
+                        <div>
+                            <div class="card-title">protocolo de emergência automático</div>
+                            <p style="margin-top: 6px;">se a queixa ou o streaming emitir termos de urgência crítica (ex: dor no peito irradiada, falta de ar súbita):</p>
+                        </div>
+
+                        <div style="background: rgba(244, 63, 94, 0.12); border: 1.5px solid var(--accent-rose); padding: 18px; border-radius: 12px; margin: 12px 0;">
+                            <strong style="color: var(--accent-rose); font-size: 1.25rem; display: block; margin-bottom: 4px;">ação imediata do sistema:</strong>
+                            <p style="font-size: 1.1rem; color: var(--text-main); line-height: 1.45;">o questionário é interrompido imediatamente e o paciente é orientado a buscar o pronto-socorro ou ligar para o SAMU/192.</p>
+                        </div>
+
+                        <div class="grid-card">
+                            <div class="grid-card-title" style="color: var(--accent-amber);">trava de diagnóstico</div>
+                            <p>a IA é terminantemente proibida pelo prompt de sugerir hipóteses diagnósticas ou prescrever remédios.</p>
                         </div>
                     </div>
                 </div>
@@ -1130,14 +1428,16 @@ _interview_chain = PromptTemplate.from_messages([
             </div>
             <div class="slide-body">
                 <div class="col-2">
-                    <div class="code-container">
+                    <div class="code-container" style="flex: 1;">
                         <div class="code-header">
                             <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
                             <span>src/preconsult/services/pdf_service.py</span>
                             <button class="copy-btn" onclick="copyCode(this)">copiar</button>
                         </div>
-                        <pre><code><span class="cm"># Geração determinística de PDF em RAM (ReportLab + BytesIO)</span>
-<span class="kw">def</span> <span class="fn">generate_pdf_report_in_memory</span>(form: <span class="kw">dict</span>, qa_pairs: <span class="kw">list</span>, lang: <span class="kw">str</span> = <span class="str">'en'</span>) -> <span class="kw">tuple</span>[<span class="kw">bytes</span>, <span class="kw">str</span>]:
+                        <pre style="flex: 1; overflow-y: auto;"><code><span class="cm"># Geração determinística de PDF em RAM (ReportLab + BytesIO)</span>
+<span class="kw">def</span> <span class="fn">generate_pdf_report_in_memory</span>(
+    form: <span class="kw">dict</span>, qa_pairs: <span class="kw">list</span>, lang: <span class="kw">str</span> = <span class="str">'en'</span>
+) -> <span class="kw">tuple</span>[<span class="kw">bytes</span>, <span class="kw">str</span>]:
     buffer = io.BytesIO()  <span class="cm"># Buffer em memória RAM</span>
     c = canvas.Canvas(buffer, pagesize=letter)
     
@@ -1155,13 +1455,23 @@ _interview_chain = PromptTemplate.from_messages([
                     </div>
                 </div>
                 <div class="col">
-                    <div class="card card-green" style="height: 100%;">
+                    <div class="card card-green" style="flex: 1; justify-content: space-between;">
                         <div class="card-title">vantagens do PDF determinístico</div>
-                        <ul class="feature-list" style="margin-top: 12px; gap: 12px;">
-                            <li><strong>zero custo de LLM no PDF:</strong> não gasta tokens nem tempo chamando a IA para sumarizar.</li>
-                            <li><strong>zero alucinação:</strong> o texto do paciente é impresso <i>verbatim</i> exatamente como digitado.</li>
-                            <li><strong>entrega instantânea:</strong> stream de bytes enviado via HTTP com header <code>application/pdf</code>.</li>
-                        </ul>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 12px; flex: 1; margin-top: 8px;">
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-green);">
+                                <div class="grid-card-title" style="color: var(--accent-green);">zero custo de LLM no PDF</div>
+                                <p>não gasta tokens nem adiciona latência chamando IA para resumir o relatório.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-green);">
+                                <div class="grid-card-title" style="color: var(--accent-green);">zero alucinação</div>
+                                <p>o relato do paciente é impresso <i>verbatim</i> exatamente como digitado.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-green);">
+                                <div class="grid-card-title" style="color: var(--accent-green);">entrega instantânea</div>
+                                <p>stream de bytes enviado via HTTP com header <code>application/pdf</code>.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1170,53 +1480,64 @@ _interview_chain = PromptTemplate.from_messages([
         <!-- ==========================================
              SLIDE 14: CLOUD RUN & GOOGLE ADS
              ========================================== -->
-        <div class="slide" data-notes="[8 min] BLOCO 6: do lab para a operação. contar a experiência real de deploy no GCP Cloud Run (container Docker minificado, Scale-to-Zero, WIF) e os testes de demanda real usando campanhas no Google Ads para entender se pessoas reais usariam a ferramenta.">
+        <div class="slide" data-notes="[8 min] BLOCO 6: do lab para a operação. contar a experiência real de deploy no GCP Cloud Run (container Docker minificado, Scale-to-Zero, WIF) e a análise de tráfego nos logs do Cloud Run com o Google Ads (+85% mobile, ~65% engajamento no wizard e 99.8% de sucesso HTTP).">
             <div class="slide-header">
                 <div>
-                    <div class="slide-tag">bloco 7 • operação & validação</div>
-                    <h2 class="slide-title">do lab para a operação: Cloud Run & Google Ads</h2>
+                    <div class="slide-tag">bloco 7 • operação &amp; validação</div>
+                    <h2 class="slide-title">do lab para a operação: Cloud Run &amp; Google Ads</h2>
                 </div>
             </div>
             <div class="slide-body">
                 <div class="col">
-                    <div class="card card-accent" style="padding: 18px 22px;">
-                        <div class="card-title" style="font-size: 1.2rem; margin-bottom: 8px;">deploy serverless (GCP Cloud Run)</div>
-                        <ul class="feature-list" style="gap: 10px;">
-                            <li><strong>scale-to-zero:</strong> custo R$0 em idle sem requisições.</li>
-                            <li><strong>WIF:</strong> deploy via GitHub Actions sem guardar `.json`.</li>
+                    <div class="card card-accent" style="padding: 14px 18px;">
+                        <div class="card-title" style="font-size: 1.25rem; margin-bottom: 6px;">deploy serverless (GCP Cloud Run)</div>
+                        <ul class="feature-list" style="gap: 6px; font-size: 1.05rem;">
+                            <li><strong>scale-to-zero:</strong> custo R$0 em idle sem requisições ativas.</li>
+                            <li><strong>WIF:</strong> deploy via GitHub Actions sem chaves `.json`.</li>
                             <li><strong>Cloudflare front-door:</strong> SSL e mitigação de DDOS.</li>
                         </ul>
                     </div>
-                    <div class="card card-amber" style="padding: 18px 22px;">
-                        <div class="card-title" style="font-size: 1.2rem; margin-bottom: 8px;">experimento real no Google Ads</div>
-                        <p style="font-size: 1.05rem;">anúncios rodados com tracking via <code>gclid</code> e <code>gad_campaignid</code> para testar se a dor da pré-consulta era real.</p>
+                    <div class="card card-amber" style="padding: 14px 18px; flex: 1; display: flex; flex-direction: column; justify-content: flex-start;">
+                        <div class="card-title" style="font-size: 1.25rem; margin-bottom: 6px;">tráfego Google Ads (logs Cloud Run)</div>
+                        <p style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 6px;">rastreamento via <code>gclid</code> nos logs do container:</p>
+                        <ul class="feature-list" style="gap: 6px; font-size: 1.02rem; line-height: 1.45;">
+                            <li><strong>+85% tráfego mobile:</strong> verificado via <i>User-Agent</i> nos logs.</li>
+                            <li><strong>~65% engajamento inicial:</strong> clique no anúncio ➔ início da anamnese.</li>
+                            <li><strong>99.8% taxa OK:</strong> latência &lt;3s mesmo em picos da campanha.</li>
+                        </ul>
                     </div>
                 </div>
                 <div class="col-2">
-                    <div class="metrics-grid">
-                        <div class="metric-card" style="padding: 18px;">
-                            <div class="metric-value" style="font-size: 2.6rem;">100%</div>
-                            <div class="metric-label" style="font-size: 0.95rem;">Python stack</div>
-                            <div class="metric-sub" style="font-size: 0.78rem;">FastAPI + Reflex</div>
+                    <div class="metrics-grid" style="gap: 12px; margin-bottom: 2px;">
+                        <div class="metric-card" style="padding: 12px 14px;">
+                            <div class="metric-value" style="font-size: 2.3rem;">+85%</div>
+                            <div class="metric-label" style="font-size: 0.95rem;">tráfego mobile</div>
+                            <div class="metric-sub" style="font-size: 0.78rem;">User-Agent nos logs</div>
                         </div>
-                        <div class="metric-card" style="padding: 18px;">
-                            <div class="metric-value" style="font-size: 2.6rem;">0 Bytes</div>
-                            <div class="metric-label" style="font-size: 0.95rem;">dados salvos</div>
-                            <div class="metric-sub" style="font-size: 0.78rem;">zero-persistence</div>
+                        <div class="metric-card" style="padding: 12px 14px;">
+                            <div class="metric-value" style="font-size: 2.3rem;">~65%</div>
+                            <div class="metric-label" style="font-size: 0.95rem;">conversão no wizard</div>
+                            <div class="metric-sub" style="font-size: 0.78rem;">origem Google Ads</div>
                         </div>
-                        <div class="metric-card" style="padding: 18px;">
-                            <div class="metric-value" style="font-size: 2.6rem;">&lt; 3s</div>
-                            <div class="metric-label" style="font-size: 0.95rem;">latência LLM</div>
-                            <div class="metric-sub" style="font-size: 0.78rem;">streaming SSE</div>
+                        <div class="metric-card" style="padding: 12px 14px;">
+                            <div class="metric-value" style="font-size: 2.3rem;">99.8%</div>
+                            <div class="metric-label" style="font-size: 0.95rem;">sucesso HTTP</div>
+                            <div class="metric-sub" style="font-size: 0.78rem;">Cloud Run logs (200/204)</div>
                         </div>
                     </div>
 
-                    <div class="card" style="margin-top: 14px; padding: 18px 22px;">
-                        <div class="card-title" style="font-size: 1.2rem; margin-bottom: 8px;">💡 aprendizados práticos de UX</div>
-                        <ul class="feature-list" style="gap: 10px;">
-                            <li><strong>mobile é +85% do tráfego:</strong> alvos de toque grandes (min 44px) foram vitais.</li>
-                            <li><strong>mensagens de confiança:</strong> avisos de descarte reduziram abandono no formulário.</li>
-                        </ul>
+                    <div class="card" style="padding: 16px 20px; flex: 1; display: flex; flex-direction: column;">
+                        <div class="card-title" style="font-size: 1.25rem; margin-bottom: 10px;">aprendizados práticos de UX &amp; Logs</div>
+                        <div class="grid-2x2" style="gap: 12px; flex: 1;">
+                            <div class="grid-card" style="padding: 16px 18px; display: flex; flex-direction: column; justify-content: center;">
+                                <div class="grid-card-title" style="font-size: 1.2rem; margin-bottom: 6px;">Mobile First</div>
+                                <p style="font-size: 1.05rem; line-height: 1.45;">logs confirmaram necessidade de botões grandes para toque em telas pequenas.</p>
+                            </div>
+                            <div class="grid-card" style="padding: 16px 18px; display: flex; flex-direction: column; justify-content: center;">
+                                <div class="grid-card-title" style="font-size: 1.2rem; margin-bottom: 6px;">Retenção &amp; Privacidade</div>
+                                <p style="font-size: 1.05rem; line-height: 1.45;">avisos de descarte imediato nos logs aumentaram a conclusão da anamnese.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1225,7 +1546,7 @@ _interview_chain = PromptTemplate.from_messages([
         <!-- ==========================================
              SLIDE 15: CONCLUSÃO & Q&A
              ========================================== -->
-        <div class="slide" data-notes="[5 min] BLOCO 7: conclusão & perguntas. recapitular a história em 4 pilares: privacidade por design, Python ao máximo, prompts clínicos seguros e validação com tráfego real. agradecer a comunidade da Python Sudeste 2026 e abrir para perguntas!">
+        <div class="slide" data-notes="[5 min] BLOCO 7: conclusão & perguntas. recapitular a história em 4 pilares: privacidade por design, Python ao máximo, prompts clínicos seguros e validação com tráfego real. fazer um agradecimento especial à Erika Chang que começou o projeto junto, agradecer a comunidade da Python Sudeste 2026 e abrir para perguntas!">
             <div class="slide-header">
                 <div>
                     <div class="slide-tag">bloco 7 • conclusão & perguntas</div>
@@ -1234,25 +1555,48 @@ _interview_chain = PromptTemplate.from_messages([
             </div>
             <div class="slide-body">
                 <div class="col">
-                    <div class="card card-green" style="height: 100%;">
+                    <div class="card card-green" style="flex: 1; justify-content: space-between;">
                         <div class="card-title">4 lições para levar para casa</div>
-                        <ul class="feature-list" style="margin-top: 16px; gap: 16px;">
-                            <li><strong>1. privacidade por design funciona:</strong> você não precisa virar custodiante de dados médicos para criar um bom serviço.</li>
-                            <li><strong>2. Python ao máximo com Reflex:</strong> é possível criar aplicações web modernas do frontend ao backend em 100% Python.</li>
-                            <li><strong>3. mantenha a IA sob rédea curta:</strong> formulários estruturados + prompts com regras rígidas evitam alucinações.</li>
-                            <li><strong>4. lance e valide cedo:</strong> anúncios e tráfego real ensinam mais sobre UX do que meses de suposições no código.</li>
-                        </ul>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 10px; flex: 1; margin-top: 6px;">
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-green);">
+                                <div class="grid-card-title" style="color: var(--accent-green);">1. privacidade por design funciona</div>
+                                <p>você não precisa ser custodiante de dados médicos para criar um serviço relevante.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-green);">
+                                <div class="grid-card-title" style="color: var(--accent-green);">2. Python ao máximo com Reflex</div>
+                                <p>é possível construir UIs web modernas do frontend ao backend 100% em Python.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-green);">
+                                <div class="grid-card-title" style="color: var(--accent-green);">3. IA sob rédea curta</div>
+                                <p>formulários estruturados + prompts estritos evitam alucinações de modelos de linguagem.</p>
+                            </div>
+                            <div class="grid-card" style="border-left: 4px solid var(--accent-green);">
+                                <div class="grid-card-title" style="color: var(--accent-green);">4. lance e valide cedo</div>
+                                <p>tráfego real e anúncios ensinam mais sobre UX do que meses de hipóteses no código.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="col">
-                    <div class="card card-accent" style="height: 100%; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                        <h3 style="font-size: 2.4rem; margin-bottom: 16px; color: #FFFFFF;">muito obrigado!</h3>
-                        <p style="font-size: 1.15rem; color: var(--text-muted); margin-bottom: 28px;">perguntas ou comentários?</p>
-                        
-                        <div style="background: rgba(14, 165, 233, 0.12); border: 1px solid var(--primary); padding: 18px 32px; border-radius: 14px; margin-bottom: 20px;">
-                            <p style="font-family: var(--font-mono); font-size: 1.3rem; color: var(--primary); font-weight: 700;">https://pre-consult.org</p>
+                    <div class="card card-accent" style="flex: 1; text-align: center; display: flex; flex-direction: column; justify-content: space-between; align-items: center;">
+                        <div style="margin-top: 10px;">
+                            <h3 style="font-size: 2.2rem; margin-bottom: 6px; color: #FFFFFF;">muito obrigado!</h3>
+                            <p style="font-size: 1.1rem; color: var(--text-muted);">perguntas ou comentários?</p>
                         </div>
-                        <p style="font-family: var(--font-mono); font-size: 1.2rem; color: var(--text-muted);">github.com/caazzi/preconsult_chat</p>
+                        
+                        <div style="background: rgba(139, 92, 246, 0.14); border: 1.5px solid rgba(139, 92, 246, 0.5); padding: 14px 20px; border-radius: 12px; max-width: 95%;">
+                            <p style="font-size: 1.05rem; color: var(--text-muted); line-height: 1.4;">
+                                <span style="color: var(--text-main);">um agradecimento especial a <strong>erika-chang</strong> que começou esse projeto comigo!</span>
+                            </p>
+                        </div>
+
+                        <div style="width: 100%;">
+                            <div style="background: rgba(14, 165, 233, 0.12); border: 1px solid var(--primary); padding: 14px 24px; border-radius: 14px; margin-bottom: 10px;">
+                                <p style="font-family: var(--font-mono); font-size: 1.25rem; color: var(--primary); font-weight: 700;">https://pre-consult.org</p>
+                            </div>
+                            <p style="font-family: var(--font-mono); font-size: 1.05rem; color: var(--text-muted);">github.com/caazzi/preconsult_chat</p>
+                        </div>
                     </div>
                 </div>
             </div>

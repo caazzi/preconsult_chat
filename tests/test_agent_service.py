@@ -91,6 +91,16 @@ def test_interview_prompt_contains_emergency_rule():
     assert "emergency" in system_msg.lower()
     assert "do not generate questions" in system_msg.lower()
 
+def test_interview_prompt_contains_xml_and_frameworks():
+    chain = get_interview_chain()
+    prompt = chain.steps[0]
+    system_msg = str(prompt.messages[0])
+    assert "<role>" in system_msg
+    assert "<clinical_framework>" in system_msg
+    assert "<safety_guardrails>" in system_msg
+    assert "OPQRST" in system_msg
+    assert "SAMPLE" in system_msg
+
 @pytest.mark.asyncio
 @patch("preconsult.services.agent_service.get_llm")
 async def test_emergency_detection_in_output(mock_get_llm):
@@ -111,5 +121,6 @@ async def test_emergency_detection_in_output(mock_get_llm):
     lower_text = full_text.lower()
     assert any(word in lower_text for word in ["emergency", "911", "immediate"])
     assert not full_text.startswith("1.")
+
 
 

@@ -487,7 +487,7 @@ def step_6_summary() -> rx.Component:
                 ),
                 rx.button(
                     State.t["start_new"],
-                    on_click=rx.redirect("/"),
+                    on_click=State.reset_intake,
                     color_scheme="gray", variant="ghost",
                     width="100%", min_height="48px",
                     _hover={"transform": "scale(1.02)"}, transition="all 0.2s ease"

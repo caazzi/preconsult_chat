@@ -116,3 +116,9 @@ scratch/
 .env.*
 !*.env.example
 *credentials*.json
+
+# Documentation & Presentations
+docs/SPRINTS.md
+docs/presentation_proposal.mhtml
+docs/templates/
+

@@ -36,3 +36,16 @@ def test_get_localized_value_empty_key_returns_empty():
     state = State()
     result = state.get_localized_value("duration", "")
     assert result == ""
+
+
+def test_state_set_lang():
+    from reflex_app.preconsult.state import State
+    state = State()
+    state.set_lang("pt")
+    assert state.lang == "pt"
+    state.set_lang("en")
+    assert state.lang == "en"
+    # Invalid lang should be ignored
+    state.set_lang("fr")
+    assert state.lang == "en"
+

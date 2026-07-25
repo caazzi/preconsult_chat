@@ -1,0 +1,1419 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>um assistente de saúde privacy-first :: Python Sudeste 2026</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0B0F17;
+            --bg-card: #161F30;
+            --bg-card-hover: #1E293B;
+            --border-color: #2E3D52;
+            --primary: #0EA5E9;
+            --primary-glow: rgba(14, 165, 233, 0.25);
+            --accent-green: #10B981;
+            --accent-purple: #8B5CF6;
+            --accent-amber: #F59E0B;
+            --accent-rose: #F43F5E;
+            --text-main: #FFFFFF;
+            --text-muted: #CBD5E1;
+            --code-bg: #090D16;
+            --font-sans: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Top Progress Bar */
+        #progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--accent-green));
+            width: 0%;
+            transition: width 0.3s ease;
+            z-index: 1000;
+        }
+
+        /* Main Presentation Canvas */
+        #deck {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 28px 48px 28px 48px;
+            opacity: 0;
+            visibility: hidden;
+            transform: scale(0.96) translateY(10px);
+            transition: opacity 0.4s ease, transform 0.4s ease, visibility 0.4s;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
+        }
+
+        .slide.active {
+            opacity: 1;
+            visibility: visible;
+            transform: scale(1) translateY(0);
+        }
+
+        /* Header Layout */
+        .slide-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 14px;
+            flex-shrink: 0;
+        }
+
+        .slide-tag {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--primary);
+            text-transform: lowercase;
+            letter-spacing: 0.5px;
+            background: rgba(14, 165, 233, 0.12);
+            padding: 6px 16px;
+            border-radius: 99px;
+            border: 1px solid rgba(14, 165, 233, 0.4);
+        }
+
+        .slide-title {
+            font-size: clamp(2.2rem, 4.2vh, 3.2rem);
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: #FFFFFF;
+            background: linear-gradient(135deg, #FFFFFF 30%, var(--text-muted) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .slide-body {
+            flex: 1;
+            display: flex;
+            gap: 24px;
+            align-items: stretch;
+            min-height: 0;
+        }
+
+        .col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-height: 0;
+        }
+
+        .col-2 { flex: 2; }
+        .col-3 { flex: 3; }
+
+        /* Card Component */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+            transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            border-color: rgba(14, 165, 233, 0.4);
+            box-shadow: 0 12px 35px -5px rgba(14, 165, 233, 0.15);
+        }
+
+        .card-accent { border-left: 5px solid var(--primary); }
+        .card-green { border-left: 5px solid var(--accent-green); }
+        .card-amber { border-left: 5px solid var(--accent-amber); }
+        .card-rose { border-left: 5px solid var(--accent-rose); }
+        .card-purple { border-left: 5px solid var(--accent-purple); }
+
+        .card-title {
+            font-size: clamp(1.4rem, 2.8vh, 1.8rem);
+            font-weight: 700;
+            margin-bottom: 14px;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card p, .card li {
+            font-size: clamp(1.15rem, 2.2vh, 1.35rem);
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .card strong {
+            color: var(--text-main);
+        }
+
+        ul.feature-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        ul.feature-list li {
+            position: relative;
+            padding-left: 32px;
+            font-size: clamp(1.15rem, 2.2vh, 1.35rem);
+            line-height: 1.6;
+        }
+
+        ul.feature-list li::before {
+            content: "•";
+            color: var(--primary);
+            font-weight: bold;
+            font-size: 1.4rem;
+            position: absolute;
+            left: 0;
+            top: 0;
+            font-size: 1.15rem;
+        }
+
+        /* Large Feature Highlight Block */
+        .big-highlight {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.1), rgba(16, 185, 129, 0.08));
+            border: 1.5px solid var(--primary);
+            border-radius: 16px;
+            padding: 28px;
+            text-align: center;
+        }
+
+        .big-highlight h3 {
+            font-size: clamp(1.8rem, 3.5vh, 2.4rem);
+            color: #FFFFFF;
+            margin-bottom: 14px;
+        }
+
+        .big-highlight p {
+            font-size: clamp(1.25rem, 2.4vh, 1.5rem);
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        /* Code Blocks */
+        .code-container {
+            background-color: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            overflow: hidden;
+            font-family: var(--font-mono);
+            font-size: 0.88rem;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .code-header {
+            background-color: rgba(255, 255, 255, 0.04);
+            padding: 9px 16px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            flex-shrink: 0;
+        }
+
+        .code-header .dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .code-header .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .dot-red { background-color: #FF5F56; }
+        .dot-yellow { background-color: #FFBD2E; }
+        .dot-green { background-color: #27C93F; }
+
+        .copy-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            padding: 3px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        pre code {
+            display: block;
+            padding: 16px 18px;
+            overflow-x: auto;
+            color: #F1F5F9;
+            line-height: 1.5;
+            white-space: pre;
+            font-size: clamp(0.95rem, 1.9vh, 1.12rem);
+        }
+
+        /* Code Highlight Colors */
+        .kw { color: #F43F5E; font-weight: 600; }
+        .fn { color: #38BDF8; }
+        .str { color: #34D399; }
+        .cm { color: #64748B; font-style: italic; }
+        .num { color: #F59E0B; }
+
+        /* Flow / Step Diagram */
+        .stepper-flow {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        .step-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px 10px;
+            text-align: center;
+            position: relative;
+        }
+
+        .step-box.highlight {
+            border-color: var(--primary);
+            background: rgba(14, 165, 233, 0.08);
+        }
+
+        .step-number {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--primary);
+            text-transform: lowercase;
+        }
+
+        .step-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin: 6px 0;
+            color: var(--text-main);
+        }
+
+        .step-desc {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+        }
+
+        /* Metric Grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .metric-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 22px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: clamp(2.0rem, 4.5vh, 2.8rem);
+            font-weight: 800;
+            color: var(--primary);
+            background: linear-gradient(135deg, var(--primary), var(--accent-green));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .metric-label {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-top: 6px;
+        }
+
+        .metric-sub {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        /* Speaker Notes Panel Drawer */
+        #speaker-notes {
+            position: fixed;
+            right: -440px;
+            top: 0;
+            width: 420px;
+            height: 100vh;
+            background: #0D131F;
+            border-left: 1px solid var(--border-color);
+            padding: 30px;
+            box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+            transition: right 0.3s ease;
+            z-index: 1100;
+            overflow-y: auto;
+        }
+
+        #speaker-notes.open { right: 0; }
+
+        #speaker-notes h3 {
+            font-size: 1.3rem;
+            color: var(--primary);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        #speaker-notes-content {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        /* Grid Overview Overlay */
+        #grid-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(11, 15, 23, 0.96);
+            backdrop-filter: blur(15px);
+            z-index: 1200;
+            display: none;
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        #grid-overlay.open { display: block; }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 16px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .grid-thumb {
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            height: 140px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .grid-thumb:hover, .grid-thumb.active {
+            border-color: var(--primary);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px var(--primary-glow);
+        }
+
+        .grid-thumb-num {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        .grid-thumb-title {
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--text-main);
+            line-height: 1.3;
+        }
+
+        /* Cover Slide Styling */
+        .cover-slide {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+
+        .cover-badge {
+            font-family: var(--font-mono);
+            font-size: clamp(1.1rem, 2.2vh, 1.4rem);
+            background: rgba(14, 165, 233, 0.14);
+            color: var(--primary);
+            border: 1.5px solid rgba(14, 165, 233, 0.5);
+            padding: 12px 32px;
+            border-radius: 99px;
+            margin-bottom: clamp(24px, 4vh, 40px);
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .cover-title {
+            font-size: clamp(3.2rem, 7.5vh, 5.4rem);
+            font-weight: 800;
+            line-height: 1.15;
+            margin-bottom: clamp(28px, 5vh, 56px);
+            max-width: 1250px;
+            background: linear-gradient(135deg, #FFFFFF 40%, var(--primary) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .cover-author {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-color);
+            padding: 16px 36px;
+            border-radius: 99px;
+        }
+
+        .author-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            color: white;
+            font-size: 1.5rem;
+        }
+
+        .author-info { text-align: left; }
+        .author-name { font-size: 1.5rem; font-weight: 700; color: var(--text-main); }
+
+        .arch-diagram {
+            width: 100%;
+            height: auto;
+            max-height: 350px;
+            object-fit: contain;
+        }
+
+        /* Responsive & Projector Adaptations */
+        @media (max-height: 800px) {
+            .slide {
+                padding: 24px 40px;
+            }
+            .slide-header {
+                margin-bottom: 12px;
+                padding-bottom: 8px;
+            }
+            .card {
+                padding: 16px;
+            }
+            .big-highlight {
+                padding: 18px;
+            }
+            .big-highlight h3 {
+                font-size: 1.4rem;
+            }
+            .big-highlight p {
+                font-size: 1.2rem;
+            }
+            pre code {
+                font-size: 0.8rem;
+                padding: 10px 12px;
+            }
+            .stepper-flow {
+                gap: 8px;
+            }
+            .step-box {
+                padding: 8px 6px;
+            }
+            .step-title {
+                font-size: 0.82rem;
+            }
+            .step-desc {
+                font-size: 0.7rem;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .slide {
+                padding: 24px 30px;
+            }
+            .slide-body {
+                flex-direction: column;
+                overflow-y: auto;
+            }
+            .col, .col-2, .col-3 {
+                flex: none;
+                width: 100%;
+            }
+            .stepper-flow {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="progress-bar"></div>
+
+    <div id="deck">
+
+        <!-- ==========================================
+             SLIDE 1: COVER
+             ========================================== -->
+        <div class="slide active" data-notes="[5 min] apresentação da palestra por Claudio Azzi. boas-vindas à Python Sudeste 2026! explicar que vamos contar a história real de construção, arquitetura e operação de um assistente de saúde privacy-first feito 100% em Python.">
+            <div class="cover-slide">
+                <div class="cover-badge">
+                    <span>🐍 Python Sudeste 2026 • 26/07/26</span>
+                </div>
+                <h1 class="cover-title">um assistente de saúde privacy-first</h1>
+                
+                <div class="cover-author">
+                    <img src="data:image/jpeg;base64,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" alt="Claudio Azzi" class="author-avatar">
+                    <div class="author-info">
+                        <div class="author-name">Claudio Azzi</div>
+                        <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px; font-family: var(--font-mono); font-size: 0.9rem; color: var(--text-muted);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+                            </svg>
+                            <span>@caazzi</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 2: O INCÔMODO PRÉ-CONSULTA
+             ========================================== -->
+        <div class="slide" data-notes="[5 min] BLOCO 1A: o incômodo motivador. quantas vezes você foi ao médico e esqueceu o dia exato que a dor começou, ou o nome do remédio em uso? em consultas de 15 minutos, a ansiedade atrapalha a comunicação. o paciente sai sem contar detalhes cruciais.">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 1 • motivação</div>
+                    <h2 class="slide-title">o incômodo na consulta médica</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="card card-rose" style="height: 100%;">
+                        <div class="card-title">a experiência do paciente no consultório</div>
+                        <p style="margin-top: 12px;">você marca uma consulta médica esperada há semanas. ao sentar na frente do médico:</p>
+                        <ul class="feature-list" style="margin-top: 18px;">
+                            <li><strong>ansiedade e bloqueio:</strong> difícil lembrar o histórico completo sob pressão.</li>
+                            <li><strong>linha do tempo confusa:</strong> "começou faz 3 semanas ou 2 meses?"</li>
+                            <li><strong>nomes e doses:</strong> esquecimento de medicações em uso e dosagens exatas.</li>
+                            <li><strong>consultas curtas (15-20 min):</strong> o médico tem pouco tempo para extrair tudo.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card card-amber" style="height: 100%;">
+                        <div class="card-title">a necessidade de preparação</div>
+                        <p style="margin-top: 12px;">e se o paciente pudesse <strong>organizar a própria anamnese</strong> minutos antes da consulta, chegando com um resumo estruturado e profissional em mãos?</p>
+                        <div style="margin-top: 24px; background: rgba(245, 158, 11, 0.1); border: 1px solid var(--accent-amber); padding: 18px; border-radius: 12px;">
+                            <strong style="color: var(--accent-amber); font-size: 1.3rem;">o objetivo:</strong> transformar relatos desorganizados de sintomas em um documento clínico claro para acelerar e qualificar o atendimento médico.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 3: O DILEMA DOS DADOS DE SAÚDE
+             ========================================== -->
+        <div class="slide" data-notes="[5 min] BLOCO 1B: o dilema dos dados de saúde. por que tantos projetos morrem aqui? armazenar dados médicos atrai LGPD, HIPAA, necessidade de criptografia em repouso, políticas de retenção e responsabilidade por vazamentos. para um desenvolvedor solo, o custo de compliance é inviável.">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 1 • desafio de privacidade</div>
+                    <h2 class="slide-title">o dilema dos dados de saúde & LGPD</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="card card-rose" style="height: 100%;">
+                        <div class="card-title">o peso da regulamentação (LGPD / HIPAA)</div>
+                        <p style="margin-top: 10px;">dados de saúde são classificados como <strong>dados pessoais sensíveis</strong> no artigo 5º da LGPD.</p>
+                        <ul class="feature-list" style="margin-top: 16px;">
+                            <li><strong>risco de vazamento:</strong> um banco de dados de saúde vazado causa danos irreversíveis aos usuários.</li>
+                            <li><strong>responsabilidade civil:</strong> multas pesadas da ANPD e processos individuais.</li>
+                            <li><strong>complexidade de compliance:</strong> direito ao esquecimento, logs de auditoria, criptografia de banco.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card card-purple" style="height: 100%;">
+                        <div class="card-title">onde a maioria dos projetos trava</div>
+                        <p style="margin-top: 10px;">criadores desistem de lançar serviços de saúde por receio da infraestrutura de banco de dados e custódia de prontuários.</p>
+                        <div style="margin-top: 24px; background: rgba(139, 92, 246, 0.1); border: 1px solid var(--accent-purple); padding: 18px; border-radius: 12px;">
+                            <strong style="color: var(--accent-purple); font-size: 1.3rem;">pergunta provocativa:</strong> é possível criar um assistente inteligente de anamnese sem guardar NENHUM dado de saúde do usuário?
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 4: A TESE ZERO-PERSISTENCE
+             ========================================== -->
+        <div class="slide" data-notes="[5 min] BLOCO 1C: a tese zero-persistence. a sacada: se você não armazena dados de saúde em disco, você zera o risco de vazamento de banco de dados! 0 tabelas SQL, 0 NoSQL, 0 logins. a sessão existe apenas em RAM/Redis temporário durante o uso e se autodestrói.">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 1 • a tese do projeto</div>
+                    <h2 class="slide-title">a tese: "zero-persistence" por design</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col-2">
+                    <div class="big-highlight">
+                        <h3>💡 "a melhor forma de proteger dados médicos em uma aplicação de saúde é NUNCA salvá-los em disco."</h3>
+                        <p style="margin-top: 14px;">arquitetamos o sistema desde o primeiro dia para operar como um pipeline efêmero de transformação de memória.</p>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 16px;">
+                        <div class="card card-green">
+                            <div class="card-title">zero database</div>
+                            <p>sem PostgreSQL, MySQL, SQLite ou MongoDB. nenhuma tabela médica existe.</p>
+                        </div>
+                        <div class="card card-green">
+                            <div class="card-title">zero logins</div>
+                            <p>sem contas de usuário, senhas ou armazenamento de perfis pessoais.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card card-accent" style="height: 100%;">
+                        <div class="card-title">como funciona na prática?</div>
+                        <ul class="feature-list" style="margin-top: 12px;">
+                            <li><strong>memória temporária (Redis TTL):</strong> estado mantido por no máximo 30 minutos enquanto o usuário preenche o wizard.</li>
+                            <li><strong>relatório gerado em RAM:</strong> o PDF é montado na memória RAM do servidor (`io.BytesIO`).</li>
+                            <li><strong>auto-destruição:</strong> ao baixar o PDF ou fechar a aba, a sessão é apagada sem deixar rastros.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 5: LIVE DEMO & QR CODE
+             ========================================== -->
+        <div class="slide" data-notes="[5 min] BLOCO 2A: convidar a plateia a testar o projeto no celular! acessar pre-consult.org ou escanear o QR code. pedir para sentirem como o fluxo é fluido e rápido.">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 2 • live demo (5 min)</div>
+                    <h2 class="slide-title">experimente ao vivo: pre-consult.org</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col" style="align-items: center; justify-content: center;">
+                    <div class="card card-accent" style="text-align: center; padding: 26px; width: 100%;">
+                        <div class="card-title" style="justify-content: center; font-size: 1.6rem;">abra no navegador do celular</div>
+                        
+                        <div style="background: white; padding: 18px; border-radius: 16px; display: inline-block; margin: 18px 0;">
+                            <svg width="240" height="240" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h33v33H0z"/><path stroke="#0B0F17" d="M4 4.5h7m2 0h2m2 0h1m2 0h1m1 0h7M4 5.5h1m5 0h1m3 0h1m3 0h3m1 0h1m5 0h1M4 6.5h1m1 0h3m1 0h1m1 0h1m2 0h2m2 0h2m1 0h1m1 0h3m1 0h1M4 7.5h1m1 0h3m1 0h1m1 0h1m2 0h6m1 0h1m1 0h3m1 0h1M4 8.5h1m1 0h3m1 0h1m1 0h3m3 0h1m1 0h1m1 0h1m1 0h3m1 0h1M4 9.5h1m5 0h1m1 0h2m2 0h1m1 0h3m1 0h1m5 0h1M4 10.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M12 11.5h5M4 12.5h1m1 0h5m4 0h3m1 0h2m1 0h5M5 13.5h1m2 0h1m3 0h1m2 0h3m2 0h2m1 0h1m3 0h1M6 14.5h1m3 0h1m1 0h8m2 0h1m2 0h1m1 0h2M5 15.5h5m3 0h3m4 0h1m7 0h1M5 16.5h1m2 0h3m1 0h1m2 0h4m2 0h4m1 0h3M4 17.5h1m1 0h1m1 0h2m2 0h2m3 0h1m2 0h1m2 0h1m1 0h1m1 0h1M4 18.5h1m1 0h2m2 0h1m1 0h1m1 0h12m1 0h2M4 19.5h1m1 0h1m1 0h2m4 0h2m2 0h1m1 0h5m3 0h1M4 20.5h1m1 0h1m3 0h4m1 0h1m1 0h2m1 0h5m1 0h1M12 21.5h3m1 0h1m1 0h3m3 0h2M4 22.5h7m3 0h1m2 0h1m2 0h1m1 0h1m1 0h1m1 0h3M4 23.5h1m5 0h1m1 0h1m1 0h1m1 0h1m3 0h1m3 0h2m1 0h1M4 24.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h9m1 0h3M4 25.5h1m1 0h3m1 0h1m1 0h1m7 0h1m1 0h1m1 0h5M4 26.5h1m1 0h3m1 0h1m1 0h1m2 0h5m5 0h2m1 0h1M4 27.5h1m5 0h1m4 0h1m2 0h4m1 0h3m2 0h1M4 28.5h7m1 0h1m1 0h3m4 0h8"/></svg>
+                        </div>
+                        
+                        <p style="font-family: var(--font-mono); font-size: 1.65rem; color: var(--primary); font-weight: 700;">https://pre-consult.org</p>
+                        <p style="font-size: 1.15rem; margin-top: 8px; color: var(--text-muted);">repositório open-source: <code>github.com/caazzi/preconsult_chat</code></p>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card card-green" style="height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                        <div class="card-title">o que você vai experimentar:</div>
+                        <ul class="feature-list" style="margin-top: 16px; gap: 14px;">
+                            <li><strong>interface limpa:</strong> sem necessidade de criar conta.</li>
+                            <li><strong>fluxo guiado:</strong> preenchimento rápido em menos de 3 minutos.</li>
+                            <li><strong>perguntas inteligentes:</strong> IA gerando dúvidas cirúrgicas baseadas no seu relato.</li>
+                            <li><strong>relatório final:</strong> download imediato de um PDF formatado para levar ao médico.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 6: A JORNADA DO USUÁRIO
+             ========================================== -->
+        <div class="slide" data-notes="[5 min] BLOCO 2B: a jornada do usuário. explicar a técnica de progressive disclosure (dividir 6 passos). mostrar por que é fundamental coletar dados estruturados ANTES da IA agir (evita perguntas repetidas).">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 2 • UX design & fluxo</div>
+                    <h2 class="slide-title">a jornada em 6 passos (progressive disclosure)</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col-3">
+                    <div class="card" style="height: 100%;">
+                        <div class="card-title">divisão da coleta médica para reduzir carga cognitiva</div>
+                        <p style="margin-bottom: 18px;">em vez de um formulário longo e assustador, o usuário é guiado por etapas curtas:</p>
+
+                        <div class="stepper-flow">
+                            <div class="step-box highlight">
+                                <div class="step-number">passo 1</div>
+                                <div class="step-title">perfil</div>
+                                <div class="step-desc">idade e sexo biológico</div>
+                            </div>
+                            <div class="step-box highlight">
+                                <div class="step-number">passo 2</div>
+                                <div class="step-title">queixa</div>
+                                <div class="step-desc">sintoma & SOCRATES</div>
+                            </div>
+                            <div class="step-box highlight">
+                                <div class="step-number">passo 3</div>
+                                <div class="step-title">histórico</div>
+                                <div class="step-desc">remédios e alergias</div>
+                            </div>
+                            <div class="step-box highlight">
+                                <div class="step-number">passo 4</div>
+                                <div class="step-title">hábitos</div>
+                                <div class="step-desc">fumo, álcool, família</div>
+                            </div>
+                            <div class="step-box highlight">
+                                <div class="step-number">passo 5</div>
+                                <div class="step-title">IA stream</div>
+                                <div class="step-desc">perguntas clínicas</div>
+                            </div>
+                            <div class="step-box highlight">
+                                <div class="step-number">passo 6</div>
+                                <div class="step-title">PDF RAM</div>
+                                <div class="step-desc">download e descarte</div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 22px; background: rgba(16, 185, 129, 0.08); border: 1px solid var(--accent-green); padding: 18px; border-radius: 12px;">
+                            <strong style="color: var(--accent-green); font-size: 1.3rem;">por que estruturar os passos 1 a 4 antes da IA?</strong>
+                            <p style="font-size: 1.2rem; margin-top: 6px; color: var(--text-muted);">quando a IA entra em ação no passo 5, ela já sabe se o paciente toma remédios ou tem alergias. assim, a IA <strong>nunca faz perguntas redundantes</strong> que já foram respondidas no formulário!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 7: ARQUITETURA FULL-STACK PYTHON
+             ========================================== -->
+        <div class="slide" data-notes="[8 min] BLOCO 3: apresentar a arquitetura completa. explicar a conexão entre o frontend em Reflex, a API FastAPI, o cache de sessão Redis, o motor de LLM LangChain e o serviço de PDF em ReportLab.">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 3 • arquitetura de software</div>
+                    <h2 class="slide-title">visão geral da arquitetura do sistema</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col-3">
+                    <div class="card" style="height: 100%;">
+                        <div class="card-title">diagrama de componentes Full-Stack Python</div>
+                        
+                        <svg class="arch-diagram" viewBox="0 0 800 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="20" y="30" width="180" height="230" rx="12" fill="#1E293B" stroke="#0EA5E9" stroke-width="2"/>
+                            <text x="110" y="58" text-anchor="middle" fill="#0EA5E9" font-family="Inter" font-weight="700" font-size="13">FRONTEND (Reflex)</text>
+                            <text x="110" y="80" text-anchor="middle" fill="#94A3B8" font-family="JetBrains Mono" font-size="10">rx.State & Components</text>
+                            
+                            <rect x="35" y="105" width="150" height="36" rx="6" fill="#0F172A" stroke="#2E3D52"/>
+                            <text x="110" y="128" text-anchor="middle" fill="#F1F5F9" font-size="11">6-step UI wizard</text>
+
+                            <rect x="35" y="155" width="150" height="36" rx="6" fill="#0F172A" stroke="#2E3D52"/>
+                            <text x="110" y="178" text-anchor="middle" fill="#F1F5F9" font-size="11">SSE client (httpx)</text>
+
+                            <rect x="35" y="205" width="150" height="30" rx="6" fill="#10B981" fill-opacity="0.2" stroke="#10B981"/>
+                            <text x="110" y="225" text-anchor="middle" fill="#10B981" font-size="11" font-weight="600">PDF download stream</text>
+
+                            <path d="M 200 123 L 290 123" stroke="#0EA5E9" stroke-width="2" stroke-dasharray="4 4"/>
+                            <polygon points="290,123 282,118 282,128" fill="#0EA5E9"/>
+                            <text x="245" y="113" text-anchor="middle" fill="#94A3B8" font-size="10">POST /session/init</text>
+
+                            <path d="M 200 173 L 290 173" stroke="#38BDF8" stroke-width="2"/>
+                            <polygon points="290,173 282,168 282,178" fill="#38BDF8"/>
+                            <text x="245" y="163" text-anchor="middle" fill="#94A3B8" font-size="10">SSE questions</text>
+
+                            <rect x="290" y="30" width="220" height="230" rx="12" fill="#1E293B" stroke="#10B981" stroke-width="2"/>
+                            <text x="400" y="58" text-anchor="middle" fill="#10B981" font-family="Inter" font-weight="700" font-size="13">BACKEND (FastAPI)</text>
+                            
+                            <rect x="305" y="85" width="190" height="32" rx="6" fill="#0F172A" stroke="#2E3D52"/>
+                            <text x="400" y="106" text-anchor="middle" fill="#F1F5F9" font-size="11">endpoints.py (ASGI)</text>
+
+                            <rect x="305" y="127" width="190" height="32" rx="6" fill="#0F172A" stroke="#2E3D52"/>
+                            <text x="400" y="148" text-anchor="middle" fill="#F1F5F9" font-size="11">agent_service.py (LangChain)</text>
+
+                            <rect x="305" y="169" width="190" height="32" rx="6" fill="#0F172A" stroke="#2E3D52"/>
+                            <text x="400" y="190" text-anchor="middle" fill="#F1F5F9" font-size="11">pdf_service.py (ReportLab)</text>
+
+                            <rect x="305" y="211" width="190" height="30" rx="6" fill="#0F172A" stroke="#2E3D52"/>
+                            <text x="400" y="231" text-anchor="middle" fill="#94A3B8" font-size="10">session_service.py</text>
+
+                            <rect x="570" y="30" width="200" height="95" rx="12" fill="#1E293B" stroke="#F43F5E" stroke-width="2"/>
+                            <text x="670" y="58" text-anchor="middle" fill="#F43F5E" font-family="Inter" font-weight="700" font-size="12">REDIS (Upstash/GCP)</text>
+                            <text x="670" y="80" text-anchor="middle" fill="#94A3B8" font-size="10">TTL = 30 minutos (1800s)</text>
+                            <text x="670" y="100" text-anchor="middle" fill="#F59E0B" font-size="10">fallback: MemoryStore</text>
+
+                            <rect x="570" y="150" width="200" height="110" rx="12" fill="#1E293B" stroke="#8B5CF6" stroke-width="2"/>
+                            <text x="670" y="178" text-anchor="middle" fill="#8B5CF6" font-family="Inter" font-weight="700" font-size="12">LLM ENGINE</text>
+                            <text x="670" y="200" text-anchor="middle" fill="#F1F5F9" font-size="11">Vertex AI / Gemini</text>
+                            <text x="670" y="220" text-anchor="middle" fill="#34D399" font-size="10">single interview chain</text>
+
+                            <path d="M 510 100 L 570 78" stroke="#F43F5E" stroke-width="2"/>
+                            <path d="M 510 143 L 570 190" stroke="#8B5CF6" stroke-width="2"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 8: POR QUE REFLEX? (PYTHON AO MÁXIMO)
+             ========================================== -->
+        <div class="slide" data-notes="[6 min] BLOCO 5A: por que Reflex? explicar o objetivo explícito de usar Python o máximo que conseguisse no projeto. o Reflex permite criar UIs web em Python puro compiladas para React/Next.js. não foi preciso escrever React/JS!">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 4 • frontend Python (Reflex)</div>
+                    <h2 class="slide-title">usando Python ao máximo com Reflex</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="card card-green" style="height: 100%;">
+                        <div class="card-title">🐍 a decisão de usar 100% Python</div>
+                        <p style="margin-top: 10px;">para a maioria das aplicações web, você é forçado a manter duas linguagens: Python no backend e TypeScript/React no frontend.</p>
+                        
+                        <div style="margin-top: 18px; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-green); padding: 18px; border-radius: 12px;">
+                            <strong style="color: var(--accent-green); font-size: 1.15rem;">objetivo do projeto:</strong> "levar o ecossistema Python ao limite máximo — construindo do frontend ao backend sem tocar em JS."
+                        </div>
+
+                        <ul class="feature-list" style="margin-top: 18px;">
+                            <li><strong>interface reativa em Python:</strong> componentes como <code>rx.vstack()</code>, <code>rx.button()</code> e <code>rx.match()</code>.</li>
+                            <li><strong>estado unificado (`rx.State`):</strong> toda a lógica de sessão, rascunho no <code>localStorage</code> e cookies escrita em Python no <code>state.py</code>.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card card-accent" style="height: 100%;">
+                        <div class="card-title">como o Reflex opera nos bastidores</div>
+                        <p style="margin-top: 10px;">o Reflex analisa o código Python e transpila automaticamente para um app React/Next.js moderno.</p>
+                        <ul class="feature-list" style="margin-top: 16px;">
+                            <li><strong>servidor de eventos WebSocket/HTTP:</strong> sincronização em tempo real entre o estado em Python e o DOM.</li>
+                            <li><strong>zero context-switching:</strong> o desenvolvedor trabalha 100% do tempo no mesmo ambiente de execução e tipos Python.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 9: BACKEND FASTAPI
+             ========================================== -->
+        <div class="slide" data-notes="[6 min] BLOCO 5B: backend FastAPI. explicar a escolha do FastAPI para gerenciar requisições assíncronas (ASGI), validação Pydantic, Sentry para monitoramento e rotas REST/SSE. mostrar código real do endpoints.py!">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 4 • backend FastAPI & SSE</div>
+                    <h2 class="slide-title">backend assíncrono com FastAPI</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col-2">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                            <span>src/preconsult/api/endpoints.py</span>
+                            <button class="copy-btn" onclick="copyCode(this)">copiar</button>
+                        </div>
+                        <pre><code><span class="cm"># Endpoint de Inicialização de Sessão com Validação Pydantic</span>
+<span class="kw">@router.post</span>(<span class="str">"/session/init"</span>, response_model=SessionInitResponse)
+<span class="kw">async def</span> <span class="fn">init_session</span>(request: SessionInitRequest):
+    session_data = {
+        <span class="str">"age_bracket"</span>: request.age_bracket,
+        <span class="str">"sex"</span>: request.sex,
+        <span class="str">"specialist"</span>: request.specialist,
+        <span class="str">"chief_complaint"</span>: request.chief_complaint,
+        <span class="str">"conditions"</span>: request.conditions,
+        <span class="str">"medications"</span>: request.medications,
+    }
+    session_id = <span class="kw">await</span> create_session(session_data)
+    <span class="kw">return</span> SessionInitResponse(session_id=session_id)</code></pre>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card card-accent" style="height: 100%;">
+                        <div class="card-title">por que FastAPI & SSE (Server-Sent Events)?</div>
+                        <ul class="feature-list" style="margin-top: 12px;">
+                            <li><strong>performance assíncrona (ASGI):</strong> I/O não-bloqueante ideal para conexões de streaming com a LLM.</li>
+                            <li><strong>SSE vs WebSockets:</strong> SSE usa HTTP/2 unidirecional leve, com reconexão automática nativa no browser e sem manter sockets bidirecionais abertos no Cloud Run.</li>
+                            <li><strong>contratos rígidos (Pydantic v2):</strong> validação automática de esquemas JSON sem código boilerplate.</li>
+                            <li><strong>observabilidade com Sentry:</strong> captura avançada de erros filtrando PII e dados médicos.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 10: REDIS EFÊMERO & FALLBACK
+             ========================================== -->
+        <div class="slide" data-notes="[8 min] BLOCO 4A: Redis efêmero. explicar como funciona o `session_service.py`: TTL de 30 minutos (`SESSION_TTL = 1800`), e o fallback em memória `MemoryRateLimitStore` que assume se o Redis estiver indisponível.">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 5 • estado efêmero (Redis)</div>
+                    <h2 class="slide-title">Redis efêmero & fallback em memória</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col-2">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                            <span>src/preconsult/services/session_service.py</span>
+                            <button class="copy-btn" onclick="copyCode(this)">copiar</button>
+                        </div>
+                        <pre><code><span class="cm"># TTL de 30 Minutos (1800s) e Fallback em RAM</span>
+SESSION_TTL = <span class="num">30</span> * <span class="num">60</span>  <span class="cm"># Auto-destruição em 30 min</span>
+
+<span class="kw">async def</span> <span class="fn">create_session</span>(data: <span class="kw">dict</span>) -> <span class="kw">str</span>:
+    session_id = <span class="kw">str</span>(uuid.uuid4())
+    key = <span class="str">f"session:{session_id}"</span>
+    
+    client = get_redis()
+    <span class="kw">if</span> client <span class="kw">is not None</span>:
+        <span class="kw">await</span> client.hset(key, mapping=_serialize(data))
+        <span class="kw">await</span> client.expire(key, SESSION_TTL)  <span class="cm"># Expiração forçada no Redis</span>
+    <span class="kw">else</span>:
+        logging.info(<span class="str">"Sessão em memória (Redis offline fallback)"</span>)
+    <span class="kw">return</span> session_id</code></pre>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card card-amber" style="height: 100%;">
+                        <div class="card-title">resiliência sem persistência</div>
+                        <p style="margin-top: 10px;">se a instância do Redis expirar ou ficar offline, o sistema ativa transparentemente o <code>MemoryRateLimitStore</code> usando <code>time.monotonic()</code>.</p>
+                        <ul class="feature-list" style="margin-top: 16px;">
+                            <li>nenhum dado é gravado no disco rígido do servidor.</li>
+                            <li>garantia matemática de expiração de dados após 30 minutos de inatividade.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 11: A MURALHA DE PRIVACIDADE
+             ========================================== -->
+        <div class="slide" data-notes="[8 min] BLOCO 4B: a muralha de privacidade. explicar a regra de ouro: o formulário inicial estruturado alimenta o prompt da LLM. porém, quando o paciente responde em texto livre (as respostas da anamnese), essas respostas JAMAIS voltam para a LLM! o PDF junta as duas coisas de forma determinística.">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 5 • muralha de privacidade</div>
+                    <h2 class="slide-title">a muralha de privacidade (privacy wall)</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="card card-accent" style="height: 100%;">
+                        <div class="card-title">1. o que VAI para a LLM</div>
+                        <p style="margin-top: 10px;">apenas os dados <strong>estruturados e demográficos</strong> do formulário inicial:</p>
+                        <ul class="feature-list" style="margin-top: 16px;">
+                            <li>idade, sexo biológico, especialidade.</li>
+                            <li>sintoma principal curto e opções checadas (ex: hipertensão: sim).</li>
+                        </ul>
+                        <p style="margin-top: 16px; font-size: 0.95rem; color: var(--primary);">➔ utilizado para gerar 3 a 5 perguntas clínicas cirúrgicas.</p>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card card-rose" style="height: 100%;">
+                        <div class="card-title">2. o que NUNCA vai para a LLM</div>
+                        <p style="margin-top: 10px;">as <strong>respostas em texto livre do paciente</strong> às perguntas da anamnese!</p>
+                        <ul class="feature-list" style="margin-top: 16px;">
+                            <li>informações ultrassensíveis escritas pelo usuário.</li>
+                            <li>descrições pessoais detalhadas de dores ou histórico íntimo.</li>
+                        </ul>
+                        <p style="margin-top: 16px; font-size: 0.95rem; color: var(--accent-rose);">➔ vão direto para o gerador de PDF sem reenviar para nenhuma API de IA.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 12: PROMPT ENGINEERING CLÍNICO
+             ========================================== -->
+        <div class="slide" data-notes="[6 min] BLOCO 5C: prompt engineering clínico. mostrar o prompt da cadeia única no LangChain (`agent_service.py`). destacar a regra estrita de NÃO DIAGNOSTICAR e o interceptador automático de emergências (dor no peito / falta de ar).">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 6 • IA clínica & segurança (Gemini)</div>
+                    <h2 class="slide-title">prompt engineering & interceptador de emergências</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col-2">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                            <span>src/preconsult/services/agent_service.py</span>
+                            <button class="copy-btn" onclick="copyCode(this)">copiar</button>
+                        </div>
+                        <pre><code><span class="cm"># Prompt da Cadeia Única de Anamnese (LangChain + Vertex AI)</span>
+_interview_chain = PromptTemplate.from_messages([
+    (<span class="str">"system"</span>, (
+        <span class="str">"You are a clinical intake assistant... STRICT RULES:\n"</span>
+        <span class="str">"1. YOU ARE NOT A DOCTOR. Never suggest diagnoses or treatments.\n"</span>
+        <span class="str">"2. Do not re-ask information already in the form.\n"</span>
+        <span class="str">"3. Focus on current complaint: onset, radiation, severity...\n"</span>
+        <span class="str">"4. EMERGENCY RULE: If symptoms suggest severe chest pain or sudden "</span>
+        <span class="str">"dyspnea, output ONLY emergency warning directing patient to immediate care!\n"</span>
+        <span class="str">"5. Generate between 3 and 5 open-ended questions.\n"</span>
+    )),
+    (<span class="str">"human"</span>, <span class="str">"Chief complaint: {chief_complaint}\nMedications: {medications}..."</span>)
+]) | get_llm() | StrOutputParser()</code></pre>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card card-rose" style="height: 100%;">
+                        <div class="card-title">🚨 protocolo de emergência automático</div>
+                        <p style="margin-top: 10px;">se a queixa ou o streaming emitir termos de urgência crítica (ex: dor no peito irradiada, perda de consciência):</p>
+                        <div style="margin-top: 16px; background: rgba(244, 63, 94, 0.1); border: 1px solid var(--accent-rose); padding: 16px; border-radius: 10px;">
+                            <strong style="color: var(--accent-rose);">ação do sistema:</strong> o questionário é interrompido imediatamente e o paciente é instruído a buscar o pronto-socorro ou ligar para o SAMU/192.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 13: RELATÓRIO PDF EM RAM
+             ========================================== -->
+        <div class="slide" data-notes="[8 min] BLOCO 4C: PDF 100% em RAM. explicar como o `pdf_service.py` constrói o documento ReportLab usando `io.BytesIO()`. não há chamada de LLM para resumir; a montagem é determinística e streamed diretamente como octet-stream para o browser.">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 6 • geração de PDF em RAM</div>
+                    <h2 class="slide-title">geração determinística de PDF em RAM</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col-2">
+                    <div class="code-container">
+                        <div class="code-header">
+                            <div class="dots"><div class="dot dot-red"></div><div class="dot dot-yellow"></div><div class="dot dot-green"></div></div>
+                            <span>src/preconsult/services/pdf_service.py</span>
+                            <button class="copy-btn" onclick="copyCode(this)">copiar</button>
+                        </div>
+                        <pre><code><span class="cm"># Geração determinística de PDF em RAM (ReportLab + BytesIO)</span>
+<span class="kw">def</span> <span class="fn">generate_pdf_report_in_memory</span>(form: <span class="kw">dict</span>, qa_pairs: <span class="kw">list</span>, lang: <span class="kw">str</span> = <span class="str">'en'</span>) -> <span class="kw">tuple</span>[<span class="kw">bytes</span>, <span class="kw">str</span>]:
+    buffer = io.BytesIO()  <span class="cm"># Buffer em memória RAM</span>
+    c = canvas.Canvas(buffer, pagesize=letter)
+    
+    <span class="cm"># Renderiza formulário estruturado + respostas íntegras</span>
+    draw_labeled_section(labels[<span class="str">'chief_complaint'</span>], form.get(<span class="str">"chief_complaint"</span>))
+    <span class="kw">for</span> i, qa <span class="kw">in</span> <span class="kw">enumerate</span>(qa_pairs):
+        draw_labeled_section(<span class="str">f"Q{i+1}"</span>, qa.get(<span class="str">"question"</span>))
+        draw_labeled_section(<span class="str">"A"</span>, qa.get(<span class="str">"answer"</span>))
+    
+    c.showPage()
+    c.save()
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    <span class="kw">return</span> pdf_bytes, filename  <span class="cm"># Stream de bytes direto para o browser</span></code></pre>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card card-green" style="height: 100%;">
+                        <div class="card-title">vantagens do PDF determinístico</div>
+                        <ul class="feature-list" style="margin-top: 12px; gap: 12px;">
+                            <li><strong>zero custo de LLM no PDF:</strong> não gasta tokens nem tempo chamando a IA para sumarizar.</li>
+                            <li><strong>zero alucinação:</strong> o texto do paciente é impresso <i>verbatim</i> exatamente como digitado.</li>
+                            <li><strong>entrega instantânea:</strong> stream de bytes enviado via HTTP com header <code>application/pdf</code>.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 14: CLOUD RUN & GOOGLE ADS
+             ========================================== -->
+        <div class="slide" data-notes="[8 min] BLOCO 6: do lab para a operação. contar a experiência real de deploy no GCP Cloud Run (container Docker minificado, Scale-to-Zero, WIF) e os testes de demanda real usando campanhas no Google Ads para entender se pessoas reais usariam a ferramenta.">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 7 • operação & validação</div>
+                    <h2 class="slide-title">do lab para a operação: Cloud Run & Google Ads</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="card card-accent" style="padding: 18px 22px;">
+                        <div class="card-title" style="font-size: 1.2rem; margin-bottom: 8px;">deploy serverless (GCP Cloud Run)</div>
+                        <ul class="feature-list" style="gap: 10px;">
+                            <li><strong>scale-to-zero:</strong> custo R$0 em idle sem requisições.</li>
+                            <li><strong>WIF:</strong> deploy via GitHub Actions sem guardar `.json`.</li>
+                            <li><strong>Cloudflare front-door:</strong> SSL e mitigação de DDOS.</li>
+                        </ul>
+                    </div>
+                    <div class="card card-amber" style="padding: 18px 22px;">
+                        <div class="card-title" style="font-size: 1.2rem; margin-bottom: 8px;">experimento real no Google Ads</div>
+                        <p style="font-size: 1.05rem;">anúncios rodados com tracking via <code>gclid</code> e <code>gad_campaignid</code> para testar se a dor da pré-consulta era real.</p>
+                    </div>
+                </div>
+                <div class="col-2">
+                    <div class="metrics-grid">
+                        <div class="metric-card" style="padding: 18px;">
+                            <div class="metric-value" style="font-size: 2.6rem;">100%</div>
+                            <div class="metric-label" style="font-size: 0.95rem;">Python stack</div>
+                            <div class="metric-sub" style="font-size: 0.78rem;">FastAPI + Reflex</div>
+                        </div>
+                        <div class="metric-card" style="padding: 18px;">
+                            <div class="metric-value" style="font-size: 2.6rem;">0 Bytes</div>
+                            <div class="metric-label" style="font-size: 0.95rem;">dados salvos</div>
+                            <div class="metric-sub" style="font-size: 0.78rem;">zero-persistence</div>
+                        </div>
+                        <div class="metric-card" style="padding: 18px;">
+                            <div class="metric-value" style="font-size: 2.6rem;">&lt; 3s</div>
+                            <div class="metric-label" style="font-size: 0.95rem;">latência LLM</div>
+                            <div class="metric-sub" style="font-size: 0.78rem;">streaming SSE</div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top: 14px; padding: 18px 22px;">
+                        <div class="card-title" style="font-size: 1.2rem; margin-bottom: 8px;">💡 aprendizados práticos de UX</div>
+                        <ul class="feature-list" style="gap: 10px;">
+                            <li><strong>mobile é +85% do tráfego:</strong> alvos de toque grandes (min 44px) foram vitais.</li>
+                            <li><strong>mensagens de confiança:</strong> avisos de descarte reduziram abandono no formulário.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             SLIDE 15: CONCLUSÃO & Q&A
+             ========================================== -->
+        <div class="slide" data-notes="[5 min] BLOCO 7: conclusão & perguntas. recapitular a história em 4 pilares: privacidade por design, Python ao máximo, prompts clínicos seguros e validação com tráfego real. agradecer a comunidade da Python Sudeste 2026 e abrir para perguntas!">
+            <div class="slide-header">
+                <div>
+                    <div class="slide-tag">bloco 7 • conclusão & perguntas</div>
+                    <h2 class="slide-title">conclusão & perguntas da plateia</h2>
+                </div>
+            </div>
+            <div class="slide-body">
+                <div class="col">
+                    <div class="card card-green" style="height: 100%;">
+                        <div class="card-title">4 lições para levar para casa</div>
+                        <ul class="feature-list" style="margin-top: 16px; gap: 16px;">
+                            <li><strong>1. privacidade por design funciona:</strong> você não precisa virar custodiante de dados médicos para criar um bom serviço.</li>
+                            <li><strong>2. Python ao máximo com Reflex:</strong> é possível criar aplicações web modernas do frontend ao backend em 100% Python.</li>
+                            <li><strong>3. mantenha a IA sob rédea curta:</strong> formulários estruturados + prompts com regras rígidas evitam alucinações.</li>
+                            <li><strong>4. lance e valide cedo:</strong> anúncios e tráfego real ensinam mais sobre UX do que meses de suposições no código.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card card-accent" style="height: 100%; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                        <h3 style="font-size: 2.4rem; margin-bottom: 16px; color: #FFFFFF;">muito obrigado!</h3>
+                        <p style="font-size: 1.15rem; color: var(--text-muted); margin-bottom: 28px;">perguntas ou comentários?</p>
+                        
+                        <div style="background: rgba(14, 165, 233, 0.12); border: 1px solid var(--primary); padding: 18px 32px; border-radius: 14px; margin-bottom: 20px;">
+                            <p style="font-family: var(--font-mono); font-size: 1.3rem; color: var(--primary); font-weight: 700;">https://pre-consult.org</p>
+                        </div>
+                        <p style="font-family: var(--font-mono); font-size: 1.2rem; color: var(--text-muted);">github.com/caazzi/preconsult_chat</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Speaker Notes Panel -->
+    <div id="speaker-notes">
+        <h3>
+            <span>📝 notas do palestrante</span>
+            <button onclick="toggleNotes()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.2rem;">✕</button>
+        </h3>
+        <div id="speaker-notes-content"></div>
+    </div>
+
+    <!-- Grid Overview Overlay -->
+    <div id="grid-overlay">
+        <div style="text-align: right; max-width: 1600px; margin: 0 auto 20px auto;">
+            <button class="ctrl-btn" onclick="toggleGrid()">✕ fechar visão geral</button>
+        </div>
+        <div class="grid-container" id="grid-container"></div>
+    </div>
+
+    <script>
+        let currentSlideIndex = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+        const progressBar = document.getElementById('progress-bar');
+        const notesPanel = document.getElementById('speaker-notes');
+        const notesContent = document.getElementById('speaker-notes-content');
+        const gridOverlay = document.getElementById('grid-overlay');
+        const gridContainer = document.getElementById('grid-container');
+
+        function updateSlide() {
+            slides.forEach((slide, idx) => {
+                if (idx === currentSlideIndex) {
+                    slide.classList.add('active');
+                } else {
+                    slide.classList.remove('active');
+                }
+            });
+
+            const progress = ((currentSlideIndex + 1) / totalSlides) * 100;
+            progressBar.style.width = `${progress}%`;
+
+            // Update speaker notes
+            const activeSlide = slides[currentSlideIndex];
+            const notes = activeSlide.getAttribute('data-notes') || 'sem notas para este slide.';
+            notesContent.innerHTML = `<p>${notes.replace(/\n/g, '<br>')}</p>`;
+
+            // Highlight active thumb in grid
+            document.querySelectorAll('.grid-thumb').forEach((thumb, idx) => {
+                if (idx === currentSlideIndex) {
+                    thumb.classList.add('active');
+                } else {
+                    thumb.classList.remove('active');
+                }
+            });
+        }
+
+        function nextSlide() {
+            if (currentSlideIndex < totalSlides - 1) {
+                currentSlideIndex++;
+                updateSlide();
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlideIndex > 0) {
+                currentSlideIndex--;
+                updateSlide();
+            }
+        }
+
+        function goToSlide(index) {
+            currentSlideIndex = index;
+            updateSlide();
+            if (gridOverlay.classList.contains('open')) {
+                toggleGrid();
+            }
+        }
+
+        function toggleNotes() {
+            notesPanel.classList.toggle('open');
+        }
+
+        function toggleGrid() {
+            gridOverlay.classList.toggle('open');
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {});
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        function copyCode(btn) {
+            const container = btn.closest('.code-container');
+            const code = container.querySelector('code').innerText;
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = btn.innerText;
+                btn.innerText = 'copiado!';
+                btn.style.background = 'var(--accent-green)';
+                btn.style.color = 'white';
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.background = 'transparent';
+                    btn.style.color = 'var(--text-muted)';
+                }, 2000);
+            });
+        }
+
+        // Build Grid Overview
+        slides.forEach((slide, idx) => {
+            const titleEl = slide.querySelector('.slide-title') || slide.querySelector('.cover-title');
+            const titleText = titleEl ? titleEl.innerText : `slide ${idx + 1}`;
+
+            const thumb = document.createElement('div');
+            thumb.className = `grid-thumb ${idx === 0 ? 'active' : ''}`;
+            thumb.onclick = () => goToSlide(idx);
+            thumb.innerHTML = `
+                <div class="grid-thumb-num">SLIDE ${idx + 1}</div>
+                <div class="grid-thumb-title">${titleText}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">clique para ir ao slide</div>
+            `;
+            gridContainer.appendChild(thumb);
+        });
+
+        // Keyboard Controls
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                e.preventDefault();
+                prevSlide();
+            } else if (e.key === 'Home') {
+                e.preventDefault();
+                goToSlide(0);
+            } else if (e.key === 'End') {
+                e.preventDefault();
+                goToSlide(totalSlides - 1);
+            } else if (e.key.toLowerCase() === 'n') {
+                e.preventDefault();
+                toggleNotes();
+            } else if (e.key.toLowerCase() === 'g') {
+                e.preventDefault();
+                toggleGrid();
+            } else if (e.key.toLowerCase() === 'f') {
+                e.preventDefault();
+                toggleFullscreen();
+            }
+        });
+
+        // Initialize
+        updateSlide();
+    </script>
+</body>
+</html>

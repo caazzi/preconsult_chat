@@ -96,7 +96,7 @@ class State(rx.State):
     
     # --- General Form State ---
     gender: str = ""
-    lang: str = "en"
+    lang: str = rx.Cookie("en", name="preconsult_lang", max_age=365 * 24 * 3600, path="/")
     session_id: str = ""
     
     # --- Step 2: Chief Complaint ---
@@ -148,38 +148,39 @@ class State(rx.State):
             self.utm_source = query_params.get("utm_source", "")
             self.utm_campaign = query_params.get("utm_campaign", "")
 
-            lang_cookie = self.get_cookie("preconsult_lang")
-            if lang_cookie in ("pt", "en"):
-                self.lang = lang_cookie
-                return
             lang_param = query_params.get("lang", "").lower()
             if lang_param in ("pt", "en"):
                 self.lang = lang_param
                 return
+
+            if self.lang in ("pt", "en") and self.lang != "en":
+                return
+
             accept_lang = self.router.headers.get("accept-language", "")
             parsed = []
             for entry in accept_lang.split(","):
                 parts = entry.split(";")
-                lang = parts[0].strip().lower().split("-")[0]
+                lang_code = parts[0].strip().lower().split("-")[0]
                 q = 1.0
                 if len(parts) > 1:
                     import re
                     m = re.search(r"q=([\d.]+)", parts[1])
                     if m:
                         q = float(m.group(1))
-                if lang in ("en", "pt"):
-                    parsed.append((lang, q))
+                if lang_code in ("en", "pt"):
+                    parsed.append((lang_code, q))
             parsed.sort(key=lambda x: x[1], reverse=True)
-            self.lang = parsed[0][0] if parsed else "en"
+            if parsed:
+                self.lang = parsed[0][0]
         except Exception:
-            self.lang = "en"
+            pass
 
     def set_gender(self, val: str):
         self.gender = val
 
     def set_lang(self, val: str):
-        self.lang = val
-        self.set_cookie("preconsult_lang", val, max_age=365 * 24 * 3600, path="/")
+        if val in ("en", "pt"):
+            self.lang = val
 
     def set_chief_complaint(self, val: str):
         self.chief_complaint = val
@@ -310,6 +311,34 @@ class State(rx.State):
 
     def _clear_draft_script(self):
         return rx.call_script("try { localStorage.removeItem('preconsult_draft'); } catch(e) {}")
+
+    def reset_intake(self):
+        self.step = 0
+        self.gender = ""
+        self.specialist = ""
+        self.age_bracket = ""
+        self.chief_complaint = ""
+        self.duration = ""
+        self.complaint_detail = ""
+        self.conditions = []
+        self.medications = []
+        self.allergies_flag = False
+        self.allergies_text = ""
+        self.family_history = []
+        self.smoking = ""
+        self.alcohol = ""
+        self.questions = []
+        self.current_answers = []
+        self._qs_buffer = ""
+        self.summary_text = ""
+        self.is_emergency = False
+        self.question_index = 0
+        self.session_id = ""
+        self.error_message = ""
+        self.loading = False
+        yield self._clear_draft_script()
+        yield self._scroll_top_script()
+        yield rx.redirect("/")
 
     def go_back(self):
         if self.step > 0:

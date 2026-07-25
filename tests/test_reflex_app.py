@@ -159,4 +159,18 @@ def test_state_scroll_and_draft_scripts():
     assert "localStorage.removeItem" in repr(clear_script) or "localStorage.removeItem" in str(clear_script.args)
 
 
+def test_state_reset_intake():
+    state = State()
+    state.step = 6
+    state.chief_complaint = "Headache"
+    state.session_id = "sess_123"
+    
+    events = list(state.reset_intake())
+    assert state.step == 0
+    assert state.chief_complaint == ""
+    assert state.session_id == ""
+    assert len(events) == 3
+
+
+
 

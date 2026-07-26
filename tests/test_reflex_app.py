@@ -223,6 +223,19 @@ def test_get_router_params_helper():
     assert _get_router_params(MockRouterWithPage()) == {"token": "secret123"}
 
 
+def test_state_set_answer_out_of_bounds():
+    state = State()
+    state.current_answers = []
+    # Test setting answer for index 0 when list is empty
+    state.set_answer(0, "Answer 1")
+    assert state.current_answers == ["Answer 1"]
+
+    # Test setting answer for index 3 when list length is 1
+    state.set_answer(3, "Answer 4")
+    assert state.current_answers == ["Answer 1", "", "", "Answer 4"]
+
+
+
 
 
 

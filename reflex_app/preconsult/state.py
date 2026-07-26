@@ -290,6 +290,8 @@ class State(rx.State):
 
     def set_answer(self, idx: int, val: str):
         answers = self.current_answers.copy()
+        while len(answers) <= idx:
+            answers.append("")
         answers[idx] = val
         self.current_answers = answers
 

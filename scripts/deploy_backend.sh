@@ -7,7 +7,7 @@ REGION=${GOOGLE_CLOUD_REGION:-"us-central1"}
 SERVICE_NAME=${SERVICE_NAME:-"preconsult"}
 # ------------------------------------
 
-PROFILE=${1:-${DEPLOY_PROFILE:-"high_performance"}}
+PROFILE=${1:-${DEPLOY_PROFILE:-"cost_optimized"}}
 echo "🚀 Starting Backend Deployment for PreConsult (Profile: $PROFILE)..."
 
 # Check if logged in
@@ -28,7 +28,7 @@ fi
 if [ "$PROFILE" = "high_performance" ]; then
     PROFILE_FLAGS="--min-instances 2 --max-instances 10 --concurrency 40 --cpu 2 --memory 2Gi --no-cpu-throttling"
 else
-    PROFILE_FLAGS="--min-instances 1 --max-instances 5 --concurrency 80 --cpu 1 --memory 1Gi"
+    PROFILE_FLAGS="--min-instances 1 --max-instances 5 --concurrency 80 --cpu 1 --memory 1Gi --cpu-throttling"
 fi
 
 echo "🐳 Building and deploying container to Cloud Run ($PROFILE)..."

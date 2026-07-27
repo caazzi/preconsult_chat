@@ -38,22 +38,45 @@ fi
 # Target Cloud Run domain (update with 'gcloud run services describe preconsult --region=us-central1 --format="value(status.url)"' hostname)
 TARGET_URL=${CLOUD_RUN_TARGET_URL:-"preconsult-811607528687.us-central1.run.app"}
 
-echo "🛰️ 1. Creating CNAME record for pre-consult.org -> $TARGET_URL (Proxied)..."
-DNS_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records" \
+echo "🛰️ 1. Ensuring DNS record for pre-consult.org -> $TARGET_URL (Proxied: true)..."
+
+# Fetch existing DNS records
+RECORDS_JSON=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records?name=pre-consult.org" \
      -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-     -H "Content-Type: application/json" \
-     --data "{
-       \"type\": \"CNAME\",
-       \"name\": \"@\",
-       \"content\": \"${TARGET_URL}\",
-       \"ttl\": 1,
-       \"proxied\": true
-     }")
+     -H "Content-Type: application/json")
+
+RECORD_ID=$(echo "$RECORDS_JSON" | jq -r '.result[0].id // empty')
+
+if [ -n "$RECORD_ID" ]; then
+    echo "ℹ️ Existing DNS record found ($RECORD_ID). Updating record to CNAME -> $TARGET_URL (Proxied: true)..."
+    DNS_RESPONSE=$(curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${RECORD_ID}" \
+         -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+         -H "Content-Type: application/json" \
+         --data "{
+           \"type\": \"CNAME\",
+           \"name\": \"@\",
+           \"content\": \"${TARGET_URL}\",
+           \"ttl\": 1,
+           \"proxied\": true
+         }")
+else
+    echo "➕ Creating new CNAME record for pre-consult.org -> $TARGET_URL (Proxied: true)..."
+    DNS_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records" \
+         -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+         -H "Content-Type: application/json" \
+         --data "{
+           \"type\": \"CNAME\",
+           \"name\": \"@\",
+           \"content\": \"${TARGET_URL}\",
+           \"ttl\": 1,
+           \"proxied\": true
+         }")
+fi
 
 if echo "$DNS_RESPONSE" | grep -q '"success":true'; then
-    echo "✅ DNS CNAME Record created successfully!"
+    echo "✅ DNS CNAME Record configured and proxied successfully!"
 else
-    echo "⚠️ DNS creation response: $DNS_RESPONSE"
+    echo "⚠️ DNS configuration response: $DNS_RESPONSE"
 fi
 
 echo "🚀 2. Deploying Host Header Override Rule (Origin Rule)..."

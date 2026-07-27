@@ -435,10 +435,11 @@ class State(rx.State):
         yield self._scroll_top_script()
         yield self._save_draft_script()
 
+    @rx.event(background=True)
     async def init_session(self):
         """Step 4 -> Step 5: Initialize Redis session."""
-        self.loading = True
-        yield
+        async with self:
+            self.loading = True
         
         async with httpx.AsyncClient() as client:
             try:
@@ -468,36 +469,42 @@ class State(rx.State):
                 if resp.status_code == 200:
                     session_id = resp.json().get("session_id")
                     if not session_id:
-                        self.error_message = self._t["err_generic"]
+                        async with self:
+                            self.error_message = self._t["err_generic"]
                         return
-                    self.session_id = session_id
-                    self.step = 5
-                    self.error_message = ""
-                    self.log_analytics_event("lifestyle_submitted")
-                    self.current_answers = []
-                    self.questions = []
-                    self.question_index = 0
-                    self.is_emergency = False
-                    async for item in self.get_interview_questions():
-                        yield item
+                    async with self:
+                        self.session_id = session_id
+                        self.step = 5
+                        self.error_message = ""
+                        self.log_analytics_event("lifestyle_submitted")
+                        self.current_answers = []
+                        self.questions = []
+                        self.question_index = 0
+                        self.is_emergency = False
+                    await self.get_interview_questions()
                 elif resp.status_code == 429:
-                    self.error_message = self._t["err_rate_limit"]
+                    async with self:
+                        self.error_message = self._t["err_rate_limit"]
                 else:
-                    self.error_message = self._t["err_init"]
+                    async with self:
+                        self.error_message = self._t["err_init"]
             except Exception:
-                self.error_message = self._t["err_generic"]
+                async with self:
+                    self.error_message = self._t["err_generic"]
             finally:
-                self.loading = False
+                async with self:
+                    self.loading = False
 
+    @rx.event(background=True)
     async def get_interview_questions(self):
-        self.loading = True
-        self._qs_buffer = ""
-        self.questions = []
-        self.current_answers = []
-        self.question_index = 0
-        self.is_emergency = False
-        self.error_message = ""
-        yield
+        async with self:
+            self.loading = True
+            self._qs_buffer = ""
+            self.questions = []
+            self.current_answers = []
+            self.question_index = 0
+            self.is_emergency = False
+            self.error_message = ""
 
         import asyncio
         stream_timeout = 30.0
@@ -514,32 +521,30 @@ class State(rx.State):
                         async for line in response.aiter_lines():
                             if line.startswith("data: "):
                                 chunk = json.loads(line[len("data: "):])
-                            self._qs_buffer += chunk
-                            
-                            lower_buffer = self._qs_buffer.lower()
-                            if "emergency" in lower_buffer or "911" in lower_buffer or "urgência" in lower_buffer or "urgencia" in lower_buffer:
-                                self.is_emergency = True
-                                self.questions = []
-                                self.current_answers = []
-                                yield
-                                return
-                                
-                            # Match lines like "1. Question", "2) Question", etc. Very permissive match
-                            qs = [q.strip() for q in re.split(r'\n(?:\d+[\.\)]|\-)\s*', '\n' + self._qs_buffer) if q.strip()]
-                            # Fallback: if regex didn't split into multiple questions, split by any newline
-                            if len(qs) <= 1:
-                                qs = [q.strip() for q in self._qs_buffer.strip().split('\n') if q.strip()]
-                            self.questions = qs
-                            
-                            while len(self.current_answers) < len(self.questions):
-                                self.current_answers.append("")
-                            yield
+                                async with self:
+                                    self._qs_buffer += chunk
+                                    lower_buffer = self._qs_buffer.lower()
+                                    if "emergency" in lower_buffer or "911" in lower_buffer or "urgência" in lower_buffer or "urgencia" in lower_buffer:
+                                        self.is_emergency = True
+                                        self.questions = []
+                                        self.current_answers = []
+                                        return
+                                        
+                                    qs = [q.strip() for q in re.split(r'\n(?:\d+[\.\)]|\-)\s*', '\n' + self._qs_buffer) if q.strip()]
+                                    if len(qs) <= 1:
+                                        qs = [q.strip() for q in self._qs_buffer.strip().split('\n') if q.strip()]
+                                    self.questions = qs
+                                    while len(self.current_answers) < len(self.questions):
+                                        self.current_answers.append("")
             except asyncio.TimeoutError:
-                self.error_message = self._t["err_timeout"]
+                async with self:
+                    self.error_message = self._t["err_timeout"]
             except Exception:
-                self.error_message = self._t["err_stream"]
+                async with self:
+                    self.error_message = self._t["err_stream"]
             finally:
-                self.loading = False
+                async with self:
+                    self.loading = False
 
     async def submit_answers(self):
         if any(not ans.strip() for ans in self.current_answers[:len(self.questions)]):

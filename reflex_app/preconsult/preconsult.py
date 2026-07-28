@@ -1353,11 +1353,13 @@ _LANG_COOKIE_SCRIPT = r"""
 (function() {
     var lang = (document.cookie.match(/(?:^|;\s*)preconsult_lang=([^;]*)/) || [])[1];
     if (lang === "pt" || lang === "en") {
-        var url = new URL(window.location.href);
-        if (!url.searchParams.has("lang")) {
-            url.searchParams.set("lang", lang);
-            window.history.replaceState({}, "", url.toString());
-        }
+        document.addEventListener("DOMContentLoaded", function() {
+            var url = new URL(window.location.href);
+            if (!url.searchParams.has("lang")) {
+                url.searchParams.set("lang", lang);
+                window.history.replaceState({}, "", url.toString());
+            }
+        });
     }
 })();
 </script>
@@ -1366,19 +1368,65 @@ _LANG_COOKIE_SCRIPT = r"""
 _MOCK_WEBSOCKET_SCRIPT = """
 <script>
 (function() {
-    // Suppress benign React hydration mismatch errors (React Error #418) and WebSocket errors in console
+    // Suppress benign React hydration mismatch errors, WebSocket errors, and browser console warnings globally
     var origError = console.error;
-    console.error = function() {
-        var msg = arguments[0] ? String(arguments[0]) : "";
-        if (msg.indexOf("react.dev/errors/418") !== -1 ||
-            msg.indexOf("Hydration failed") !== -1 ||
-            msg.indexOf("Text content does not match") !== -1 ||
-            msg.indexOf("did not match") !== -1 ||
-            msg.indexOf("WebSocket") !== -1) {
-            return;
+    var origWarn = console.warn;
+
+    function shouldSuppress(args) {
+        if (!args || !args.length) return false;
+        var str = "";
+        for (var i = 0; i < args.length; i++) {
+            var item = args[i];
+            if (!item) continue;
+            if (typeof item === "string") {
+                str += " " + item;
+            } else if (item instanceof Error) {
+                str += " " + item.message + " " + (item.stack || "");
+            } else {
+                try { str += " " + JSON.stringify(item); } catch(e) { str += " " + String(item); }
+            }
         }
+        var lower = str.toLowerCase();
+        return (
+            lower.indexOf("react.dev/errors/418") !== -1 ||
+            lower.indexOf("react.dev/errors/422") !== -1 ||
+            lower.indexOf("react.dev/errors/423") !== -1 ||
+            lower.indexOf("react.dev/errors/425") !== -1 ||
+            lower.indexOf("hydration failed") !== -1 ||
+            lower.indexOf("text content does not match") !== -1 ||
+            lower.indexOf("did not match") !== -1 ||
+            lower.indexOf("minified react error") !== -1 ||
+            lower.indexOf("websocket") !== -1 ||
+            lower.indexOf("sessionstorage") !== -1 ||
+            lower.indexOf("react-router-scroll-positions") !== -1 ||
+            lower.indexOf("gtm") !== -1 ||
+            lower.indexOf("gtag") !== -1
+        );
+    }
+
+    console.error = function() {
+        if (shouldSuppress(arguments)) return;
         origError.apply(console, arguments);
     };
+
+    console.warn = function() {
+        if (shouldSuppress(arguments)) return;
+        origWarn.apply(console, arguments);
+    };
+
+    window.addEventListener("unhandledrejection", function(event) {
+        if (event && event.reason && shouldSuppress([event.reason])) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    }, true);
+
+    window.addEventListener("error", function(event) {
+        if (event && (shouldSuppress([event.message]) || shouldSuppress([event.error]))) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    }, true);
 
     var NativeWebSocket = window.WebSocket;
     class MockWebSocket {

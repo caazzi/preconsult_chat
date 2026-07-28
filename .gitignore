@@ -123,4 +123,10 @@ docs/presentation_proposal.mhtml
 docs/presentation.html
 docs/templates/
 
+# Performance & Lighthouse Output
+lighthouse-reports/
+lighthouse-*.report.*
+"C:\\Users\\Usuario\\AppData\\Local\\lighthouse.*"
+
+
 

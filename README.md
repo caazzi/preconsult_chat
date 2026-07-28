@@ -186,6 +186,11 @@ app-preconsult/
 │   ├── state.py             # Reflex state management & API streaming
 │   ├── analytics.py         # HTTP event tracking
 │   └── i18n.py              # EN/PT translations & legal content
+├── scripts/                 # Utility & Operations Scripts
+│   ├── run_lighthouse_audit.py# Lighthouse performance audit & JSON/HTML report CLI
+│   ├── analyze_cloudrun_logs.py# GCP Cloud Run log fetcher & analyzer
+│   ├── analyze_cloudflare_logs.py# Cloudflare HTTP log fetcher & analyzer
+│   └── analyze_all_logs.py  # Unified logs analysis script
 ├── tests/                   # 104 tests
 ├── Dockerfile               # Multi-stage container build
 ├── docker-compose.yml       # Local Redis service

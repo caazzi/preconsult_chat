@@ -567,20 +567,24 @@ class State(rx.State):
         yield rx.call_script("if(window.gtag_report_micro_conversion)gtag_report_micro_conversion()")
         yield self._scroll_top_script()
 
+    @rx.event(background=True)
     async def download_report(self):
         """Step 6: Securely fetch PDF with API Key and trigger download."""
-        self.loading = True
-        yield
+        async with self:
+            self.loading = True
         
-        async with httpx.AsyncClient() as client:
-            try:
+        try:
+            async with httpx.AsyncClient() as client:
                 headers = {"X-API-KEY": API_KEY}
-                payload = {
-                    "session_id": self.session_id,
-                    "qa_pairs": [
+                async with self:
+                    session_id = self.session_id
+                    qa_pairs = [
                         {"question": q, "answer": a} 
                         for q, a in zip(self.questions, self.current_answers)
                     ]
+                payload = {
+                    "session_id": session_id,
+                    "qa_pairs": qa_pairs
                 }
                 resp = await client.post(
                     _api_url("/generate-pdf"),
@@ -589,18 +593,26 @@ class State(rx.State):
                     timeout=30.0
                 )
                 if resp.status_code == 200:
-                    self.log_analytics_event("pdf_downloaded")
-                    yield rx.call_script("if(window.gtag_report_conversion)gtag_report_conversion()")
-                    yield self._clear_draft_script()
-                    yield rx.download(
-                        data=resp.content,
-                        filename=f"PreConsult_Report{datetime.now().strftime('_%y%m%d%H%M')}.pdf"
-                    )
+                    pdf_bytes = resp.content
+                    filename = f"PreConsult_Report{datetime.now().strftime('_%y%m%d%H%M')}.pdf"
+                    async with self:
+                        self.log_analytics_event("pdf_downloaded")
+                    return [
+                        rx.call_script("if(window.gtag_report_conversion)gtag_report_conversion()"),
+                        self._clear_draft_script(),
+                        rx.download(
+                            data=pdf_bytes,
+                            filename=filename
+                        )
+                    ]
                 else:
-                    self.error_message = self._t["err_download"]
-            except Exception:
+                    async with self:
+                        self.error_message = self._t["err_download"]
+        except Exception:
+            async with self:
                 self.error_message = self._t["err_download_gen"]
-            finally:
+        finally:
+            async with self:
                 self.loading = False
 
 

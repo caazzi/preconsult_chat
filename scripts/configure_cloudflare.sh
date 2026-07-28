@@ -111,28 +111,46 @@ else
     fi
 fi
 
-echo "🛡️ 3. Deploying Bot Shield WAF Custom Rule..."
-WAF_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/rulesets" \
+echo "🛡️ 3. Deploying / Updating Bot Shield WAF Custom Rule..."
+# Fetch existing rulesets to see if http_request_firewall_custom phase exists
+RULESETS_JSON=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/rulesets" \
      -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-     -H "Content-Type: application/json" \
-     --data "{
-       \"name\": \"PreConsult Security Shield\",
-       \"description\": \"Block vulnerability scanners targeting wp-admin, .env, and non-app endpoints\",
-       \"kind\": \"zone\",
-       \"phase\": \"http_request_firewall_custom\",
-       \"rules\": [
-         {
-           \"action\": \"block\",
-           \"expression\": \"(http.request.uri.path contains \\\"/wp-\\\") or (http.request.uri.path contains \\\".env\\\") or (http.request.uri.path contains \\\"xmlrpc\\\") or (http.request.uri.path contains \\\"phpmyadmin\\\")\",
-           \"description\": \"Block automated vulnerability scanners\"
-         }
-       ]
-     }")
+     -H "Content-Type: application/json")
+
+EXISTING_FW_ID=$(echo "$RULESETS_JSON" | jq -r '.result[] | select(.phase=="http_request_firewall_custom") | .id // empty' | head -n 1)
+
+WAF_BODY='{
+  "name": "PreConsult Security Shield",
+  "description": "Block vulnerability scanners targeting wp-admin, .env, install.php, and non-app endpoints",
+  "kind": "zone",
+  "phase": "http_request_firewall_custom",
+  "rules": [
+    {
+      "action": "block",
+      "expression": "(http.request.uri.path contains \"/wp-\") or (http.request.uri.path contains \".env\") or (http.request.uri.path contains \"xmlrpc\") or (http.request.uri.path contains \"phpmyadmin\") or (http.request.uri.path contains \"setup.php\") or (http.request.uri.path contains \"install.php\") or (http.request.uri.path contains \"/.git\")",
+      "description": "Block automated vulnerability scanners"
+    }
+  ]
+}'
+
+if [ -n "$EXISTING_FW_ID" ]; then
+    echo "ℹ️ Updating existing WAF Ruleset ($EXISTING_FW_ID)..."
+    WAF_RESPONSE=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/rulesets/${EXISTING_FW_ID}" \
+         -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+         -H "Content-Type: application/json" \
+         --data "$WAF_BODY")
+else
+    echo "➕ Creating new WAF Ruleset..."
+    WAF_RESPONSE=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/rulesets" \
+         -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+         -H "Content-Type: application/json" \
+         --data "$WAF_BODY")
+fi
 
 if echo "$WAF_RESPONSE" | grep -q '"success":true'; then
-    echo "✅ Bot Shield WAF Rule deployed successfully!"
+    echo "✅ Bot Shield WAF Rule deployed/updated successfully!"
 else
-    echo "ℹ️ WAF Rule status: $WAF_RESPONSE"
+    echo "⚠️ WAF Rule status: $WAF_RESPONSE"
 fi
 
 echo "🎉 Configuration complete! Please ensure SSL/TLS settings are set to 'Full (strict)' in your Cloudflare dashboard."

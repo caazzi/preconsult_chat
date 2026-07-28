@@ -977,7 +977,7 @@
                             <div class="step-box highlight">
                                 <div class="step-number">passo 2</div>
                                 <div class="step-title">queixa</div>
-                                <div class="step-desc">sintoma & SOCRATES</div>
+                                <div class="step-desc">sintoma & especialidade</div>
                             </div>
                             <div class="step-box highlight">
                                 <div class="step-number">passo 3</div>
@@ -1084,28 +1084,30 @@
                             <text x="412" y="200" text-anchor="middle" fill="#F1F5F9" font-size="13" font-weight="600">pdf_service.py (ReportLab)</text>
 
                             <rect x="312" y="224" width="200" height="38" rx="8" fill="#0F172A" stroke="#2E3D52" stroke-width="1.5"/>
-                            <text x="412" y="248" text-anchor="middle" fill="#94A3B8" font-size="12">session_service.py</text>
-
-                            <!-- REDIS -->
-                            <rect x="580" y="20" width="220" height="110" rx="14" fill="#1E293B" stroke="#F43F5E" stroke-width="2.5"/>
-                            <text x="690" y="52" text-anchor="middle" fill="#F43F5E" font-family="Inter" font-weight="800" font-size="15">REDIS (Upstash/GCP)</text>
-                            <text x="690" y="78" text-anchor="middle" fill="#CBD5E1" font-size="12" font-weight="600">TTL = 30 minutos (1800s)</text>
-                            <text x="690" y="102" text-anchor="middle" fill="#F59E0B" font-size="12">fallback: MemoryStore</text>
+                            <text x="412" y="248" text-anchor="middle" fill="#F1F5F9" font-size="13" font-weight="600">session_service.py (Redis)</text>
 
                             <!-- LLM ENGINE -->
-                            <rect x="580" y="150" width="220" height="130" rx="14" fill="#1E293B" stroke="#8B5CF6" stroke-width="2.5"/>
-                            <text x="690" y="182" text-anchor="middle" fill="#8B5CF6" font-family="Inter" font-weight="800" font-size="15">LLM ENGINE</text>
-                            <text x="690" y="210" text-anchor="middle" fill="#F1F5F9" font-size="14" font-weight="700">Vertex AI / Gemini</text>
-                            <text x="690" y="235" text-anchor="middle" fill="#34D399" font-size="12">single interview chain</text>
+                            <rect x="580" y="20" width="220" height="115" rx="14" fill="#1E293B" stroke="#8B5CF6" stroke-width="2.5"/>
+                            <text x="690" y="52" text-anchor="middle" fill="#8B5CF6" font-family="Inter" font-weight="800" font-size="15">LLM ENGINE</text>
+                            <text x="690" y="78" text-anchor="middle" fill="#F1F5F9" font-size="14" font-weight="700">Vertex AI / Gemini</text>
+                            <text x="690" y="103" text-anchor="middle" fill="#34D399" font-size="12">single interview chain</text>
+
+                            <!-- REDIS -->
+                            <rect x="580" y="150" width="220" height="115" rx="14" fill="#1E293B" stroke="#F43F5E" stroke-width="2.5"/>
+                            <text x="690" y="182" text-anchor="middle" fill="#F43F5E" font-family="Inter" font-weight="800" font-size="15">REDIS (Upstash/GCP)</text>
+                            <text x="690" y="208" text-anchor="middle" fill="#CBD5E1" font-size="12" font-weight="600">TTL = 30 minutos (1800s)</text>
+                            <text x="690" y="232" text-anchor="middle" fill="#F59E0B" font-size="12">fallback: MemoryStore</text>
 
                             <!-- Connectors 2 -->
-                            <path d="M 530 99 L 580 75" stroke="#F43F5E" stroke-width="2.5"/>
-                            <polygon points="580,75 569,72 573,83" fill="#F43F5E"/>
-                            <polygon points="530,99 541,102 537,91" fill="#F43F5E"/>
+                            <!-- agent_service.py (y=147) -> LLM ENGINE (y=80) -->
+                            <path d="M 530 147 L 580 80" stroke="#8B5CF6" stroke-width="2.5"/>
+                            <polygon points="580,80 568,73 574,84" fill="#8B5CF6"/>
+                            <polygon points="530,147 541,153 536,142" fill="#8B5CF6"/>
 
-                            <path d="M 530 147 L 580 205" stroke="#8B5CF6" stroke-width="2.5"/>
-                            <polygon points="580,205 573,195 567,204" fill="#8B5CF6"/>
-                            <polygon points="530,147 537,157 543,148" fill="#8B5CF6"/>
+                            <!-- session_service.py (y=243) -> REDIS (y=208) -->
+                            <path d="M 530 243 L 580 208" stroke="#F43F5E" stroke-width="2.5"/>
+                            <polygon points="580,208 569,203 573,214" fill="#F43F5E"/>
+                            <polygon points="530,243 541,248 537,237" fill="#F43F5E"/>
                         </svg>
 
                         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 10px;">
@@ -1130,7 +1132,7 @@
         <!-- ==========================================
              SLIDE 8: POR QUE REFLEX? (PYTHON AO MÁXIMO)
              ========================================== -->
-        <div class="slide" data-notes="[6 min] BLOCO 5A: por que Reflex? explicar o objetivo explícito de usar Python o máximo que conseguisse no projeto. o Reflex permite criar UIs web em Python puro compiladas para React/Next.js. não foi preciso escrever React/JS!">
+        <div class="slide" data-notes="[6 min] BLOCO 5A: por que Reflex? explicar o objetivo de usar 100% Python e como HTML e CSS são gerados nessa abordagem. O Reflex converte componentes Python (rx.box, rx.text) em elementos HTML5/React e compila estilos definidos em Python para CSS-in-JS, dispensando escrever HTML, CSS ou JS cru.">
             <div class="slide-header">
                 <div>
                     <div class="slide-tag">bloco 4 • frontend Python (Reflex)</div>
@@ -1145,7 +1147,7 @@
                             <p style="margin-top: 8px;">para a maioria das aplicações web, você é forçado a manter duas linguagens: Python no backend e TypeScript/React no frontend.</p>
                             
                             <div style="margin-top: 14px; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-green); padding: 14px 18px; border-radius: 12px;">
-                                <strong style="color: var(--accent-green); font-size: 1.15rem;">objetivo do projeto:</strong> "levar o ecossistema Python ao limite máximo — construindo do frontend ao backend sem tocar em JS."
+                                <strong style="color: var(--accent-green); font-size: 1.15rem;">objetivo do projeto:</strong> "levar o ecossistema Python ao limite máximo, construindo do frontend ao backend sem tocar em JS."
                             </div>
                         </div>
 
@@ -1164,18 +1166,26 @@
                 <div class="col">
                     <div class="card card-accent" style="flex: 1; justify-content: space-between;">
                         <div>
-                            <div class="card-title">como o Reflex opera nos bastidores</div>
-                            <p style="margin-top: 8px;">o Reflex analisa a árvore de componentes em Python e transpila automaticamente para um app React/Next.js moderno.</p>
+                            <div class="card-title">geração de HTML & CSS no Reflex</div>
+                            <p style="margin-top: 8px;">o Reflex traduz a árvore de objetos Python em marcadores HTML5 e folhas de estilo CSS durante o build.</p>
                         </div>
 
                         <div class="grid-2x2" style="margin-top: 12px;">
                             <div class="grid-card">
-                                <div class="grid-card-title">servidor de eventos</div>
-                                <p>sincronização via WebSocket/HTTP entre o estado no servidor Python e o DOM do browser.</p>
+                                <div class="grid-card-title">HTML5 via componentes</div>
+                                <p><code>rx.box()</code> (div), <code>rx.text()</code> (p/span), <code>rx.heading()</code> (h1-h6) geram a estrutura HTML5 no React/Next.js.</p>
                             </div>
                             <div class="grid-card">
-                                <div class="grid-card-title">zero context-switch</div>
-                                <p>100% do tempo no mesmo ambiente de execução, ferramentas de lint e checagem de tipos Python.</p>
+                                <div class="grid-card-title">CSS via kwargs & dicts</div>
+                                <p>estilos definidos em Python via <code>style={...}</code>, var CSS e layout kwargs são compilados em CSS-in-JS.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">transpilação automática</div>
+                                <p>o código Python compila para JSX/CSS do Next.js sem necessidade de escrever código HTML/CSS/JS manual.</p>
+                            </div>
+                            <div class="grid-card">
+                                <div class="grid-card-title">atualização do DOM</div>
+                                <p>mudanças de estado no <code>State</code> reescrevem reativamente o DOM no browser via WebSocket/HTTP.</p>
                             </div>
                         </div>
                     </div>
@@ -1565,7 +1575,7 @@ prompt = ChatPromptTemplate.from_messages([
                             </div>
                             <div class="grid-card" style="border-left: 4px solid var(--accent-green);">
                                 <div class="grid-card-title" style="color: var(--accent-green);">2. Python ao máximo com Reflex</div>
-                                <p>é possível construir UIs web modernas do frontend ao backend 100% em Python.</p>
+                                <p>é possível construir UIs web modernas do frontend ao backend 100% em Python, mas trás suas dores.</p>
                             </div>
                             <div class="grid-card" style="border-left: 4px solid var(--accent-green);">
                                 <div class="grid-card-title" style="color: var(--accent-green);">3. IA sob rédea curta</div>

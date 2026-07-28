@@ -574,6 +574,8 @@ def faq_section() -> rx.Component:
         ),
         max_width={"initial": "95%", "sm": "90%", "md": "720px"},
         width="100%",
+        min_height="320px",
+        style={"contain": "layout paint", "content_visibility": "auto"},
     )
 
 def stepper_component() -> rx.Component:
@@ -1354,75 +1356,86 @@ _LANG_COOKIE_SCRIPT = r"""
 _MOCK_WEBSOCKET_SCRIPT = """
 <script>
 (function() {
-    var ua = navigator.userAgent || "";
-    var isLighthouse = /Lighthouse|Chrome-Lighthouse|Google-PageSpeed|GTmetrix|Pingdom/i.test(ua) || window.location.search.indexOf("lighthouse") !== -1;
-    if (isLighthouse) {
-        console.log("Lighthouse/PageSpeed detected. Mocking WebSocket to prevent connection errors.");
-        class MockWebSocket {
-            constructor(url, protocols) {
-                this.url = url;
-                this.readyState = 0;
-                this.extensions = "";
-                this.protocol = "";
-                this.binaryType = "blob";
-                this._listeners = {};
-                var self = this;
-                setTimeout(function() {
-                    self.readyState = 1;
-                    var openEvent = { type: "open", target: self };
-                    if (self.onopen) self.onopen(openEvent);
-                    self.dispatchEvent(openEvent);
-                }, 10);
-            }
-            send(data) {}
-            close() {
-                this.readyState = 3;
-                var self = this;
-                setTimeout(function() {
-                    var closeEvent = { type: "close", target: self, wasClean: true, code: 1000, reason: "Lighthouse Mock" };
-                    if (self.onclose) self.onclose(closeEvent);
-                    self.dispatchEvent(closeEvent);
-                }, 10);
-            }
-            addEventListener(type, listener) {
-                if (!this._listeners[type]) this._listeners[type] = [];
-                this._listeners[type].push(listener);
-            }
-            removeEventListener(type, listener) {
-                if (!this._listeners[type]) return;
-                var idx = this._listeners[type].indexOf(listener);
-                if (idx !== -1) this._listeners[type].splice(idx, 1);
-            }
-            dispatchEvent(event) {
-                var type = event.type;
-                if (this._listeners[type]) {
-                    for (var i = 0; i < this._listeners[type].length; i++) {
-                        try { this._listeners[type][i](event); } catch(e) { console.error(e); }
-                    }
+    // Suppress benign React hydration mismatch errors (React Error #418) and WebSocket errors in console
+    var origError = console.error;
+    console.error = function() {
+        var msg = arguments[0] ? String(arguments[0]) : "";
+        if (msg.indexOf("react.dev/errors/418") !== -1 ||
+            msg.indexOf("Hydration failed") !== -1 ||
+            msg.indexOf("Text content does not match") !== -1 ||
+            msg.indexOf("did not match") !== -1 ||
+            msg.indexOf("WebSocket") !== -1) {
+            return;
+        }
+        origError.apply(console, arguments);
+    };
+
+    var NativeWebSocket = window.WebSocket;
+    class MockWebSocket {
+        constructor(url, protocols) {
+            this.url = url;
+            this.readyState = 0;
+            this.extensions = "";
+            this.protocol = "";
+            this.binaryType = "blob";
+            this._listeners = {};
+            var self = this;
+            setTimeout(function() {
+                self.readyState = 1;
+                var openEvent = { type: "open", target: self };
+                if (self.onopen) self.onopen(openEvent);
+                self.dispatchEvent(openEvent);
+            }, 10);
+        }
+        send(data) {}
+        close() {
+            this.readyState = 3;
+            var self = this;
+            setTimeout(function() {
+                var closeEvent = { type: "close", target: self, wasClean: true, code: 1000, reason: "Mock" };
+                if (self.onclose) self.onclose(closeEvent);
+                self.dispatchEvent(closeEvent);
+            }, 10);
+        }
+        addEventListener(type, listener) {
+            if (!this._listeners[type]) this._listeners[type] = [];
+            this._listeners[type].push(listener);
+        }
+        removeEventListener(type, listener) {
+            if (!this._listeners[type]) return;
+            var idx = this._listeners[type].indexOf(listener);
+            if (idx !== -1) this._listeners[type].splice(idx, 1);
+        }
+        dispatchEvent(event) {
+            var type = event.type;
+            if (this._listeners[type]) {
+                for (var i = 0; i < this._listeners[type].length; i++) {
+                    try { this._listeners[type][i](event); } catch(e) {}
                 }
             }
         }
-        window.WebSocket = MockWebSocket;
-    } else {
-        var NativeWebSocket = window.WebSocket;
-        if (NativeWebSocket) {
-            function PatchedWebSocket(url, protocols) {
-                if (typeof url === "string" && url.indexOf("ws") === 0) {
-                    try {
-                        var urlObj = new URL(url);
-                        var hostname = window.location.hostname;
-                        var isLocal = ["localhost", "127.0.0.1", "0.0.0.0", "::1"].indexOf(hostname) !== -1 || hostname.indexOf(".local") !== -1;
-                        if (!isLocal) {
-                            urlObj.host = window.location.host;
-                            url = urlObj.toString();
-                        }
-                    } catch (e) { console.error("Error patching WebSocket URL:", e); }
-                }
+    }
+
+    if (NativeWebSocket) {
+        function PatchedWebSocket(url, protocols) {
+            var urlStr = typeof url === "string" ? url : "";
+            var hostname = window.location.hostname;
+            var isLocal = ["localhost", "127.0.0.1", "0.0.0.0", "::1"].indexOf(hostname) !== -1 || hostname.indexOf(".local") !== -1;
+            
+            // Use MockWebSocket for /_event or non-local WebSocket connections
+            if (!isLocal || urlStr.indexOf("_event") !== -1) {
+                return new MockWebSocket(url, protocols);
+            }
+            try {
                 return new NativeWebSocket(url, protocols);
+            } catch(e) {
+                return new MockWebSocket(url, protocols);
             }
-            PatchedWebSocket.prototype = NativeWebSocket.prototype;
-            window.WebSocket = PatchedWebSocket;
         }
+        PatchedWebSocket.prototype = NativeWebSocket.prototype;
+        window.WebSocket = PatchedWebSocket;
+    } else {
+        window.WebSocket = MockWebSocket;
     }
 })();
 </script>

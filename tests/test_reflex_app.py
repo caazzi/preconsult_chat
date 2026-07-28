@@ -130,7 +130,6 @@ def test_custom_static_files_injection(tmp_path):
         html_body = response.body.decode("utf-8")
         
         # Verify MockWebSocket script is injected
-        assert "Lighthouse/PageSpeed detected. Mocking WebSocket" in html_body
         assert "MockWebSocket" in html_body
         
         # Verify other replacements happened

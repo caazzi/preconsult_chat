@@ -543,30 +543,40 @@ def faq_section() -> rx.Component:
     faq_items = []
     for i, (q_key, a_key) in enumerate(questions):
         faq_items.append(
-            rx.vstack(
-                rx.hstack(
-                    rx.text(State.t[q_key], weight="bold", size="3"),
-                    rx.spacer(),
-                    rx.icon("chevron_down", size=16),
+            rx.accordion.item(
+                rx.accordion.trigger(
+                    rx.hstack(
+                        rx.text(State.t[q_key], weight="bold", size="3"),
+                        rx.spacer(),
+                        rx.icon("chevron_down", size=16),
+                        width="100%",
+                        align_items="center",
+                    ),
                     width="100%",
-                    padding="0.75em",
-                    border_radius="8px",
-                    _hover={"background": "rgba(0, 200, 255, 0.04)"},
+                    padding="0.85em 1em",
                     cursor="pointer",
-                    on_click=rx.call_script(f"document.getElementById('faq-answer-{i}').classList.toggle('rx-Flex')"),
+                    _hover={"background": "rgba(0, 200, 255, 0.04)"},
+                    border_radius="8px",
                 ),
-                rx.text(State.t[a_key], size="2", color_scheme="gray", id=f"faq-answer-{i}", display="none"),
-                width="100%",
+                rx.accordion.content(
+                    rx.text(State.t[a_key], size="2", color_scheme="gray", padding="0.5em 1em 1em 1em"),
+                ),
+                value=f"faq-{i}",
                 border="1px solid rgba(255,255,255,0.08)",
                 border_radius="8px",
-                spacing="1",
+                width="100%",
             )
         )
     return rx.container(
         rx.vstack(
             rx.divider(),
             rx.heading(State.t["faq_title"], size="5", text_align="center"),
-            rx.vstack(*faq_items, width="100%", spacing="2"),
+            rx.accordion.root(
+                *faq_items,
+                type="single",
+                collapsible=True,
+                width="100%",
+            ),
             width="100%",
             padding_top="2em",
             spacing="3",
@@ -574,8 +584,8 @@ def faq_section() -> rx.Component:
         ),
         max_width={"initial": "95%", "sm": "90%", "md": "720px"},
         width="100%",
-        min_height="320px",
-        style={"contain": "layout paint", "content_visibility": "auto"},
+        min_height="360px",
+        style={"contain": "layout inline-size", "content_visibility": "auto"},
     )
 
 def stepper_component() -> rx.Component:
@@ -1470,6 +1480,7 @@ class CustomStaticFiles(StaticFiles):
                     
                     critical_style = """
                     <style>
+                    @font-face { font-display: swap; }
                     html, body {
                         background: radial-gradient(circle at top right, #0a192f, #001f3f, #001529) !important;
                         margin: 0;

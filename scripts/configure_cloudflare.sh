@@ -153,4 +153,27 @@ else
     echo "⚠️ WAF Rule status: $WAF_RESPONSE"
 fi
 
+echo "⚡ 4. Enabling Edge Performance Optimizations (Brotli, Auto-Minify, Early Hints, HTTP/3)..."
+curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/settings/brotli" \
+     -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+     -H "Content-Type: application/json" \
+     --data '{"value": "on"}' > /dev/null || true
+
+curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/settings/minify" \
+     -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+     -H "Content-Type: application/json" \
+     --data '{"value": {"css": "on", "html": "on", "js": "on"}}' > /dev/null || true
+
+curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/settings/early_hints" \
+     -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+     -H "Content-Type: application/json" \
+     --data '{"value": "on"}' > /dev/null || true
+
+curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/settings/http3" \
+     -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+     -H "Content-Type: application/json" \
+     --data '{"value": "on"}' > /dev/null || true
+
+echo "✅ Edge performance settings (Brotli, Minify, Early Hints, HTTP/3) applied!"
+
 echo "🎉 Configuration complete! Please ensure SSL/TLS settings are set to 'Full (strict)' in your Cloudflare dashboard."

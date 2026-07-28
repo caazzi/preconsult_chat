@@ -1,4 +1,5 @@
 import reflex as rx
+from starlette.middleware.gzip import GZipMiddleware
 from .state import State, AdminState
 try:
     from preconsult.api.endpoints import router as api_router
@@ -1603,9 +1604,12 @@ class CustomStaticFiles(StaticFiles):
                     for key, val in response.headers.items():
                         if key.lower() not in ("content-length", "content-type"):
                             new_response.headers[key] = val
+                    new_response.headers["Vary"] = "Accept-Encoding"
+                    new_response.headers["Cache-Control"] = "no-cache, must-revalidate"
                     return new_response
                 except Exception:
                     pass
+        response.headers["Vary"] = "Accept-Encoding"
         return response
 
 static_dir_vite = os.path.join(os.getcwd(), ".web", "build", "client")
@@ -1613,6 +1617,9 @@ static_dir_legacy = os.path.join(os.getcwd(), ".web", "_static")
 static_dir = static_dir_vite if os.path.exists(static_dir_vite) else static_dir_legacy
 if os.path.exists(static_dir):
     app._api.mount("/", CustomStaticFiles(directory=static_dir, html=True), name="static")
+
+# Enable application-level Gzip compression for payloads >= 500 bytes (HTML, CSS, JS, API JSON)
+app._api.add_middleware(GZipMiddleware, minimum_size=500)
 
 app._api.router.lifespan_context = app._run_lifespan_tasks
 api = app._context_middleware(app._api)

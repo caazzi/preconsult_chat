@@ -66,7 +66,7 @@ No health data is ever written to disk. Every design decision flows from this co
 | UI/UX | Glassmorphism, mobile-first, 48px touch targets, prefers-reduced-motion, EN/PT i18n |
 | Monitoring | Sentry SDK (2.65.0) + `GET /health` endpoint |
 | Deployment | GCP Cloud Run, us-central1 (two profiles: `high_performance` / `standard`, selectable via CI/CD) |
-| CI/CD | GitHub Actions (tests + WIF auth + Cloud Run deploy) |
+| CI/CD | GitHub Actions (tests + WIF auth + Cloud Run deploy) — **exclusive deploy path** (see Deployment section) |
 
 ---
 
@@ -145,25 +145,39 @@ The test suite contains **108 passing tests** covering:
 
 ## Deployment (GCP Cloud Run)
 
-The app deploys as a single consolidated container via GitHub Actions CI/CD.
+> **⚠️ DEPLOYMENT POLICY — MUST FOLLOW**
+> The **only** supported way to deploy the serving container is the **GitHub Actions CI/CD** pipeline
+> (`.github/workflows/ci-cd.yml`), which builds with `docker buildx` into the `securemed-repo`
+> Artifact Registry and deploys via `google-github-actions/deploy-cloudrun`.
+>
+> **Do NOT use `gcloud run deploy --source .` or any ad-hoc manual rebuild.** Cloud Build's
+> `cloud-run-source-deploy` images have proven to be unservable (they return `502` /
+> `upstream connect error ... protocol error` even though the process starts). Only CI-built images
+> from `securemed-repo` are verified to serve correctly.
+>
+> **How to deploy:**
+> 1. Commit changes and push to `main` — CI auto-deploys on merge.
+> 2. Or trigger a manual release: **GitHub Actions → PreConsult CI/CD Pipeline → *Run workflow***.
+> 3. To deploy a specific image without rebuilding, use `scripts/deploy_backend.sh [profile] [image_ref]`
+>    (this script deploys an **already-built** CI image and never runs `--source`).
+>
+> Agents (and humans): if the change affects anything the container runs, the change is NOT "done"
+> until it has gone through the CI/CD deploy path and the served revision passes a smoke test.
 
-### Manual deploy
+### Manual helper (CI-built images only)
 
 ```bash
-gcloud run deploy preconsult \
-  --source . \
-  --project=securemed-chat-494521 \
-  --region=us-central1 \
-  --memory=2Gi --cpu=2 \
-  --min-instances=2 --max-instances=10 \
-  --no-cpu-throttling \
-  --concurrency=40 \
-  --set-secrets=PRECONSULT_API_KEY=SECUREMED_API_KEY:latest,REDIS_URL=REDIS_URL:latest
+# Deploy the latest CI-built image (default profile: cost_optimized)
+scripts/deploy_backend.sh cost_optimized
+
+# Deploy a specific CI-built image by tag/digest
+scripts/deploy_backend.sh cost_optimized \
+  us-central1-docker.pkg.dev/securemed-chat-494521/securemed-repo/preconsult:<commit-sha>
 ```
 
 ### Custom Domain (Cloudflare DNS → Cloud Run Domain Mapping)
 
-The app is served at **pre-consult.org** via Cloud Run domain mapping. Cloudflare is used as a DNS-only provider (proxy disabled) — DNS A records point to Google's IPs (`216.239.{32,34,36,38}.21`), and Google handles SSL termination.
+The app is served at **pre-consult.org** via Cloud Run domain mapping. Cloudflare is used as a DNS-only provider (proxy disabled) — DNS A records point to Google's IPs (`216.239.{32,34,36,38}.21`), and Google handles SSL termination. Note: Cloudflare WAF/rate-limit rules and Bot Shield can only take effect if DNS for the domain is actually proxied through Cloudflare; if the apex uses the Google-hosted A records above, they are DNS-only. Any DNS proxy change is a high-risk production change and must be validated against a smoke test after rollout.
 
 ---
 
@@ -187,11 +201,15 @@ app-preconsult/
 │   ├── analytics.py         # HTTP event tracking
 │   └── i18n.py              # EN/PT translations & legal content
 ├── scripts/                 # Utility & Operations Scripts
+│   ├── deploy_backend.sh     # Deploy an ALREADY-BUILT CI image (NEVER --source)
+│   ├── configure_cloudflare.sh# Cloudflare DNS/WAF/rate-limit configuration
 │   ├── run_lighthouse_audit.py# Lighthouse performance audit & JSON/HTML report CLI
 │   ├── analyze_cloudrun_logs.py# GCP Cloud Run log fetcher & analyzer
 │   ├── analyze_cloudflare_logs.py# Cloudflare HTTP log fetcher & analyzer
+│   ├── analyze_week_humans.py# Weekly human-vs-bot access analysis
 │   └── analyze_all_logs.py  # Unified logs analysis script
 ├── tests/                   # 104 tests
+├── AGENTS.md                # Agent rules (incl. CI/CD-only deploy policy)
 ├── Dockerfile               # Multi-stage container build
 ├── docker-compose.yml       # Local Redis service
 ├── pyproject.toml           # Dependencies & build configuration

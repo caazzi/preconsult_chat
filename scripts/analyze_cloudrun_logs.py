@@ -45,8 +45,8 @@ def fetch_logs(project_id, service_name, hours):
         return []
 
 def analyze_logs(logs):
-    request_logs = [l for l in logs if 'httpRequest' in l]
-    app_logs = [l for l in logs if 'httpRequest' not in l]
+    request_logs = [log for log in logs if 'httpRequest' in log]
+    app_logs = [log for log in logs if 'httpRequest' not in log]
 
     statuses = Counter()
     methods = Counter()
@@ -78,8 +78,8 @@ def analyze_logs(logs):
             except ValueError:
                 pass
 
-    error_logs = [l for l in app_logs if l.get('severity') in ('ERROR', 'CRITICAL', 'ALERT', 'EMERGENCY')]
-    app_severities = Counter(l.get('severity', 'DEFAULT') for l in app_logs)
+    error_logs = [log for log in app_logs if log.get('severity') in ('ERROR', 'CRITICAL', 'ALERT', 'EMERGENCY')]
+    app_severities = Counter(log.get('severity', 'DEFAULT') for log in app_logs)
 
     return {
         'total_logs': len(logs),
@@ -164,7 +164,7 @@ def main():
 
     if args.json:
         # Remove raw non-serializable objects if any
-        analysis['error_logs'] = [l.get('textPayload') or l.get('jsonPayload') for l in analysis['error_logs']]
+        analysis['error_logs'] = [log.get('textPayload') or log.get('jsonPayload') for log in analysis['error_logs']]
         print(json.dumps(analysis, indent=2))
     else:
         print_report(analysis)

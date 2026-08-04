@@ -126,7 +126,9 @@ docs/templates/
 # Performance & Lighthouse Output
 lighthouse-reports/
 lighthouse-*.report.*
-"C:\\Users\\Usuario\\AppData\\Local\\lighthouse.*"
+lighthouse.*/
+Lighthouse/
+C:*/
 
 
 

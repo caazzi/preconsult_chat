@@ -114,8 +114,12 @@ GTAG_ID=     # optional
 
 ```bash
 uv sync --extra test
-uv run python -m pytest tests/ -v
+uv run python -m pytest tests/ -v --cov --cov-report=term-missing --cov-fail-under=80
 ```
+
+The test command enforces an **80% coverage gate** (measured over `src/preconsult`
+and `reflex_app/preconsult`, branch coverage, excluding the declarative Reflex
+page tree). CI fails the build if coverage drops below the threshold.
 
 The test suite contains **108 passing tests** covering:
 - **Agent Service**: XML prompt structure, OPQRST & SAMPLE clinical frameworks, multi-language prompt formatting, emergency condition detection.

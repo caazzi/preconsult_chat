@@ -35,6 +35,20 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = ["asyncio: marks tests as async"]
+addopts = "--strict-markers"
+
+[tool.coverage.run]
+source = ["src/preconsult", "reflex_app/preconsult"]
+# The Reflex page/component tree is generated declaratively and contributes
+# little behavioral value per assertion, so omit it from the gate to keep the
+# coverage signal pointed at the code that can actually regress behaviour.
+omit = ["reflex_app/preconsult/preconsult.py"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 80
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/preconsult"]

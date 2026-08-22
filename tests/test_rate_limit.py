@@ -2,6 +2,7 @@ import asyncio
 import pytest
 import httpx
 from httpx import ASGITransport
+from unittest.mock import AsyncMock
 from reflex_app.preconsult.preconsult import api as app
 from preconsult.core.config import PRECONSULT_API_KEY
 
@@ -174,3 +175,85 @@ async def test_concurrent_session_quota():
 
     assert ok_count == 20, f"Esperado 20 OK, obtido {ok_count}"
     assert quota_reached, "Quota diaria deveria ter sido atingida"
+
+
+# ---------------------------------------------------------------------------
+# Redis-backed code path (Lua EVAL / get / expire) via a mocked client.
+#
+# The tests above force the in-memory fallback (`_redis_available = False`).
+# These drive the *real* Redis branch that runs the `INCR_EXPIRE_SCRIPT` and
+# `hincrby` through a mocked asyncio redis client, so both code paths are
+# covered. The fixture in conftest.py resets the cached pool/health per test.
+# ---------------------------------------------------------------------------
+
+def _fake_client():
+    return AsyncMock()
+
+
+@pytest.mark.asyncio
+async def test_check_rate_limit_via_redis():
+    import preconsult.services.session_service as srv
+
+    client = _fake_client()
+    srv._redis_pool = client
+    srv._redis_available = None
+
+    client.eval.return_value = 1  # first hit under the limit
+    assert await srv.check_rate_limit("1.2.3.4", limit=2, window=60) is True
+    client.eval.assert_called_once()
+
+    client.eval.return_value = 2  # at the limit
+    assert await srv.check_rate_limit("1.2.3.4", limit=2, window=60) is True
+
+    client.eval.return_value = 3  # over the limit
+    assert await srv.check_rate_limit("1.2.3.4", limit=2, window=60) is False
+    assert srv._redis_available is True
+
+
+@pytest.mark.asyncio
+async def test_check_session_quota_via_redis():
+    import preconsult.services.session_service as srv
+
+    client = _fake_client()
+    srv._redis_pool = client
+    srv._redis_available = None
+
+    client.get.return_value = b"5"
+    assert await srv.check_session_quota("9.9.9.9", limit=20) is True
+
+    client.get.return_value = None  # never used this IP
+    assert await srv.check_session_quota("9.9.9.9", limit=20) is True
+
+    client.get.return_value = b"20"
+    assert await srv.check_session_quota("9.9.9.9", limit=20) is False
+
+
+@pytest.mark.asyncio
+async def test_increment_session_quota_via_redis():
+    import preconsult.services.session_service as srv
+
+    client = _fake_client()
+    srv._redis_pool = client
+    srv._redis_available = None
+
+    await srv.increment_session_quota("1.1.1.1", window=86400)
+    client.eval.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_redis_commands_fall_back_to_memory_on_error():
+    import preconsult.services.session_service as srv
+
+    client = _fake_client()
+    srv._redis_pool = client
+    srv._redis_available = None
+
+    # eval raises -> _try_redis catches, marks Redis down, uses memory limiter
+    client.eval.side_effect = Exception("connection refused")
+    assert await srv.check_rate_limit("fallback-ip", limit=10, window=60) is True
+    assert srv._redis_available is False
+
+    # second call hits the latched-down path -> fallback only, no redis call
+    client.eval.side_effect = Exception("still down")
+    assert await srv.check_rate_limit("fallback-ip", limit=10, window=60) is True
+    assert srv._redis_available is False

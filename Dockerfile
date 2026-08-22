@@ -55,6 +55,8 @@ RUN groupadd -r preconsult && useradd -r -g preconsult -m preconsult && \
 USER preconsult
 WORKDIR /app/reflex_app
 
-# Run production backend using Gunicorn with Uvicorn workers and bind to the PORT env variable
-# 'exec' ensures signals (like SIGTERM for scale-down) are correctly sent to gunicorn
-CMD ["sh", "-c", "exec uv run gunicorn preconsult.preconsult:api --bind 0.0.0.0:${PORT:-8080} --worker-class uvicorn.workers.UvicornWorker --workers 2 --threads 4"]
+# Run production backend using Gunicorn with Uvicorn workers and bind to the PORT env variable.
+# UvicornH11Worker forces uvicorn's pure-Python h11 HTTP parser (instead of the strict
+# httptools C parser) to avoid "Invalid HTTP request received" 502s on cold/throttled
+# instances. 'exec' ensures signals (like SIGTERM for scale-down) reach gunicorn.
+CMD ["sh", "-c", "exec uv run gunicorn preconsult.preconsult:api --bind 0.0.0.0:${PORT:-8080} --worker-class uvicorn.workers.UvicornH11Worker --workers 2"]

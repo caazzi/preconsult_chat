@@ -124,10 +124,16 @@ jobs:
         run: |
           PROFILE="${{ env.DEPLOY_PROFILE }}"
           echo "🚀 Selected Deployment Profile: $PROFILE"
+          # --no-use-http2 forces HTTP/1.1 to the container. The service port
+          # was previously (sticky) named `h2c`, so Cloud Run's proxy spoke
+          # HTTP/2 cleartext which uvicorn 0.34 has NO support for -> every
+          # request reset with 502 "Invalid HTTP request received". HTTP/1.1
+          # (the `http1` port name, used by the verified-working revisions) is
+          # what uvicorn serves cleanly.
           if [ "$PROFILE" = "high_performance" ]; then
-            echo "flags=--allow-unauthenticated --session-affinity --max-instances=10 --min-instances=2 --concurrency=40 --cpu=2 --memory=2Gi --no-cpu-throttling" >> "$GITHUB_OUTPUT"
+            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=10 --min-instances=2 --concurrency=40 --cpu=2 --memory=2Gi --no-cpu-throttling" >> "$GITHUB_OUTPUT"
           else
-            echo "flags=--allow-unauthenticated --session-affinity --max-instances=5 --min-instances=1 --concurrency=80 --cpu=1 --memory=2Gi --cpu-throttling" >> "$GITHUB_OUTPUT"
+            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=5 --min-instances=1 --concurrency=80 --cpu=1 --memory=2Gi --cpu-throttling" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy to Cloud Run
@@ -172,23 +178,23 @@ jobs:
             --region=${{ env.REGION }} \
             --format=json > /tmp/service.json
           python3 - <<'PY'
-            import json, sys
-            with open('/tmp/service.json') as f:
-                svc = json.load(f)
-            status = svc.get('status', {})
-            latest_ready = status.get('latestReadyRevisionName')
-            traffic = status.get('traffic') or []
-            if not traffic:
-                sys.exit(f"ERROR: no traffic targets on service {svc['metadata']['name']}")
-            # Traffic is ordered by percentage; promoted revision should be at the top.
-            top = traffic[0]
-            if top.get('revisionName') != latest_ready:
-                sys.exit(f"ERROR: traffic not promoted. Top target {top.get('revisionName')} "
-                         f"!= latest ready revision {latest_ready}")
-            if top.get('percent') != 100:
-                sys.exit(f"ERROR: top target {top.get('revisionName')} has "
-                         f"{top.get('percent')}% traffic, expected 100%")
-            print(f"OK: {top['revisionName']} serving {top['percent']}% of traffic")
+          import json, sys
+          with open('/tmp/service.json') as f:
+              svc = json.load(f)
+          status = svc.get('status', {})
+          latest_ready = status.get('latestReadyRevisionName')
+          traffic = status.get('traffic') or []
+          if not traffic:
+              sys.exit(f"ERROR: no traffic targets on service {svc['metadata']['name']}")
+          # Traffic is ordered by percentage; promoted revision should be at the top.
+          top = traffic[0]
+          if top.get('revisionName') != latest_ready:
+              sys.exit(f"ERROR: traffic not promoted. Top target {top.get('revisionName')} "
+                       f"!= latest ready revision {latest_ready}")
+          if top.get('percent') != 100:
+              sys.exit(f"ERROR: top target {top.get('revisionName')} has "
+                       f"{top.get('percent')}% traffic, expected 100%")
+          print(f"OK: {top['revisionName']} serving {top['percent']}% of traffic")
           PY
 
   smoke-test:
@@ -231,23 +237,23 @@ jobs:
             --region=${{ env.REGION }} \
             --format=json > /tmp/service.json
           python3 - <<'PY'
-            import json, os, sys
-            exp = os.environ.get("EXPECTED_REVISION", "")
-            with open('/tmp/service.json') as f:
-                svc = json.load(f)
-            traffic = (svc.get('status', {}).get('traffic') or [])
-            top = traffic[0] if traffic else {}
-            serving = top.get('revisionName')
-            percent = top.get('percent')
-            print(f"Serving revision: {serving} ({percent}%)")
-            if not exp:
-                sys.exit("ERROR: no expected revision supplied from deploy job")
-            if serving != exp:
-                sys.exit(f"ERROR: serving revision {serving} != deployed revision {exp}; "
-                         f"smoke test would validate a stale build")
-            if (percent or 0) != 100:
-                sys.exit(f"ERROR: serving revision {serving} at {percent}%, expected 100%")
-            print("OK: traffic is on the newly deployed revision")
+          import json, os, sys
+          exp = os.environ.get("EXPECTED_REVISION", "")
+          with open('/tmp/service.json') as f:
+              svc = json.load(f)
+          traffic = (svc.get('status', {}).get('traffic') or [])
+          top = traffic[0] if traffic else {}
+          serving = top.get('revisionName')
+          percent = top.get('percent')
+          print(f"Serving revision: {serving} ({percent}%)")
+          if not exp:
+              sys.exit("ERROR: no expected revision supplied from deploy job")
+          if serving != exp:
+              sys.exit(f"ERROR: serving revision {serving} != deployed revision {exp}; "
+                       f"smoke test would validate a stale build")
+          if (percent or 0) != 100:
+              sys.exit(f"ERROR: serving revision {serving} at {percent}%, expected 100%")
+          print("OK: traffic is on the newly deployed revision")
           PY
 
       - name: Run Multi-Stage Smoke Tests

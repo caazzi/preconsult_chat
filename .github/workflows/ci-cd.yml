@@ -81,6 +81,8 @@ jobs:
     # Only run deploy on push to main or manual dispatch
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
+    outputs:
+      latest_ready_revision: ${{ steps.promote.outputs.latest_ready_revision }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -142,8 +144,52 @@ jobs:
           secrets: |
             REDIS_URL=REDIS_URL:latest
             PRECONSULT_API_KEY=SECUREMED_API_KEY:latest
-          revision_traffic: 'LATEST=100'
           flags: ${{ steps.profile.outputs.flags }}
+
+      # The deploy action's `revision_traffic: LATEST=100` input has proven
+      # unreliable here (the freshly built revision was repeatedly left
+      # Ready-but-Retired with 0% traffic while 100% stayed pinned to an old
+      # revision). Promote explicitly and verify, so the new build is actually
+      # what serves production and the smoke test exercises the new revision.
+      - name: Promote latest revision (to-latest)
+        id: promote
+        run: |
+          # 1. Promote: route 100% of traffic to the newest ready revision.
+          gcloud run services update-traffic ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --to-latest > /dev/null
+
+          # 2. Capture the latest ready revision name for the smoke test.
+          LATEST_READY="$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --format='value(status.latestReadyRevisionName)')"
+          echo "latest_ready_revision=${LATEST_READY}" >> "$GITHUB_OUTPUT"
+          echo "Promoted traffic to latest ready revision: ${LATEST_READY}"
+
+          # 3. Verify: the top traffic target must be the latest ready revision
+          #    at 100%. Fail loudly otherwise so stale builds never get green-lit.
+          gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --format=json > /tmp/service.json
+          python3 - <<'PY'
+            import json, sys
+            with open('/tmp/service.json') as f:
+                svc = json.load(f)
+            status = svc.get('status', {})
+            latest_ready = status.get('latestReadyRevisionName')
+            traffic = status.get('traffic') or []
+            if not traffic:
+                sys.exit(f"ERROR: no traffic targets on service {svc['metadata']['name']}")
+            # Traffic is ordered by percentage; promoted revision should be at the top.
+            top = traffic[0]
+            if top.get('revisionName') != latest_ready:
+                sys.exit(f"ERROR: traffic not promoted. Top target {top.get('revisionName')} "
+                         f"!= latest ready revision {latest_ready}")
+            if top.get('percent') != 100:
+                sys.exit(f"ERROR: top target {top.get('revisionName')} has "
+                         f"{top.get('percent')}% traffic, expected 100%")
+            print(f"OK: {top['revisionName']} serving {top['percent']}% of traffic")
+          PY
 
   smoke-test:
     name: Smoke Test Deployed Endpoint
@@ -172,6 +218,38 @@ jobs:
             --format='value(status.url)')
           echo "url=${URL}" >> "$GITHUB_OUTPUT"
 
+      # Guard: the revision actually serving traffic must be the one just
+      # promoted by the deploy job. If traffic is still on a stale revision
+      # (e.g. promotion regresses), fail here instead of green-lighting the old
+      # build.
+      - name: Verify served revision matches deployed revision
+        env:
+          EXPECTED_REVISION: ${{ needs.deploy.outputs.latest_ready_revision }}
+        run: |
+          echo "Expected (promoted) revision: ${EXPECTED_REVISION}"
+          gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region=${{ env.REGION }} \
+            --format=json > /tmp/service.json
+          python3 - <<'PY'
+            import json, os, sys
+            exp = os.environ.get("EXPECTED_REVISION", "")
+            with open('/tmp/service.json') as f:
+                svc = json.load(f)
+            traffic = (svc.get('status', {}).get('traffic') or [])
+            top = traffic[0] if traffic else {}
+            serving = top.get('revisionName')
+            percent = top.get('percent')
+            print(f"Serving revision: {serving} ({percent}%)")
+            if not exp:
+                sys.exit("ERROR: no expected revision supplied from deploy job")
+            if serving != exp:
+                sys.exit(f"ERROR: serving revision {serving} != deployed revision {exp}; "
+                         f"smoke test would validate a stale build")
+            if (percent or 0) != 100:
+                sys.exit(f"ERROR: serving revision {serving} at {percent}%, expected 100%")
+            print("OK: traffic is on the newly deployed revision")
+          PY
+
       - name: Run Multi-Stage Smoke Tests
         env:
           BASE_URL: ${{ steps.url.outputs.url }}
@@ -180,8 +258,8 @@ jobs:
           echo "==== Stage 1: Liveness / Health Check ===="
           HEALTH_URL="${BASE_URL}/health"
           SUCCESS=false
-          for i in {1..5}; do
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" --connect-timeout 15 --max-time 45 || echo "000")
+          for i in {1..10}; do
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" --connect-timeout 15 --max-time 30 || echo "000")
             echo "Health ping $i: HTTP Status $HTTP_STATUS"
             if [ "$HTTP_STATUS" = "200" ]; then
               SUCCESS=true

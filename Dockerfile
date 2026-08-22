@@ -13,12 +13,15 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uv/bin/
 ENV PATH="/uv/bin:$PATH"
 
-# Install dependencies
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project
-
-# Copy the entire project for build
+# Copy the entire project for build (needed so `uv sync` can install the app
+# wheel from source).
 COPY . .
+
+# Install dependencies and bake the app wheel into the venv.
+# Installing the project here (NOT --no-install-project) means the runtime
+# `uv run` never rebuilds/re-syncs the wheel, eliminating the ~40s of
+# `Building preconsult @ file:///app` CPU work that happened on every cold start.
+RUN uv sync --frozen
 
 # Build Reflex frontend
 WORKDIR /app/reflex_app
@@ -39,10 +42,13 @@ ENV PATH="/uv/bin:$PATH"
 # Copy the built project and venv from builder
 COPY --from=builder /app /app
 
-# Set up environment
+# Set up environment.
+# UV_NO_SYNC=1 forbids `uv run` from re-syncing/rebuilding the already-baked
+# project + venv, keeping container startup fast (seconds, not ~46s).
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH="/app/src"
+    PYTHONPATH="/app/src" \
+    UV_NO_SYNC=1
 
 # Expose ports (Reflex default is 8000 for backend, 3000 for frontend, 
 # but in prod it's consolidated or served differently)

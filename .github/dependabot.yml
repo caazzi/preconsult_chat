@@ -1,5 +1,10 @@
 version: 2
 updates:
+  # --- Python dependencies ------------------------------------------------
+  # Deployments go ONLY through GitHub Actions CI/CD, and every merged pip bump
+  # triggers a full Cloud Run deploy. Keep the pipeline stable by grouping
+  # low-risk patch/minor bumps into a single weekly PR, and by ignoring the
+  # big/breaking deps that must be reviewed deliberately instead of auto-bumped.
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -10,26 +15,26 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    versioning-strategy: "increase-if-necessary"
+    groups:
+      patch-minor:
+        applies-to: version-updates
+        update-types: ["patch", "minor"]
+    ignore:
+      # Breaking/graph-changing deps that touch the serving or LLM path — review
+      # these manually rather than letting dependabot raise PRs for them.
+      - dependency-name: "langchain"
+      - dependency-name: "langchain-google-vertexai"
+      - dependency-name: "reflex"
+      - dependency-name: "reflex-base"
+      - dependency-name: "google-cloud-aiplatform"
+      # Dead dependency: declared but imported nowhere; remove it instead of bumping.
+      - dependency-name: "cachetools"
+      - dependency-name: "python-dotenv"
 
-  - package-ecosystem: "pip"
-    directory: "/reflex_app"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 2
-    labels:
-      - "dependencies"
-
+  # --- GitHub Actions -----------------------------------------------------
+  # CI-only tooling; upgrading never affects the shipped container, so group
+  # and auto-bump freely.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -37,3 +42,20 @@ updates:
     open-pull-requests-limit: 2
     labels:
       - "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # --- Docker base image --------------------------------------------------
+  # Python is pinned by design (pyproject.toml requires >=3.11,<3.13). Keep the
+  # base image on a monthly cadence and ignore the python major bumps so the
+  # image stays in line with the supported interpreter range.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+    ignore:
+      - dependency-name: "python"

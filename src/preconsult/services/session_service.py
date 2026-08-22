@@ -139,13 +139,57 @@ async def update_session(session_id: str, new_data: Dict[str, Any]) -> None:
     await client.expire(key, SESSION_TTL)
     logging.debug(f"Atualizada sessao {session_id} no Redis: {list(new_data.keys())}")
 
+async def check_redis_health() -> bool:
+    """Actively probe Redis connectivity (used by /health and reconnect logic).
+
+    Sets _redis_available to reflect the live state and returns whether Redis
+    is reachable. Attempts a reconnect if Redis was previously flagged down.
+    Never raises.
+    """
+    global _redis_available
+    client = get_redis()
+    if client is None:
+        if not _reconnect_redis():
+            return False
+        client = get_redis()
+        if client is None:
+            return False
+    try:
+        pong = await client.ping()
+        ok = bool(pong)
+        _redis_available = ok
+        return ok
+    except Exception as e:
+        _redis_available = False
+        logging.error(f"Redis ping falhou: {e}")
+        return False
+
+
+def _reconnect_redis() -> bool:
+    """Reset the failure latch and rebuild the pool to retry Redis.
+
+    Returns True if a fresh pool handle is available to try, else False.
+    """
+    global _redis_pool, _redis_available
+    try:
+        _redis_pool = redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2, socket_timeout=2)
+        _redis_available = None
+        return True
+    except Exception as e:
+        logging.error(f"Reconexao Redis falhou: {e}")
+        _redis_pool = None
+        _redis_available = False
+        return False
+
+
 async def _try_redis(fn, fallback_fn):
     global _redis_available
-    if _redis_available is not False:
+    client = get_redis()
+    if client is not None:
         try:
-            client = get_redis()
-            if client:
-                return await fn(client)
+            result = await fn(client)
+            _redis_available = True
+            return result
         except Exception as e:
             _redis_available = False
             logging.error(f"Redis offline. Usando fallback em memoria: {e}")

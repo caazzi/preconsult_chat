@@ -270,18 +270,23 @@ async def test_health_endpoint():
 
 
 @pytest.mark.asyncio
-async def test_health_reports_unavailable_when_redis_unknown():
-    from preconsult.services.session_service import _redis_available
-    original = _redis_available
-    try:
-        import preconsult.services.session_service as svc
-        svc._redis_available = None
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.get("/health")
-        assert resp.status_code == 200
-        assert resp.json()["redis"] == "unavailable"
-    finally:
-        svc._redis_available = original
+@patch("preconsult.services.session_service.check_redis_health", new_callable=AsyncMock)
+async def test_health_reports_ok_when_redis_up(mock_health):
+    mock_health.return_value = True
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["redis"] == "ok"
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.check_redis_health", new_callable=AsyncMock)
+async def test_health_reports_unavailable_when_redis_down(mock_health):
+    mock_health.return_value = False
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["redis"] == "unavailable"
 
 
 @pytest.mark.asyncio

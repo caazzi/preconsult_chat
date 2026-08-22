@@ -85,3 +85,56 @@ async def test_get_session_redis_unavailable(mock_get_redis):
 async def test_update_session_redis_unavailable(mock_get_redis):
     result = await update_session("any-id", {"gender": "Female"})
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_check_redis_health_ok_sets_available_true():
+    import preconsult.services.session_service as srv
+
+    client = AsyncMock()
+    client.ping.return_value = True
+    srv._redis_pool = client
+    srv._redis_available = None
+
+    assert await srv.check_redis_health() is True
+    assert srv._redis_available is True
+
+    srv._redis_pool = None
+    srv._redis_available = None
+
+
+@pytest.mark.asyncio
+async def test_check_redis_health_down_sets_available_false():
+    import preconsult.services.session_service as srv
+
+    client = AsyncMock()
+    client.ping.side_effect = Exception("boom")
+    srv._redis_pool = client
+    srv._redis_available = None
+
+    assert await srv.check_redis_health() is False
+    assert srv._redis_available is False
+
+    srv._redis_pool = None
+    srv._redis_available = None
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service._reconnect_redis", return_value=True)
+@patch("preconsult.services.session_service.get_redis")
+async def test_check_redis_health_reconnects_when_latched_down(mock_get_redis, mock_reconnect):
+    import preconsult.services.session_service as srv
+
+    # First call returns None (latched down), reconnect builds a fresh pool,
+    # second call returns a healthy client.
+    client = AsyncMock()
+    client.ping.return_value = True
+    mock_get_redis.side_effect = [None, client]
+    srv._redis_available = False
+
+    assert await srv.check_redis_health() is True
+    assert srv._redis_available is True
+    assert mock_reconnect.called
+
+    srv._redis_pool = None
+    srv._redis_available = None

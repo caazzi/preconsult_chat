@@ -195,6 +195,16 @@ jobs:
             exit 1
           fi
 
+          # 1b. Redis connectivity assertion (health must report redis: ok)
+          echo "==== Stage 1b: Redis Health Assertion ===="
+          HEALTH_BODY=$(curl -s --connect-timeout 15 --max-time 45 "$HEALTH_URL")
+          echo "Health body: $HEALTH_BODY"
+          REDIS_STATE=$(echo "$HEALTH_BODY" | jq -r '.redis // "missing"')
+          if [ "$REDIS_STATE" != "ok" ]; then
+            echo "::error::Redis reported as '$REDIS_STATE'. Expected 'ok'. Health body: $HEALTH_BODY"
+            exit 1
+          fi
+
           # 2. Get API Key from GCP Secret Manager
           echo "==== Stage 2: Retrieve API Key ===="
           API_KEY=$(gcloud secrets versions access latest --secret="SECUREMED_API_KEY")

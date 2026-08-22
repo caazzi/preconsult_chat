@@ -844,7 +844,6 @@ if api_router:
     from pydantic import ValidationError
     from google.api_core.exceptions import GoogleAPIError
     from starlette.responses import Response
-    from preconsult.services.session_service import _redis_available
     from preconsult.core.errors import (
         RedisUnavailableError,
         LLMUnavailableError,
@@ -865,8 +864,9 @@ if api_router:
 
     async def health(request):
         from starlette.responses import JSONResponse
-        redis_status = "ok" if _redis_available is True else "unavailable"
-        return JSONResponse({"status": "healthy", "redis": redis_status})
+        from preconsult.services.session_service import check_redis_health
+        redis_ok = await check_redis_health()
+        return JSONResponse({"status": "healthy", "redis": "ok" if redis_ok else "unavailable"})
 
     async def robots_txt(request):
         content = (

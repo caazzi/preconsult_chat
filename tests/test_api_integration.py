@@ -290,6 +290,34 @@ async def test_health_reports_unavailable_when_redis_down(mock_health):
 
 
 @pytest.mark.asyncio
+async def test_health_live_always_ready():
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/health/live")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.check_redis_health", new_callable=AsyncMock)
+async def test_health_ready_200_when_redis_ok(mock_health):
+    mock_health.return_value = True
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/health/ready")
+    assert resp.status_code == 200
+    assert resp.json()["redis"] == "ok"
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.check_redis_health", new_callable=AsyncMock)
+async def test_health_ready_503_when_redis_down(mock_health):
+    mock_health.return_value = False
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/health/ready")
+    assert resp.status_code == 503
+    assert resp.json()["code"] == "service_unavailable"
+
+
+@pytest.mark.asyncio
 async def test_root_endpoint():
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/health", headers=HEADERS)

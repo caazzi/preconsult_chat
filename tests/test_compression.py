@@ -1,12 +1,19 @@
 """
 Tests for Gzip response compression and static asset caching headers.
+
+Uses httpx.AsyncClient + ASGITransport (the suite's standard pattern) instead of
+Starlette's sync TestClient, which routes through httpx and is deprecated in
+favor of httpx2.
 """
-from fastapi.testclient import TestClient
+import pytest
+import httpx
+from httpx import ASGITransport
 from fastapi.responses import PlainTextResponse
 from reflex_app.preconsult.preconsult import app
 
 
-def test_gzip_compression_enabled():
+@pytest.mark.asyncio
+async def test_gzip_compression_enabled():
     """Verify that GZipMiddleware compresses responses >= 500 bytes when Accept-Encoding: gzip is sent."""
     starlette_app = app._api
 
@@ -15,8 +22,8 @@ def test_gzip_compression_enabled():
 
     starlette_app.add_route("/test-large-payload-gzip", large_payload)
 
-    client = TestClient(starlette_app)
-    response = client.get("/test-large-payload-gzip", headers={"Accept-Encoding": "gzip"})
+    async with httpx.AsyncClient(transport=ASGITransport(app=starlette_app), base_url="http://test") as client:
+        response = await client.get("/test-large-payload-gzip", headers={"Accept-Encoding": "gzip"})
     assert response.status_code == 200
     assert response.headers.get("content-encoding") == "gzip"
 

@@ -16,7 +16,8 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from langchain_core.runnables import Runnable
 
-from preconsult.core.config import PRECONSULT_API_KEY
+from preconsult.core.config import PRECONSULT_API_KEY, TRUST_PROXY_HEADERS
+from preconsult.core.observability import new_request_id, log_event, timed
 from preconsult.services.agent_service import (
     stream_interview_questions,
     get_interview_chain,
@@ -46,11 +47,18 @@ def _sanitize_input(text: str) -> str:
     return html.escape(text.strip())
 
 def get_client_ip(request: Request) -> str:
-    """Extrai o IP real do cliente, considerando proxies como Cloudflare ou Cloud Run."""
-    if "cf-connecting-ip" in request.headers:
-        return request.headers["cf-connecting-ip"]
-    if "x-forwarded-for" in request.headers:
-        return request.headers["x-forwarded-for"].split(",")[0].strip()
+    """Extract the effective client IP for rate limiting / quotas.
+
+    When ``TRUST_PROXY_HEADERS`` is enabled (the app sits behind a trusted
+    fronting proxy such as Cloudflare/Cloud Run) the proxy-forwarded headers
+    are honored. Otherwise the transport-level address is used so a spoofed
+    ``cf-connecting-ip`` / ``x-forwarded-for`` cannot bypass per-IP limits.
+    """
+    if TRUST_PROXY_HEADERS:
+        if "cf-connecting-ip" in request.headers:
+            return request.headers["cf-connecting-ip"]
+        if "x-forwarded-for" in request.headers:
+            return request.headers["x-forwarded-for"].split(",")[0].strip()
     return request.client.host if request.client else "127.0.0.1"
 
 # --- Data Models (Ephemeral State Design) ---
@@ -94,35 +102,52 @@ router = APIRouter(dependencies=[Depends(get_api_key)])
 @router.post("/session/init")
 async def init_session(request: SessionInitRequest, fastapi_req: Request):
     """Initializes a new ephemeral Redis session with full form data."""
+    request_id = new_request_id()
     ip = get_client_ip(fastapi_req)
-    
-    # 1. Check daily quota (max 20 sessions per IP)
-    if not await check_session_quota(ip, limit=20):
-        raise HTTPException(status_code=429, detail="Daily session limit reached for this IP.")
-        
-    # 2. Check rate limit for session creation (max 2 per minute)
-    if not await check_rate_limit(f"init:{ip}", limit=2, window=60):
-        raise HTTPException(status_code=429, detail="Too many session requests. Please wait.")
 
-    session_id = await create_session({
-        "age_bracket": request.age_bracket,
-        "sex": request.sex,
-        "lang": request.lang,
-        "specialist": request.specialist,
-        "chief_complaint": request.chief_complaint,
-        "duration": request.duration,
-        "complaint_detail": request.complaint_detail,
-        "conditions": request.conditions,
-        "medications": request.medications,
-        "allergies": request.allergies,
-        "family_history": request.family_history,
-        "smoking": request.smoking,
-        "alcohol": request.alcohol,
-    })
-    
-    # Increment quota after successful creation
-    await increment_session_quota(ip)
-    
+    async with timed(
+        "session.init",
+        request_id=request_id,
+        lang=request.lang,
+        conditions_n=len(request.conditions),
+        medications_n=len(request.medications),
+        complaint_len=len(request.chief_complaint),
+    ):
+        # 1. Check daily quota (max 20 sessions per IP)
+        if not await check_session_quota(ip, limit=20):
+            raise HTTPException(status_code=429, detail="Daily session limit reached for this IP.")
+
+        # 2. Check rate limit for session creation (max 2 per minute)
+        if not await check_rate_limit(f"init:{ip}", limit=2, window=60):
+            raise HTTPException(status_code=429, detail="Too many session requests. Please wait.")
+
+        session_id = await create_session({
+            "age_bracket": request.age_bracket,
+            "sex": request.sex,
+            "lang": request.lang,
+            "specialist": request.specialist,
+            "chief_complaint": request.chief_complaint,
+            "duration": request.duration,
+            "complaint_detail": request.complaint_detail,
+            "conditions": request.conditions,
+            "medications": request.medications,
+            "allergies": request.allergies,
+            "family_history": request.family_history,
+            "smoking": request.smoking,
+            "alcohol": request.alcohol,
+        })
+
+        # Increment quota after successful creation
+        await increment_session_quota(ip)
+
+        log_event(
+            logging.INFO,
+            "session.init.ok",
+            request_id=request_id,
+            session_id_short=session_id[:8],
+            lang=request.lang,
+        )
+
     return {"session_id": session_id}
 
 @router.post("/initial-questions-stream")
@@ -132,6 +157,7 @@ async def get_initial_questions_streamed(
     chain: Runnable = Depends(get_interview_chain)
 ):
     """ Streams interview questions based on chief complaint. """
+    request_id = new_request_id()
     ip = get_client_ip(fastapi_req)
     if not await check_rate_limit(f"stream:{ip}", limit=5, window=60):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait a moment.")
@@ -151,12 +177,36 @@ async def get_initial_questions_streamed(
         else "⚠️ ERRO: Serviço temporariamente indisponível. Tente novamente."
     )
 
+    log_event(
+        logging.INFO,
+        "stream.initial.start",
+        request_id=request_id,
+        session_id_short=request.session_id[:8],
+        lang=lang,
+        complaint_len=len(sanitized_complaint),
+    )
+
     async def event_generator():
+        streamed = 0
         try:
             async for chunk in stream_interview_questions(session_data, lang, chain):
+                streamed += 1
                 yield f"data: {json.dumps(chunk)}\n\n"
+            log_event(
+                logging.INFO,
+                "stream.initial.ok",
+                request_id=request_id,
+                session_id_short=request.session_id[:8],
+                chunks=streamed,
+            )
         except Exception as e:
             logging.error(f"Error during streaming initial questions: {e}", exc_info=True)
+            log_event(
+                logging.ERROR,
+                "stream.initial.error",
+                request_id=request_id,
+                error_type=type(e).__name__,
+            )
             yield f"data: {json.dumps(' ' + err_msg)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -168,6 +218,7 @@ async def get_interview_questions_streamed(
     chain: Runnable = Depends(get_interview_chain)
 ):
     """Streams targeted interview questions based on full form context. Single LLM call."""
+    request_id = new_request_id()
     ip = get_client_ip(fastapi_req)
     if not await check_rate_limit(f"stream:{ip}", limit=5, window=60):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait a moment.")
@@ -183,12 +234,35 @@ async def get_interview_questions_streamed(
         else "⚠️ ERRO: Serviço temporariamente indisponível. Tente novamente."
     )
 
+    log_event(
+        logging.INFO,
+        "stream.interview.start",
+        request_id=request_id,
+        session_id_short=request.session_id[:8],
+        lang=lang,
+    )
+
     async def event_generator():
+        streamed = 0
         try:
             async for chunk in stream_interview_questions(session_data, lang, chain):
+                streamed += 1
                 yield f"data: {json.dumps(chunk)}\n\n"
+            log_event(
+                logging.INFO,
+                "stream.interview.ok",
+                request_id=request_id,
+                session_id_short=request.session_id[:8],
+                chunks=streamed,
+            )
         except Exception as e:
             logging.error(f"Error during streaming interview questions: {e}", exc_info=True)
+            log_event(
+                logging.ERROR,
+                "stream.interview.error",
+                request_id=request_id,
+                error_type=type(e).__name__,
+            )
             yield f"data: {json.dumps(' ' + err_msg)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -196,15 +270,29 @@ async def get_interview_questions_streamed(
 @router.post("/generate-pdf")
 async def generate_pdf_endpoint(request: GeneratePdfRequest):
     """Generates PDF deterministically from session form data + Q&A pairs. No LLM call."""
+    request_id = new_request_id()
     session_data = await get_session(request.session_id)
     if not session_data:
         raise HTTPException(status_code=404, detail="Session expired or invalid")
 
     qa_pairs = [{"question": pair.question, "answer": pair.answer} for pair in request.qa_pairs]
     loop = asyncio.get_running_loop()
-    pdf_bytes, filename = await loop.run_in_executor(
-        None, generate_pdf_report_in_memory,
-        session_data, qa_pairs, session_data.get("lang", "en")
+    async with timed(
+        "pdf.generate",
+        request_id=request_id,
+        lang=session_data.get("lang", "en"),
+        qa_n=len(qa_pairs),
+    ):
+        pdf_bytes, filename = await loop.run_in_executor(
+            None, generate_pdf_report_in_memory,
+            session_data, qa_pairs, session_data.get("lang", "en")
+        )
+    log_event(
+        logging.INFO,
+        "pdf.generate.ok",
+        request_id=request_id,
+        session_id_short=request.session_id[:8],
+        pdf_bytes=len(pdf_bytes),
     )
     headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
     return Response(content=pdf_bytes, media_type='application/pdf', headers=headers)

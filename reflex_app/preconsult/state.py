@@ -7,8 +7,53 @@ import os
 from datetime import datetime
 from .i18n import translations
 from .analytics import log_analytics_event, fetch_analytics_data
+from preconsult.core.parsing import split_questions, is_emergency_trigger
 
 API_KEY = os.environ.get("PRECONSULT_API_KEY", "")
+
+
+def build_session_init_payload(
+    *,
+    age_bracket: str,
+    sex: str,
+    lang: str,
+    specialist: str,
+    chief_complaint: str,
+    complaint_detail: str,
+    conditions: List[str],
+    medications: List[str],
+    allergies_flag: bool,
+    allergies_text: str,
+    family_history: List[str],
+    smoking: str,
+    alcohol: str,
+    duration: str,
+    localize,
+) -> Dict[str, Any]:
+    """Build the payload for ``POST /api/session/init``.
+
+    Pure module-level function so the field mapping, localization, filtering of
+    blank medication entries and the allergies ``"None"`` fallback can be
+    unit-tested without spinning up a reflex event loop.
+
+    ``localize`` is a callable mapping a category + key to its translated label
+    (i.e. ``State.get_localized_value``).
+    """
+    return {
+        "age_bracket": age_bracket,
+        "sex": sex,
+        "lang": lang,
+        "specialist": specialist,
+        "chief_complaint": chief_complaint,
+        "duration": localize("duration", duration),
+        "complaint_detail": complaint_detail,
+        "conditions": [localize("conditions", c) for c in conditions],
+        "medications": [m for m in medications if m.strip()],
+        "allergies": allergies_text if allergies_flag else "None",
+        "family_history": [localize("family_history", f) for f in family_history],
+        "smoking": localize("smoking", smoking),
+        "alcohol": localize("alcohol", alcohol),
+    }
 
 
 def _api_url(path: str) -> str:
@@ -212,7 +257,6 @@ class State(rx.State):
                 lang_code = parts[0].strip().lower().split("-")[0]
                 q = 1.0
                 if len(parts) > 1:
-                    import re
                     m = re.search(r"q=([\d.]+)", parts[1])
                     if m:
                         q = float(m.group(1))
@@ -444,21 +488,23 @@ class State(rx.State):
         async with httpx.AsyncClient() as client:
             try:
                 # payload conforming to Sprint 1
-                payload = {
-                    "age_bracket": self.age_bracket,
-                    "sex": self.gender,
-                    "lang": self.lang,
-                    "specialist": self.specialist,
-                    "chief_complaint": self.chief_complaint,
-                    "duration": self.get_localized_value("duration", self.duration),
-                    "complaint_detail": self.complaint_detail,
-                    "conditions": [self.get_localized_value("conditions", c) for c in self.conditions],
-                    "medications": [m for m in self.medications if m.strip()],
-                    "allergies": self.allergies_text if self.allergies_flag else "None",
-                    "family_history": [self.get_localized_value("family_history", f) for f in self.family_history],
-                    "smoking": self.get_localized_value("smoking", self.smoking),
-                    "alcohol": self.get_localized_value("alcohol", self.alcohol)
-                }
+                payload = build_session_init_payload(
+                    age_bracket=self.age_bracket,
+                    sex=self.gender,
+                    lang=self.lang,
+                    specialist=self.specialist,
+                    chief_complaint=self.chief_complaint,
+                    duration=self.duration,
+                    complaint_detail=self.complaint_detail,
+                    conditions=self.conditions,
+                    medications=self.medications,
+                    allergies_flag=self.allergies_flag,
+                    allergies_text=self.allergies_text,
+                    family_history=self.family_history,
+                    smoking=self.smoking,
+                    alcohol=self.alcohol,
+                    localize=self.get_localized_value,
+                )
                 
                 resp = await client.post(
                     _api_url("/session/init"),
@@ -523,17 +569,13 @@ class State(rx.State):
                                 chunk = json.loads(line[len("data: "):])
                                 async with self:
                                     self._qs_buffer += chunk
-                                    lower_buffer = self._qs_buffer.lower()
-                                    if "emergency" in lower_buffer or "911" in lower_buffer or "urgência" in lower_buffer or "urgencia" in lower_buffer:
+                                    if is_emergency_trigger(self._qs_buffer):
                                         self.is_emergency = True
                                         self.questions = []
                                         self.current_answers = []
                                         return
-                                        
-                                    qs = [q.strip() for q in re.split(r'\n(?:\d+[\.\)]|\-)\s*', '\n' + self._qs_buffer) if q.strip()]
-                                    if len(qs) <= 1:
-                                        qs = [q.strip() for q in self._qs_buffer.strip().split('\n') if q.strip()]
-                                    self.questions = qs
+
+                                    self.questions = split_questions(self._qs_buffer)
                                     while len(self.current_answers) < len(self.questions):
                                         self.current_answers.append("")
             except asyncio.TimeoutError:

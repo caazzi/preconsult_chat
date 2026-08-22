@@ -840,13 +840,14 @@ app = rx.App(
 
 if api_router:
     from datetime import date
-    from fastapi import FastAPI
+    from fastapi import FastAPI, HTTPException
     from pydantic import ValidationError
     from google.api_core.exceptions import GoogleAPIError
     from starlette.responses import Response
     from preconsult.core.errors import (
         RedisUnavailableError,
         LLMUnavailableError,
+        http_exception_handler,
         redis_unavailable_handler,
         llm_unavailable_handler,
         validation_handler,
@@ -856,13 +857,35 @@ if api_router:
     custom_api = FastAPI()
     custom_api.add_exception_handler(RedisUnavailableError, redis_unavailable_handler)
     custom_api.add_exception_handler(LLMUnavailableError, llm_unavailable_handler)
+    custom_api.add_exception_handler(HTTPException, http_exception_handler)
     custom_api.add_exception_handler(ValidationError, validation_handler)
     custom_api.add_exception_handler(GoogleAPIError, google_api_handler)
     custom_api.add_exception_handler(Exception, generic_handler)
     custom_api.include_router(api_router)
     app._api.mount("/api", custom_api)
 
+    async def health_live(request):
+        # Liveness: process is up. No external dependency probed so Cloud Run
+        # never restarts a healthy-but-slow-to-warm container unnecessarily.
+        from starlette.responses import JSONResponse
+        return JSONResponse({"status": "healthy", "checks": {"live": "ok"}})
+
+    async def health_ready(request):
+        # Readiness: only serve traffic when Redis is reachable (sessions and
+        # rate limiting depend on it). 503 means "don't send me requests yet".
+        from starlette.responses import JSONResponse
+        from preconsult.services.session_service import check_redis_health
+        redis_ok = await check_redis_health()
+        if not redis_ok:
+            return JSONResponse(
+                status_code=503,
+                content={"status": "not_ready", "redis": "unavailable", "code": "service_unavailable"},
+            )
+        return JSONResponse({"status": "ready", "redis": "ok"})
+
     async def health(request):
+        # Aggregate endpoint retained for backward compatibility with the
+        # existing CI smoke test which asserts `redis` is "ok"/"unavailable".
         from starlette.responses import JSONResponse
         from preconsult.services.session_service import check_redis_health
         redis_ok = await check_redis_health()
@@ -942,6 +965,8 @@ if api_router:
             headers={"Cache-Control": "public, max-age=3600"}
         )
     app._api.add_route("/health", health, include_in_schema=False, methods=["GET"])
+    app._api.add_route("/health/live", health_live, include_in_schema=False, methods=["GET"])
+    app._api.add_route("/health/ready", health_ready, include_in_schema=False, methods=["GET"])
     app._api.add_route("/robots.txt", robots_txt, include_in_schema=False, methods=["GET"])
     app._api.add_route("/sitemap.xml", sitemap_xml, include_in_schema=False, methods=["GET"])
     app._api.add_route("/llms.txt", llms_txt, include_in_schema=False, methods=["GET"])

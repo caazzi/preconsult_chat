@@ -11,6 +11,50 @@ from .analytics import log_analytics_event, fetch_analytics_data
 API_KEY = os.environ.get("PRECONSULT_API_KEY", "")
 
 
+def build_session_init_payload(
+    *,
+    age_bracket: str,
+    sex: str,
+    lang: str,
+    specialist: str,
+    chief_complaint: str,
+    complaint_detail: str,
+    conditions: List[str],
+    medications: List[str],
+    allergies_flag: bool,
+    allergies_text: str,
+    family_history: List[str],
+    smoking: str,
+    alcohol: str,
+    duration: str,
+    localize,
+) -> Dict[str, Any]:
+    """Build the payload for ``POST /api/session/init``.
+
+    Pure module-level function so the field mapping, localization, filtering of
+    blank medication entries and the allergies ``"None"`` fallback can be
+    unit-tested without spinning up a reflex event loop.
+
+    ``localize`` is a callable mapping a category + key to its translated label
+    (i.e. ``State.get_localized_value``).
+    """
+    return {
+        "age_bracket": age_bracket,
+        "sex": sex,
+        "lang": lang,
+        "specialist": specialist,
+        "chief_complaint": chief_complaint,
+        "duration": localize("duration", duration),
+        "complaint_detail": complaint_detail,
+        "conditions": [localize("conditions", c) for c in conditions],
+        "medications": [m for m in medications if m.strip()],
+        "allergies": allergies_text if allergies_flag else "None",
+        "family_history": [localize("family_history", f) for f in family_history],
+        "smoking": localize("smoking", smoking),
+        "alcohol": localize("alcohol", alcohol),
+    }
+
+
 def _api_url(path: str) -> str:
     base = os.environ.get("API_BASE_URL", "").rstrip("/")
     if base.startswith("http://") or base.startswith("https://"):
@@ -444,21 +488,23 @@ class State(rx.State):
         async with httpx.AsyncClient() as client:
             try:
                 # payload conforming to Sprint 1
-                payload = {
-                    "age_bracket": self.age_bracket,
-                    "sex": self.gender,
-                    "lang": self.lang,
-                    "specialist": self.specialist,
-                    "chief_complaint": self.chief_complaint,
-                    "duration": self.get_localized_value("duration", self.duration),
-                    "complaint_detail": self.complaint_detail,
-                    "conditions": [self.get_localized_value("conditions", c) for c in self.conditions],
-                    "medications": [m for m in self.medications if m.strip()],
-                    "allergies": self.allergies_text if self.allergies_flag else "None",
-                    "family_history": [self.get_localized_value("family_history", f) for f in self.family_history],
-                    "smoking": self.get_localized_value("smoking", self.smoking),
-                    "alcohol": self.get_localized_value("alcohol", self.alcohol)
-                }
+                payload = build_session_init_payload(
+                    age_bracket=self.age_bracket,
+                    sex=self.gender,
+                    lang=self.lang,
+                    specialist=self.specialist,
+                    chief_complaint=self.chief_complaint,
+                    duration=self.duration,
+                    complaint_detail=self.complaint_detail,
+                    conditions=self.conditions,
+                    medications=self.medications,
+                    allergies_flag=self.allergies_flag,
+                    allergies_text=self.allergies_text,
+                    family_history=self.family_history,
+                    smoking=self.smoking,
+                    alcohol=self.alcohol,
+                    localize=self.get_localized_value,
+                )
                 
                 resp = await client.post(
                     _api_url("/session/init"),

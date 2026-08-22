@@ -105,6 +105,8 @@ opencode.json
 
 # Reflex Build Artifacts (gerados por `reflex export`, não devem ser versionados)
 reflex_app/frontend.zip
+reflex_app/requirements.txt
+reflex_app/reflex.lock/
 *.zip
 
 # Local scratch files

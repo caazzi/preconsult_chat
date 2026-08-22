@@ -27,6 +27,11 @@ RUN uv sync --frozen
 WORKDIR /app/reflex_app
 ARG API_URL="https://pre-consult.org"
 ENV API_URL=$API_URL
+# Baked into the client's env.json (TRANSPORT) during export. Must match the
+# server-side config.transport at runtime (see final stage). Defaults to
+# `polling` for Cloud Run (see rxconfig.py), overridable via REFLEX_TRANSPORT.
+ARG REFLEX_TRANSPORT="polling"
+ENV REFLEX_TRANSPORT=$REFLEX_TRANSPORT
 RUN npm install -g bun && \
     BUILD_MODE=true uv run reflex export --frontend-only --no-zip
 
@@ -45,7 +50,8 @@ COPY --from=builder /app /app
 # Set up environment.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH="/app/src"
+    PYTHONPATH="/app/src" \
+    REFLEX_TRANSPORT="polling"
 
 # Expose ports (Reflex default is 8000 for backend, 3000 for frontend, 
 # but in prod it's consolidated or served differently)

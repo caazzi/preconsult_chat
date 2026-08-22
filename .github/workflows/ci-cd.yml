@@ -116,6 +116,7 @@ jobs:
           tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
           build-args: |
             API_URL=https://pre-consult.org
+            REFLEX_TRANSPORT=polling
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -259,6 +260,7 @@ jobs:
       - name: Run Multi-Stage Smoke Tests
         env:
           BASE_URL: ${{ steps.url.outputs.url }}
+          REFLEX_TRANSPORT: polling
         run: |
           # 1. Warm-up and Liveness check
           echo "==== Stage 1: Liveness / Health Check ===="
@@ -289,6 +291,42 @@ jobs:
             echo "::error::Redis reported as '$REDIS_STATE'. Expected 'ok'. Health body: $HEALTH_BODY"
             exit 1
           fi
+
+          # 1c. Reflex event-channel assertion.
+          # Reflex drives all state mutations (e.g. the "Start Preparing" button)
+          # over the event channel. Historically only /health and the REST/SSE
+          # endpoints were exercised, so the WebSocket-vs-HTTP2 failure on Cloud
+          # Run shipped green. Probe the subscribed transport directly:
+          #   - polling: the engine.io handshake must return 200 (HTTP long-poll
+          #     over HTTP/2 works on Cloud Run).
+          #   - websocket: an HTTP/1.1 Upgrade must complete with 101.
+          # Any other result means interactive events are broken even though
+          # liveness/REST pass, so fail the deploy loudly.
+          echo "==== Stage 1c: Reflex Event-Channel Assertion ===="
+          TRANSPORT="${REFLEX_TRANSPORT:-polling}"
+          EVENT_CHANNEL="${BASE_URL}/_event/socket.io/?EIO=4&transport=${TRANSPORT}"
+          EVENT_STATUS=$(curl -s -o /tmp/event_handshake.txt -w "%{http_code}" \
+            "$EVENT_CHANNEL" --connect-timeout 15 --max-time 30 || echo "000")
+          echo "Event channel (${TRANSPORT}) handshake HTTP Status: $EVENT_STATUS"
+          echo "Response body: $(head -c 200 /tmp/event_handshake.txt)"
+          if [ "$TRANSPORT" = "polling" ]; then
+            if [ "$EVENT_STATUS" != "200" ]; then
+              echo "::error::Reflex polling handshake failed with $EVENT_STATUS (expected 200). Interactive events are unavailable."
+              echo "Body: $(cat /tmp/event_handshake.txt)"
+              exit 1
+            fi
+          else
+            # websocket: curl cannot fully detect 101 with -w; the responses
+            # "400 Invalid websocket upgrade" (HTTP/2) vs "101" (HTTP/1.1) are
+            # indistinguishable via exit code, so treat any non-200 body that
+            # signals rejection as failure by checking the response code.
+            if [ "$EVENT_STATUS" != "101" ] && ! grep -q "101 Switching Protocols" /tmp/event_handshake.txt 2>/dev/null; then
+              echo "::error::Reflex websocket upgrade failed with HTTP status $EVENT_STATUS (expected 101). Interactive events are unavailable."
+              echo "Body: $(cat /tmp/event_handshake.txt)"
+              exit 1
+            fi
+          fi
+          echo "Event channel (${TRANSPORT}) OK"
 
           # 2. Get API Key from GCP Secret Manager
           echo "==== Stage 2: Retrieve API Key ===="

@@ -1525,9 +1525,24 @@ _MOCK_WEBSOCKET_SCRIPT = """
 """
 
 class CustomStaticFiles(StaticFiles):
+    # Reflex backend endpoints must never be answered by the SPA fallback. The
+    # bare /_event path is handled by an explicit redirect route, but keep this
+    # as a defensive backstop so a mis-routed backend request returns a clear
+    # 404 text response instead of misleading HTML (which breaks the socket).
+    _BACKEND_PREFIXES = (
+        "_event",
+        "_ping",
+        "_health",
+        "_upload",
+        "auth-codespace",
+        "_all_routes",
+    )
+
     async def get_response(self, path: str, scope) -> Response:
         path_lower = path.lower()
         if any(path_lower.endswith(ext) for ext in (".php", ".asp", ".aspx", ".jsp", ".cgi")) or "wp-admin" in path_lower or "wp-content" in path_lower or ".env" in path_lower or "phpmyadmin" in path_lower:
+            return Response("Not Found", status_code=404, media_type="text/plain")
+        if any(path_lower == prefix or path_lower.startswith(prefix + "/") for prefix in self._BACKEND_PREFIXES):
             return Response("Not Found", status_code=404, media_type="text/plain")
 
         response = await super().get_response(path, scope)
@@ -1708,6 +1723,26 @@ class CustomStaticFiles(StaticFiles):
                     pass
         response.headers["Vary"] = "Accept-Encoding"
         return response
+
+# Reflex mounts the event socket (EngineIO) as a trailing-slash route ``/_event/``
+# for the state connection (see reflex's ``_add_socket``), but the browser's
+# engine.io polling client requests the **bare** ``/_event`` path. Without the root
+# static fallback below, reflex answers that bare path with a 307 redirect to
+# ``/_event/`` and the connection succeeds. However the SPA catch-all mounted at
+# the end of this router matches ``/_event`` *before* that redirect can apply and
+# returns HTML instead of a socket handshake, making "Start Preparing" (and every
+# later state change) fail with "cannot connect to server: xhr poll error".
+# Re-expose the bare ``/_event`` path explicitly (as reflex already does when no
+# static mount is present) so the socket is reachable ahead of the SPA fallback.
+def _backend_redirect(request):
+    from starlette.responses import RedirectResponse
+
+    query = request.url.query
+    location = f"{request.url.path}/" + (f"?{query}" if query else "")
+    return RedirectResponse(url=location, status_code=307)
+
+
+app._api.add_route("/_event", _backend_redirect, methods=["GET", "POST"])
 
 static_dir_vite = os.path.join(os.getcwd(), ".web", "build", "client")
 static_dir_legacy = os.path.join(os.getcwd(), ".web", "_static")

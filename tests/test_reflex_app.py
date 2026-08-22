@@ -155,6 +155,44 @@ def test_bot_scanner_blocking(tmp_path):
     assert response.body == b"Not Found"
 
 
+def test_custom_static_backend_passthrough(tmp_path):
+    """Backend/reflex endpoints must never be answered with the SPA fallback."""
+    from reflex_app.preconsult.preconsult import CustomStaticFiles
+    dummy_dir = tmp_path / "static"
+    dummy_dir.mkdir()
+    (dummy_dir / "404.html").write_text("<html>SPA FALLBACK</html>", encoding="utf-8")
+    static_files = CustomStaticFiles(directory=str(dummy_dir), html=True)
+    import asyncio
+
+    for path in ("_event", "_event/x", "_ping", "_health", "_upload", "auth-codespace", "_all_routes"):
+        response = asyncio.run(static_files.get_response(path, {"type": "http", "method": "GET"}))
+        assert response.status_code == 404, path
+        assert response.headers.get("content-type", "").startswith("text/plain"), path
+        assert response.body == b"Not Found"
+
+
+def test_bare_event_redirects_instead_of_spa_fallback():
+    """The browser polls the bare /_event path; it must reach the socket
+    (via a reflex-style 307 redirect) rather than being swallowed by the SPA
+    catch-all, which previously broke the state connection with
+    'cannot connect to server: xhr poll error'."""
+    import asyncio
+    import httpx
+    from httpx import ASGITransport
+    from reflex_app.preconsult.preconsult import api as app
+
+    async def run():
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/_event?EIO=4&transport=polling")
+        return resp
+
+    resp = asyncio.run(run())
+    assert resp.status_code == 307
+    assert resp.headers.get("location") == "/_event/?EIO=4&transport=polling"
+    # Must never return the SPA HTML for the socket path.
+    assert "text/html" not in resp.headers.get("content-type", "")
+
+
 def test_state_scroll_and_draft_scripts():
     state = State()
     scroll_script = state._scroll_top_script()

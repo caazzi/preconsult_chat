@@ -372,4 +372,37 @@ jobs:
           echo "First 150 characters of stream payload:"
           echo "${STREAM_BODY}" | head -c 150
           echo ""
+
+          # 5. Reflex State-Socket Connectivity Test
+          #
+          # This is the connection that the browser uses for all interactive
+          # state changes ("Start Preparing" and every later step). The built
+          # frontend polls the BARE /_event endpoint (no trailing slash) with
+          # transport=polling; a valid setup answers with an Engine.IO handshake
+          # JSON body (starts with `0{"sid"`), never HTML. A regression here
+          # (e.g. an SPA fallback swallowing /_event) surfaces as a green deploy
+          # while the UI is broken, so it MUST be asserted explicitly.
+          echo "==== Stage 5: Reflex State-Socket (/_event) Connectivity ===="
+          EVENT_RESPONSE=$(curl -s -L -w "\nHTTP_STATUS:%{http_code}" \
+            "${BASE_URL}/_event?EIO=4&transport=polling" \
+            --connect-timeout 15 --max-time 45 || echo -e "\nHTTP_STATUS:000")
+
+          EVENT_BODY=$(echo "$EVENT_RESPONSE" | sed '$d')
+          EVENT_STATUS=$(echo "$EVENT_RESPONSE" | tail -n 1 | cut -d':' -f2)
+
+          echo "Event HTTP Status: $EVENT_STATUS"
+          if [ "$EVENT_STATUS" != "200" ]; then
+            echo "::error::Reflex state-socket endpoint (/ _event) failed!"
+            echo "Response Body: $EVENT_BODY"
+            exit 1
+          fi
+
+          if [[ "$EVENT_BODY" != 0* || "$EVENT_BODY" != *'"sid"'* ]]; then
+            echo "::error::/_event did not return an Engine.IO handshake. "
+            echo "Response Body: ${EVENT_BODY}"
+            exit 1
+          fi
+          echo "State-socket handshake OK: ${EVENT_BODY}" | head -c 120
+          echo ""
+
           echo "==== Smoke Test Passed Successfully! ===="

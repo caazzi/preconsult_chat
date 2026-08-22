@@ -141,16 +141,18 @@ def _run_handler(handler, exc):
 def test_llm_unavailable_handler_returns_503_sanitized():
     resp = _run_handler(llm_unavailable_handler, LLMUnavailableError("boom: vertex key invalid"))
     assert resp.status_code == 503
-    detail = resp.body.decode()
+    body = resp.body.decode()
+    assert "llm_unavailable" in body  # machine-readable code present
     # no exception message / module path leaked
-    assert "vertex key invalid" not in detail
-    assert "preconsult" not in detail
+    assert "vertex key invalid" not in body
+    assert "preconsult" not in body
 
 
 def test_redis_unavailable_handler_returns_503_sanitized():
     resp = _run_handler(redis_unavailable_handler, RedisUnavailableError("redis connection refused"))
     assert resp.status_code == 503
     detail = resp.body.decode()
+    assert "redis_unavailable" in detail
     assert "redis connection refused" not in detail
 
 
@@ -185,9 +187,32 @@ def test_generic_handler_returns_500_sanitized():
     assert "line 42" not in detail
 
 
+def test_valid_http_exception_carries_code():
+    from preconsult.core.errors import http_exception_handler, HTTP_STATUS_CODES
+    from fastapi import HTTPException
+
+    detail_msg = "Session expired or invalid"
+    resp = _run_handler(http_exception_handler, HTTPException(status_code=404, detail=detail_msg))
+    assert resp.status_code == 404
+    body = json.loads(resp.body)
+    # non-breaking: detail remains the original string; code added as sibling
+    assert body["detail"] == detail_msg
+    assert body["code"] == "session_expired"
+    assert HTTP_STATUS_CODES[404] == "session_expired"
+
+
+def test_valid_http_exception_status_mapping():
+    from preconsult.core.errors import http_exception_handler
+    from fastapi import HTTPException
+
+    resp = _run_handler(http_exception_handler, HTTPException(status_code=429, detail="Too many"))
+    assert json.loads(resp.body)["code"] == "rate_limited"
+
+
 def test_generic_handler_sanitizes_user_data():
     # Simulate an exception that would embed a patient-supplied value if the
     # handler were careless (e.g. str(exc) containing chief complaint text).
     resp = _run_handler(generic_handler, Exception("chief_complaint='chest pain at 3am'"))
     body = resp.body.decode()
+    assert "internal_error" in body
     assert "chest pain at 3am" not in body

@@ -840,13 +840,14 @@ app = rx.App(
 
 if api_router:
     from datetime import date
-    from fastapi import FastAPI
+    from fastapi import FastAPI, HTTPException
     from pydantic import ValidationError
     from google.api_core.exceptions import GoogleAPIError
     from starlette.responses import Response
     from preconsult.core.errors import (
         RedisUnavailableError,
         LLMUnavailableError,
+        http_exception_handler,
         redis_unavailable_handler,
         llm_unavailable_handler,
         validation_handler,
@@ -856,6 +857,7 @@ if api_router:
     custom_api = FastAPI()
     custom_api.add_exception_handler(RedisUnavailableError, redis_unavailable_handler)
     custom_api.add_exception_handler(LLMUnavailableError, llm_unavailable_handler)
+    custom_api.add_exception_handler(HTTPException, http_exception_handler)
     custom_api.add_exception_handler(ValidationError, validation_handler)
     custom_api.add_exception_handler(GoogleAPIError, google_api_handler)
     custom_api.add_exception_handler(Exception, generic_handler)

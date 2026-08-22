@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from langchain_core.runnables import Runnable
 
-from preconsult.core.config import PRECONSULT_API_KEY
+from preconsult.core.config import PRECONSULT_API_KEY, TRUST_PROXY_HEADERS
 from preconsult.services.agent_service import (
     stream_interview_questions,
     get_interview_chain,
@@ -46,11 +46,18 @@ def _sanitize_input(text: str) -> str:
     return html.escape(text.strip())
 
 def get_client_ip(request: Request) -> str:
-    """Extrai o IP real do cliente, considerando proxies como Cloudflare ou Cloud Run."""
-    if "cf-connecting-ip" in request.headers:
-        return request.headers["cf-connecting-ip"]
-    if "x-forwarded-for" in request.headers:
-        return request.headers["x-forwarded-for"].split(",")[0].strip()
+    """Extract the effective client IP for rate limiting / quotas.
+
+    When ``TRUST_PROXY_HEADERS`` is enabled (the app sits behind a trusted
+    fronting proxy such as Cloudflare/Cloud Run) the proxy-forwarded headers
+    are honored. Otherwise the transport-level address is used so a spoofed
+    ``cf-connecting-ip`` / ``x-forwarded-for`` cannot bypass per-IP limits.
+    """
+    if TRUST_PROXY_HEADERS:
+        if "cf-connecting-ip" in request.headers:
+            return request.headers["cf-connecting-ip"]
+        if "x-forwarded-for" in request.headers:
+            return request.headers["x-forwarded-for"].split(",")[0].strip()
     return request.client.host if request.client else "127.0.0.1"
 
 # --- Data Models (Ephemeral State Design) ---

@@ -23,6 +23,12 @@ if not PRECONSULT_API_KEY:
 
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 
+# When True, honor proxy-forwarded client-IP headers (cf-connecting-ip,
+# x-forwarded-for). Only enable when requests actually reach Cloud Run through
+# a trusted fronting proxy (e.g. Cloudflare). When False, client IP is taken
+# from the transport layer, so spoofed headers can't bypass rate limits/quotas.
+TRUST_PROXY_HEADERS = os.environ.get("TRUST_PROXY_HEADERS") == "true"
+
 LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-flash")
 
 # Validate Google Cloud Credentials path if configured

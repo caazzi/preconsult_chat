@@ -28,7 +28,7 @@ import httpx
 
 pytest.importorskip("reflex_components_radix.plugin")
 
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 
 from reflex_app.preconsult.state import State, AdminState, _get_router_params
 from reflex_app.preconsult.state import build_session_init_payload
@@ -40,20 +40,73 @@ def sse(payload: str) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
-def routed_client(routes):
-    """Build an httpx.AsyncClient whose MockTransport dispatches on the path tail.
+class _AsyncContextManager:
+    """Minimal async context manager adapter for mock responses."""
 
-    Matches on the suffix (rather than the exact path) so the tests remain
-    correct regardless of the local ``API_BASE_URL`` value — which, when set to
-    ``.../api``, is double-prefixed by ``state._api_url`` into ``/api/api/...``.
+    def __init__(self, value):
+        self._value = value
+
+    async def __aenter__(self):
+        return self._value
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _FakeStreamResponse:
+    """Look-and-feel of an httpx streaming response for the SSE consumer.
+
+    Only ``aiter_lines()`` is used by ``state.py``; it yields the response body
+    split on real newlines, exactly like httpx.
     """
-    def handler(request):
-        for suffix, fn in routes.items():
-            if request.url.path.endswith(suffix):
-                return fn(request)
-        return httpx.Response(404, text=request.url.path)
 
-    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    def __init__(self, resp):
+        self._resp = resp
+
+    async def aiter_lines(self):
+        text = self._resp.text
+        for line in text.split("\n"):
+            yield line
+
+
+def routed_client(routes):
+    """Build a mock ``httpx.AsyncClient`` that dispatches on the path suffix.
+
+    This intentionally does NOT construct a real ``httpx.AsyncClient`` /
+    ``MockTransport`` — those proved environment-sensitive across Python/httpx
+    versions in CI. The production code only needs ``stream()`` (SSE) and
+    ``post()`` (PDF), returning lightweight fakes.
+
+    ``routes`` maps a URL suffix to a callable ``fn(url)`` returning either an
+    ``httpx.Response`` or raising (to simulate a failure). Suffix matching keeps
+    the tests correct regardless of ``API_BASE_URL`` causing ``/api/api/...``.
+    """
+    client = MagicMock(name="httpx.AsyncClient")
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+
+    def _route(url):
+        url = url if isinstance(url, str) else str(url)
+        for suffix, fn in routes.items():
+            if url.endswith(suffix):
+                return fn
+        return None
+
+    def _stream(method, url, **kwargs):
+        fn = _route(url)
+        if fn is None:
+            return _AsyncContextManager(_FakeStreamResponse(httpx.Response(404, text="")))
+        return _AsyncContextManager(_FakeStreamResponse(fn(url)))
+
+    async def _post(url, **kwargs):
+        fn = _route(url)
+        if fn is None:
+            return httpx.Response(404, text="not found")
+        return fn(url)
+
+    client.stream = _stream
+    client.post = _post
+    return client
 
 
 def _localize_en(category, key):

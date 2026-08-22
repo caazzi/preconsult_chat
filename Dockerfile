@@ -43,12 +43,9 @@ ENV PATH="/uv/bin:$PATH"
 COPY --from=builder /app /app
 
 # Set up environment.
-# UV_NO_SYNC=1 forbids `uv run` from re-syncing/rebuilding the already-baked
-# project + venv, keeping container startup fast (seconds, not ~46s).
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH="/app/src" \
-    UV_NO_SYNC=1
+    PYTHONPATH="/app/src"
 
 # Expose ports (Reflex default is 8000 for backend, 3000 for frontend, 
 # but in prod it's consolidated or served differently)
@@ -61,9 +58,15 @@ RUN groupadd -r preconsult && useradd -r -g preconsult -m preconsult && \
 USER preconsult
 WORKDIR /app/reflex_app
 
-# Run production backend using Gunicorn with Uvicorn workers and bind to the PORT env variable.
-# The UvicornWorker + gthread-style --threads combination is the configuration that is
-# verified to serve on Cloud Run; do not alter without revalidating against a full
-# deploy (other worker/parser configs have returned 502 "Invalid HTTP request received").
-# 'exec' ensures signals (like SIGTERM for scale-down) correctly reach gunicorn.
-CMD ["sh", "-c", "exec uv run gunicorn preconsult.preconsult:api --bind 0.0.0.0:${PORT:-8080} --worker-class uvicorn.workers.UvicornWorker --workers 2 --threads 4"]
+# Run production backend using Gunicorn with Uvicorn workers and bind to the
+# PORT env variable.
+#
+# IMPORTANT: invoke gunicorn DIRECTLY from the baked venv (/app/.venv/bin) —
+# NOT via `uv run`. Running `uv run gunicorn` (with or without UV_NO_SYNC) makes
+# the worker drop Cloud Run proxy connections with "Invalid HTTP request
+# received" / 502 protocol errors, while the identical command serves 200 on
+# localhost and the direct venv invocation serves cleanly behind the proxy.
+# `uv sync --frozen` in the builder bakes the project + venv, so startup stays
+# fast (seconds) with no runtime rebuild. 'exec' ensures signals (like SIGTERM
+# for scale-down) correctly reach gunicorn.
+CMD ["sh", "-c", "exec /app/.venv/bin/gunicorn preconsult.preconsult:api --bind 0.0.0.0:${PORT:-8080} --worker-class uvicorn.workers.UvicornWorker --workers 2 --threads 4"]

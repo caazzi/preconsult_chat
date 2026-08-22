@@ -2,9 +2,13 @@ version: 2
 updates:
   # --- Python dependencies ------------------------------------------------
   # Deployments go ONLY through GitHub Actions CI/CD, and every merged pip bump
-  # triggers a full Cloud Run deploy. Keep the pipeline stable by grouping
-  # low-risk patch/minor bumps into a single weekly PR, and by ignoring the
-  # big/breaking deps that must be reviewed deliberately instead of auto-bumped.
+  # triggers a full Cloud Run deploy.
+  #
+  # Strategy (long-term friendly): don't HIDE deps forever via `ignore`.
+  #   - patch/minor: grouped into one weekly PR -> auto-mergeable, low risk.
+  #   - major: still surfaced as its own PR (group "major"), clearly labelled,
+  #     so breaking upgrades (reflex, langchain, aiplatform, ...) stay visible
+  #     and can be batched/reviewed deliberately instead of silently forgotten.
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -20,17 +24,9 @@ updates:
       patch-minor:
         applies-to: version-updates
         update-types: ["patch", "minor"]
-    ignore:
-      # Breaking/graph-changing deps that touch the serving or LLM path — review
-      # these manually rather than letting dependabot raise PRs for them.
-      - dependency-name: "langchain"
-      - dependency-name: "langchain-google-vertexai"
-      - dependency-name: "reflex"
-      - dependency-name: "reflex-base"
-      - dependency-name: "google-cloud-aiplatform"
-      # Dead dependency: declared but imported nowhere; remove it instead of bumping.
-      - dependency-name: "cachetools"
-      - dependency-name: "python-dotenv"
+      major:
+        applies-to: version-updates
+        update-types: ["major"]
 
   # --- GitHub Actions -----------------------------------------------------
   # CI-only tooling; upgrading never affects the shipped container, so group
@@ -49,7 +45,8 @@ updates:
   # --- Docker base image --------------------------------------------------
   # Python is pinned by design (pyproject.toml requires >=3.11,<3.13). Keep the
   # base image on a monthly cadence and ignore the python major bumps so the
-  # image stays in line with the supported interpreter range.
+  # image stays in line with the supported interpreter range. This is the ONE
+  # intentional ignore: the env constraint is a deliberate pin, not drift.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

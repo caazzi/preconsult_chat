@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 from .i18n import translations
 from .analytics import log_analytics_event, fetch_analytics_data
+from preconsult.core.parsing import split_questions, is_emergency_trigger
 
 API_KEY = os.environ.get("PRECONSULT_API_KEY", "")
 
@@ -256,7 +257,6 @@ class State(rx.State):
                 lang_code = parts[0].strip().lower().split("-")[0]
                 q = 1.0
                 if len(parts) > 1:
-                    import re
                     m = re.search(r"q=([\d.]+)", parts[1])
                     if m:
                         q = float(m.group(1))
@@ -569,17 +569,13 @@ class State(rx.State):
                                 chunk = json.loads(line[len("data: "):])
                                 async with self:
                                     self._qs_buffer += chunk
-                                    lower_buffer = self._qs_buffer.lower()
-                                    if "emergency" in lower_buffer or "911" in lower_buffer or "urgência" in lower_buffer or "urgencia" in lower_buffer:
+                                    if is_emergency_trigger(self._qs_buffer):
                                         self.is_emergency = True
                                         self.questions = []
                                         self.current_answers = []
                                         return
-                                        
-                                    qs = [q.strip() for q in re.split(r'\n(?:\d+[\.\)]|\-)\s*', '\n' + self._qs_buffer) if q.strip()]
-                                    if len(qs) <= 1:
-                                        qs = [q.strip() for q in self._qs_buffer.strip().split('\n') if q.strip()]
-                                    self.questions = qs
+
+                                    self.questions = split_questions(self._qs_buffer)
                                     while len(self.current_answers) < len(self.questions):
                                         self.current_answers.append("")
             except asyncio.TimeoutError:

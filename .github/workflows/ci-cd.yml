@@ -261,6 +261,7 @@ jobs:
         env:
           BASE_URL: ${{ steps.url.outputs.url }}
           REFLEX_TRANSPORT: polling
+          EXPECTED_REVISION: ${{ needs.deploy.outputs.latest_ready_revision }}
         run: |
           # 1. Warm-up and Liveness check
           echo "==== Stage 1: Liveness / Health Check ===="
@@ -421,5 +422,25 @@ jobs:
             exit 1
           fi
           echo "Asset graph OK: all index.html-referenced chunks resolve 200"
+
+          # 8. Served-bundle revision guard
+          #
+          # Cross-check the serving instance reports the revision that was just
+          # promoted. If user traffic is still landing on an old revision (or a
+          # cached document references an earlier build), the served bundle and
+          # the deployed revision diverge and the stale-shell failure returns.
+          # /health/metrics exposes the worker's K_REVISION read-only and PHI-free.
+          echo "==== Stage 8: Served instance matches deployed revision ===="
+          SERVED_REV=$(curl -s "${BASE_URL}/health/metrics" --connect-timeout 15 --max-time 30 \
+            | sed -n 's/.*"revision":"\([^"]*\)".*/\1/p')
+          echo "Served /health/metrics revision: '${SERVED_REV}'"
+          echo "Expected deployed revision: '${EXPECTED_REVISION}'"
+          # Cloud Run K_REVISION is the trailing segment after '/'; normalise.
+          SERVED_REV_BASE="${SERVED_REV##*:}"
+          if [ -z "$SERVED_REV" ] || [ "$SERVED_REV_BASE" != "$EXPECTED_REVISION" ] && [ "$SERVED_REV" != "$EXPECTED_REVISION" ]; then
+            echo "::error::Served instance revision '${SERVED_REV}' does not match deployed revision '${EXPECTED_REVISION}'. A stale build is serving traffic."
+            exit 1
+          fi
+          echo "Served revision matches deployed revision"
 
           echo "==== Smoke Test Passed Successfully! ===="

@@ -15,11 +15,44 @@ the logging story consistent across the FastAPI backend and the Reflex host.
 
 import logging
 import secrets
+import threading
 import time
 from contextlib import asynccontextmanager
 from typing import Any
 
+from preconsult.core.config import REPOSITORY_REVISION
+
 log = logging.getLogger("preconsult.observability")
+
+
+# ---------------------------------------------------------------------------
+# In-memory, PHI-safe counters
+#
+# Aggregate the high-signal,"failure-tell-tale" outcomes that would otherwise be
+# buried in log volume and hard to alert on: rejected socket handshakes, missing
+# static assets, and non-2xx HTTP outcomes keyed by path+status. These never
+# hold user content — only path prefixes / statuses / stable event names — so
+# they stay within the zero-PHI guarantee. Exposed read-only via /health/metrics.
+# ---------------------------------------------------------------------------
+_counter_lock = threading.Lock()
+_counters: dict[str, int] = {}
+
+
+def _inc(name: str, *, n: int = 1) -> None:
+    with _counter_lock:
+        _counters[name] = _counters.get(name, 0) + n
+
+
+def snapshot_counters() -> dict[str, int]:
+    """Return a copy of the counters. Path/status keyed, PHI-free."""
+    with _counter_lock:
+        return dict(_counters)
+
+
+def reset_counters() -> None:
+    """Clear all counters (mainly for deterministic tests)."""
+    with _counter_lock:
+        _counters.clear()
 
 
 def new_request_id() -> str:
@@ -49,9 +82,15 @@ def log_event(level: int, event: str, **extra: Any) -> None:
     ``event`` is a stable machine-readable name (e.g. ``session.init``).
     ``extra`` must contain only metadata: request_id, lang, duration_ms,
     status/status_code, counts and similar. Do not pass user content.
+
+    Every line is tagged with the deploy ``revision`` (GIT_SHA/K_REVISION) so
+    logs are attributable to a specific deployed build. An explicit ``revision``
+    in ``extra`` wins (callers can override).
     """
     try:
-        log.log(level, f"event={event} {_fmt(extra)}".strip())
+        meta = dict(extra)
+        meta.setdefault("revision", REPOSITORY_REVISION)
+        log.log(level, f"event={event} {_fmt(meta)}".strip())
     except Exception:  # logging must never break the request path
         pass
 

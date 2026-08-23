@@ -74,3 +74,32 @@ async def test_timed_emits_error_event_and_reraises(caplog):
         "event=session.init.error" in r.message and "error_type='RuntimeError'" in r.message
         for r in caplog.records
     )
+
+
+def test_log_event_is_revision_tagged(caplog):
+    """Every event carries the deploy revision so logs are attributable to a
+    specific deployed build (the stale-shell incident was hard to pin to a
+    revision before)."""
+    from preconsult.core.config import REPOSITORY_REVISION
+
+    with caplog.at_level(logging.INFO, logger="preconsult.observability"):
+        log_event(logging.INFO, "health.probe", request_id="rid")
+    assert any(
+        "event=health.probe" in r.message and f"revision='{REPOSITORY_REVISION}'" in r.message
+        for r in caplog.records
+    )
+
+
+def test_counters_inc_and_snapshot():
+    from preconsult.core.observability import _inc, snapshot_counters, reset_counters
+
+    reset_counters()
+    _inc("socket.handshake_rejected")
+    _inc("socket.handshake_rejected")
+    _inc("static.asset_404")
+    snap = snapshot_counters()
+    assert snap["socket.handshake_rejected"] == 2
+    assert snap["static.asset_404"] == 1
+    reset_counters()
+    assert snapshot_counters() == {}
+

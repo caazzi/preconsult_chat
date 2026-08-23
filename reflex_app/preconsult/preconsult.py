@@ -5,7 +5,7 @@ import time
 import reflex as rx
 from starlette.middleware.gzip import GZipMiddleware
 from .state import State, AdminState
-from preconsult.core.observability import log_event, new_request_id
+from preconsult.core.observability import log_event, new_request_id, _inc, snapshot_counters
 try:
     from preconsult.api.endpoints import router as api_router
 except ImportError:
@@ -944,6 +944,22 @@ if api_router:
             payload["code"] = "redis_unavailable"
         return JSONResponse(payload)
 
+    async def health_metrics(request):
+        # Read-only, in-memory aggregation of high-signal outcome counters
+        # (socket.handshake_rejected, static.asset_404, http.status.*). These are
+        # PHI-free (path/status/event-name keys only) and per-worker (in-memory),
+        # intended for monitoring/alerting on the stale-shell/socket failure
+        # classes, not as a store of truth. Not throttled: it resolves from RAM
+        # and never touches Redis.
+        from starlette.responses import JSONResponse
+        from preconsult.core.config import REPOSITORY_REVISION
+        return JSONResponse(
+            {
+                "revision": REPOSITORY_REVISION,
+                "counters": snapshot_counters(),
+            }
+        )
+
     async def robots_txt(request):
         content = (
             "User-agent: *\n"
@@ -1020,6 +1036,7 @@ if api_router:
     app._api.add_route("/health", health, include_in_schema=False, methods=["GET"])
     app._api.add_route("/health/live", health_live, include_in_schema=False, methods=["GET"])
     app._api.add_route("/health/ready", health_ready, include_in_schema=False, methods=["GET"])
+    app._api.add_route("/health/metrics", health_metrics, include_in_schema=False, methods=["GET"])
     app._api.add_route("/robots.txt", robots_txt, include_in_schema=False, methods=["GET"])
     app._api.add_route("/sitemap.xml", sitemap_xml, include_in_schema=False, methods=["GET"])
     app._api.add_route("/llms.txt", llms_txt, include_in_schema=False, methods=["GET"])
@@ -1609,6 +1626,53 @@ if os.path.exists(_STATIC_DIR):
 app._api.add_middleware(GZipMiddleware, minimum_size=500)
 
 
+# Throttled Sentry event bridge for high-frequency failure tells.
+#
+# socket.handshake_rejected can fire on every scanner/bot probe and would flood
+# Sentry if each occurrence produced a record. We coalesce to at most one per
+# TTL window per event-name (mirrors the /health probe throttling), keeping the
+# error tracker useful without a quota/bill hit. PHI-safe: only event name,
+# path, status and request_id — never user content.
+_SENTRY_EVENT_LOCK = asyncio.Lock()
+_sentry_last_emit: dict[str, float] = {}
+_SENTRY_EMIT_TTL_S = 300.0  # 5 min
+
+
+def _sentry_throttled_event(event_name: str, **context) -> None:
+    """Emit a Sentry error at most once per TTL per event name (throttled)."""
+    now = time.monotonic()
+    async def _emit():
+        global _sentry_last_emit
+        async with _SENTRY_EVENT_LOCK:
+            if now - _sentry_last_emit.get(event_name, 0.0) < _SENTRY_EMIT_TTL_S:
+                return
+            _sentry_last_emit[event_name] = now
+        try:
+            import sentry_sdk
+            from sentry_sdk.scope import Scope
+            scope = Scope()
+            scope.set_extra("event_name", event_name)
+            for k, v in context.items():
+                scope.set_extra(k, str(v))
+            sentry_sdk.capture_message(f"observability.{event_name}", level="warning", scope=scope)
+        except Exception:
+            pass  # observability must never break the request path
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None and loop.is_running():
+        loop.create_task(_emit())
+    else:
+        # No running loop (edge case); run inline best-effort within a fresh loop.
+        import asyncio as _asyncio
+        try:
+            _asyncio.run(_emit())
+        except Exception:
+            pass
+
+
 class _RequestIDMiddleware:
     """Stamp an X-Request-ID on every response and emit a PHI-safe request log.
 
@@ -1664,6 +1728,7 @@ class _RequestIDMiddleware:
                 # Only path + status are captured (no query, headers or body),
                 # preserving the zero-PHI guarantee.
                 if path.startswith("/_event") and status == 400:
+                    _inc("socket.handshake_rejected")
                     log_event(
                         logging.WARNING,
                         "socket.handshake_rejected",
@@ -1672,7 +1737,14 @@ class _RequestIDMiddleware:
                         status=status,
                         reason="engineio_protocol_or_transport",
                     )
+                    _sentry_throttled_event(
+                        "socket.handshake_rejected",
+                        request_id=request_id,
+                        path=safe_path,
+                        status=status,
+                    )
                 elif path.startswith("/assets") and status == 404:
+                    _inc("static.asset_404")
                     log_event(
                         logging.WARNING,
                         "static.asset_404",
@@ -1687,6 +1759,7 @@ class _RequestIDMiddleware:
         finally:
             status = status_holder.get("status")
             if status is not None:
+                _inc(f"http.status.{status}")
                 # Surface non-2xx outcomes at INFO so failures are queryable by
                 # path+status; 2xx stays at DEBUG to keep log volume modest.
                 log_event(

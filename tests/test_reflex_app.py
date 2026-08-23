@@ -368,6 +368,59 @@ def test_observability_logs_missing_asset_404(caplog):
     assert any("event=static.asset_404" in r.message for r in caplog.records)
 
 
+def test_health_metrics_exposes_counters_and_revision():
+    """/health/metrics surfaces the in-memory failure counters and the deploy
+    revision, so monitoring can alert on stale-shell/socket tell-tales before a
+    user files a bug."""
+    import asyncio
+
+    import httpx
+    from httpx import ASGITransport
+    from preconsult.core.observability import reset_counters
+    from reflex_app.preconsult.preconsult import api as app
+
+    reset_counters()
+
+    async def run():
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # Trigger a missing-asset 404 so static.asset_404 increments.
+            await client.get("/assets/definitely-not-on-this-revision-12345.js")
+            metrics = await client.get("/health/metrics")
+        return metrics
+
+    metrics = asyncio.run(run())
+
+    assert metrics.status_code == 200
+    body = metrics.json()
+    assert "revision" in body
+    assert body["counters"].get("static.asset_404", 0) >= 1
+    assert body["counters"].get("http.status.404", 0) >= 1
+
+
+def test_middleware_events_include_revision(caplog):
+    """Socket/asset failure events must carry the deploy revision for
+    attribution (the stale-shell incident was hard to pin to a build before)."""
+    import asyncio
+    import logging
+
+    import httpx
+    from httpx import ASGITransport
+    from preconsult.core.config import REPOSITORY_REVISION
+    from reflex_app.preconsult.preconsult import api as app
+
+    async def run():
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            await client.get("/assets/definitely-not-on-this-revision-99999.js")
+
+    with caplog.at_level(logging.WARNING, logger="preconsult.observability"):
+        asyncio.run(run())
+
+    assert any(
+        "event=static.asset_404" in r.message and f"revision='{REPOSITORY_REVISION}'" in r.message
+        for r in caplog.records
+    )
+
+
 def test_state_scroll_and_draft_scripts():
     state = State()
     scroll_script = state._scroll_top_script()

@@ -70,6 +70,13 @@ These are reflex-specific rules that WILL bite if ignored:
   only accepts metadata (event name, request id, language, counts, timings) and truncates
   free-text-derived lengths — NEVER log chief complaint, conditions, medications, answers, or
   complaint detail values. Only non-content counters (e.g. `len(...)`) are allowed.
+- Every structured event is tagged with `revision` (`GIT_SHA`/`K_REVISION`) so logs are attributable
+  to a deployed build. Keep that tag; do not drop it.
+- `_RequestIDMiddleware` (in `preconsult.py`) tracks per-request outcome counters and the
+  failure-tell-tale events `socket.handshake_rejected` (`/_event` 400) and `static.asset_404`
+  (`/assets` 404) — the signature of a stale-`index.html` shell. They are exposed read-only via
+  `GET /health/metrics` (in-memory, per-worker, PHI-free, never Redis). Keep these PHI-safe: only
+  path/status/event-name keys, never user content.
 - Every error response carries a stable machine-readable `code` (`auth_failed`, `rate_limited`,
   `session_expired`, `validation_failed`, `redis_unavailable`, `llm_unavailable`,
   `ai_upstream_error`, `service_unavailable`, `internal_error`). Do not rename/remove codes casually —

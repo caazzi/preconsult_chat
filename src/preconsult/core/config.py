@@ -31,6 +31,12 @@ TRUST_PROXY_HEADERS = os.environ.get("TRUST_PROXY_HEADERS") == "true"
 
 LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-2.5-flash")
 
+# Deploy revision identity. GIT_SHA is injected by CI; K_REVISION is Cloud Run's
+# own revision id at runtime. Kept PHI-free and included in every structured log
+# event so "which deployed build produced this outcome" is answerable in logs,
+# not just in Sentry. Mirrors the Sentry `release` in main.py.
+REPOSITORY_REVISION = os.environ.get("GIT_SHA") or os.environ.get("K_REVISION") or "dev"
+
 # Validate Google Cloud Credentials path if configured
 gcp_creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
 if gcp_creds:

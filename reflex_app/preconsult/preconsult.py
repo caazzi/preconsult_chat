@@ -1,7 +1,9 @@
 import os
+import logging
 import reflex as rx
 from starlette.middleware.gzip import GZipMiddleware
 from .state import State, AdminState
+from preconsult.core.observability import log_event, new_request_id
 try:
     from preconsult.api.endpoints import router as api_router
 except ImportError:
@@ -887,10 +889,27 @@ if api_router:
     async def health(request):
         # Aggregate endpoint retained for backward compatibility with the
         # existing CI smoke test which asserts `redis` is "ok"/"unavailable".
+        # It also surfaces the Reflex event channel status so ops can confirm
+        # the interactive (socket) path works, not just REST/health.
         from starlette.responses import JSONResponse
         from preconsult.services.session_service import check_redis_health
+        request_id = new_request_id()
         redis_ok = await check_redis_health()
-        return JSONResponse({"status": "healthy", "redis": "ok" if redis_ok else "unavailable"})
+        event_channel = await probe_event_channel()
+        log_event(
+            logging.INFO,
+            "health.probe",
+            request_id=request_id,
+            redis="ok" if redis_ok else "unavailable",
+            event_channel=event_channel,
+        )
+        return JSONResponse(
+            {
+                "status": "healthy",
+                "redis": "ok" if redis_ok else "unavailable",
+                "event_channel": event_channel,
+            }
+        )
 
     async def robots_txt(request):
         content = (
@@ -1355,102 +1374,24 @@ def admin_dashboard() -> rx.Component:
     )
 
 
-# Page-level <head> metadata. These MUST be declared through Reflex's own page
-# machinery (add_page(meta=...)) rather than string-injected into the served
-# HTML at request time: Reflex renders the same head on the server AND client,
-# which keeps React hydration identical. Historically we rewrote <head> in
-# CustomStaticFiles.get_response, but those tags were absent from the client
-# render, so React threw hydration error #418 and never attached event handlers
-# (the whole app was un-interactive). SEO/analytics live here now.
+# Page-level <head> metadata, declared through Reflex's own page machinery
+# (add_page(meta=...)) so the server and client render the same <head> and React
+# hydration succeeds.
 #
-# note: meta entries (dicts) become <meta> tags; component entries (links,
-# scripts) become their elements — both are placed in the document <head>.
-_INDEX_SEO_JSONLD = (
-    '<script type="application/ld+json">'
-    '{"@context":"https://schema.org","@graph":['
-    '{"@type":"WebSite","@id":"https://pre-consult.org/#website",'
-    '"name":"PreConsult","description":"Privacy-first AI medical intake assistant. '
-    'Prepare for your doctor appointment in minutes.",'
-    '"url":"https://pre-consult.org/","inLanguage":["en","pt"],'
-    '"alternateName":"PreConsult — AI Patient Intake"},'
-    '{"@type":"WebPage","@id":"https://pre-consult.org/#webpage",'
-    '"name":"PreConsult — Privacy-First Medical Intake Assistant",'
-    '"description":"Guided AI interview helper for patient intake with zero data persistence.",'
-    '"url":"https://pre-consult.org/","isPartOf":{"@id":"https://pre-consult.org/#website"},'
-    '"inLanguage":["en","pt"],"about":{"@type":"Thing",'
-    '"name":"Medical Intake Preparation"}}]}</script>'
-)
-
-_LANG_COOKIE_META_SCRIPT = (
-    '(function(){var lang=(document.cookie.match(/(?:^|;\\s*)preconsult_lang=([^;]*)/)||[])[1];'
-    'if(lang==="pt"||lang==="en"){document.addEventListener("DOMContentLoaded",function(){'
-    'var u=new URL(window.location.href);if(!u.searchParams.has("lang")){'
-    'u.searchParams.set("lang",lang);window.history.replaceState({},"",u.toString());}});}})();'
-)
-
-
+# IMPORTANT — only plain <meta> dicts may be returned here. Reflex turns each
+# dict into a <meta> tag rendered into <head> on BOTH server and client (safe).
+# Generic component entries (rx.el.link / rx.el.script / el.noscript) are
+# instead appended to the page <body>, where they are absent from the client
+# render and cause React hydration error #418 (the whole app becomes
+# un-interactive). Historically hreflang/canonical/JSON-LD/gtag were injected
+# into </head> at request time and later added here as components; both break
+# hydration. Social-preview and description tags are the safe subset.
 def build_index_meta():
-    from reflex_components_core.el.elements import link, script, noscript
-
-    meta_list = [
+    return [
         {"property": "og:image", "content": "https://pre-consult.org/og-image.png"},
         {"property": "og:image:width", "content": "1200"},
         {"property": "og:image:height", "content": "630"},
     ]
-
-    # Multilingual + canonical SEO links
-    meta_list += [
-        link(rel="alternate", hreflang="en", href="https://pre-consult.org/?lang=en"),
-        link(rel="alternate", hreflang="pt", href="https://pre-consult.org/?lang=pt"),
-        link(rel="alternate", hreflang="x-default", href="https://pre-consult.org/"),
-        link(rel="canonical", href="https://pre-consult.org/"),
-    ]
-
-    # Language cookie persistence (functional)
-    meta_list.append(script(_LANG_COOKIE_META_SCRIPT))
-
-    # Schema.org structured data (inline JSON-LD)
-    meta_list.append(script(_INDEX_SEO_JSONLD))
-
-    # Analytics / conversion tagging. Evaluated at build time; if the IDs are
-    # not present in the build environment, no tag is emitted (same as before).
-    gtm_id = os.environ.get("GTM_ID", "")
-    gtag_id = os.environ.get("GTAG_ID", "")
-    gtag_micro_label = os.environ.get("GTAG_MICRO_CONVERSION_LABEL", "")
-    if gtm_id:
-        meta_list += [
-            script(
-                "(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':"
-                "new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],"
-                "j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;"
-                "j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;"
-                "f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','%s');"
-                % gtm_id
-            ),
-            noscript(
-                '<iframe src="https://www.googletagmanager.com/ns.html?id=%s" '
-                'height="0" width="0" style="display:none;visibility:hidden"></iframe>' % gtm_id
-            ),
-        ]
-    elif gtag_id:
-        meta_list += [
-            script(src="https://www.googletagmanager.com/gtag/js?id=%s" % gtag_id),
-            script(
-                "window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}"
-                "gtag('js',new Date());gtag('config','%s');"
-                "function gtag_report_conversion(url){var cb=function(){"
-                "if(typeof(url)!='undefined'){window.location=url;}};"
-                "gtag('event','conversion',{'send_to':'%s/sxIaCJzM7dMcEJiyw6hE',"
-                "'value':1.0,'currency':'BRL','event_callback':cb});return false;}"
-                "function gtag_report_micro_conversion(){if(typeof gtag!=='undefined'){"
-                "var ml='%s';if(ml){gtag('event','conversion',{'send_to':'%s/'+ml,"
-                "'value':0.5,'currency':'BRL'});}gtag('event','summary_generated',"
-                "{'event_category':'engagement','event_label':'intake_summary_completed'});}}"
-                % (gtag_id, gtag_id, gtag_micro_label, gtag_id)
-            ),
-        ]
-
-    return meta_list
 
 
 app.add_page(
@@ -1491,6 +1432,15 @@ class CustomStaticFiles(StaticFiles):
         if any(path_lower.endswith(ext) for ext in (".php", ".asp", ".aspx", ".jsp", ".cgi")) or "wp-admin" in path_lower or "wp-content" in path_lower or ".env" in path_lower or "phpmyadmin" in path_lower:
             return Response("Not Found", status_code=404, media_type="text/plain")
         if any(path_lower == prefix or path_lower.startswith(prefix + "/") for prefix in self._BACKEND_PREFIXES):
+            # A Reflex backend path reached the SPA fallback. This historically
+            # meant the state socket was broken (client got HTML instead of a
+            # handshake). Log it so a regression is visible in Cloud Run logs.
+            log_event(
+                logging.WARNING,
+                "static.backend_prefix_404",
+                request_id=new_request_id(),
+                path=path_lower,
+            )
             return Response("Not Found", status_code=404, media_type="text/plain")
 
         response = await super().get_response(path, scope)
@@ -1508,6 +1458,30 @@ class CustomStaticFiles(StaticFiles):
         response.headers["Vary"] = "Accept-Encoding"
         return response
 
+async def probe_event_channel() -> str:
+    """Confirm the Reflex event socket (/_event/) answers a handshake.
+
+    Performs an in-process Engine.IO handshake and reports only a status string
+    (``ok`` / ``unavailable``). PHI-safe: never returns body content. This is the
+    same probe the CI smoke test makes, so /health and CI agree on whether the
+    interactive state channel is reachable.
+    """
+    import httpx
+    from httpx import ASGITransport
+
+    try:
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=app._api), base_url="http://health"
+        ) as client:
+            resp = await client.get("/_event/?EIO=4&transport=polling")
+        body = resp.content or b""
+        if resp.status_code == 200 and body.startswith(b"0"):
+            return "ok"
+    except Exception:
+        pass
+    return "unavailable"
+
+
 # Reflex mounts the event socket (EngineIO) as a trailing-slash route ``/_event/``
 # for the state connection (see reflex's ``_add_socket``), but the browser's
 # engine.io polling client requests the **bare** ``/_event`` path. Without the root
@@ -1523,6 +1497,12 @@ def _backend_redirect(request):
 
     query = request.url.query
     location = f"{request.url.path}/" + (f"?{query}" if query else "")
+    log_event(
+        logging.DEBUG,
+        "sock.bare_event_redirect",
+        request_id=new_request_id(),
+        path=request.url.path,
+    )
     return RedirectResponse(url=location, status_code=307)
 
 
@@ -1535,6 +1515,46 @@ if os.path.exists(_STATIC_DIR):
 # Enable application-level Gzip compression for payloads >= 500 bytes (HTML, CSS, JS, API JSON)
 app._api.add_middleware(GZipMiddleware, minimum_size=500)
 
+
+class _RequestIDMiddleware:
+    """Stamp an X-Request-ID on every response and emit a PHI-safe request log.
+
+    Only the request method + path are logged (no query string, no headers, no
+    body) so nothing user-supplied is captured. The id correlates the request
+    across Cloud Run logs and the structured backend events.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request_id = new_request_id()
+        scope["request_id"] = request_id
+        path = scope.get("path", "")
+        log_event(
+            logging.DEBUG,
+            "http.request",
+            request_id=request_id,
+            method=scope.get("method", ""),
+            path=path if len(path) <= 200 else path[:200],
+        )
+
+        async def send_with_id(message):
+            if message["type"] == "http.response.start":
+                headers = message.get("headers", [])
+                message["headers"] = [
+                    *headers,
+                    (b"x-request-id", request_id.encode("ascii")),
+                ]
+            await send(message)
+
+        await self.app(scope, receive, send_with_id)
+
+
 app._api.router.lifespan_context = app._run_lifespan_tasks
-api = app._context_middleware(app._api)
+api = _RequestIDMiddleware(app._context_middleware(app._api))
 

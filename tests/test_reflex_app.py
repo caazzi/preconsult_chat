@@ -145,25 +145,94 @@ def test_bot_scanner_blocking(tmp_path):
     assert response.body == b"Not Found"
 
 
-def test_index_page_meta_includes_seo_hydration_safe():
-    """SEO/tracking head tags must be declared via add_page(meta=...) so the
-    server and client render the same <head> (no hydration error #418)."""
-    from reflex_app.preconsult.preconsult import build_index_meta, _INDEX_SEO_JSONLD
-    from reflex_components_core.el.elements import Link, Script
+def test_index_page_meta_is_hydration_safe_meta_only():
+    """Only plain <meta> dicts may be returned from build_index_meta().
+
+    Generic link/script/noscript components passed through add_page(meta=...)
+    are rendered into the page <body> (not <head>), where they are absent from
+    the client render and break React hydration with error #418 (the whole app
+    becomes un-interactive). Lock the meta list to dicts only.
+    """
+    from reflex_app.preconsult.preconsult import build_index_meta
+    from reflex_components_core.el.elements import Link, Script, Noscript
 
     meta = build_index_meta()
-    # og:image + dimensions are <meta> dicts
-    metas = [m for m in meta if isinstance(m, dict)]
-    assert {"property": "og:image", "content": "https://pre-consult.org/og-image.png"} in metas
+    assert meta, "expected at least the og:image metas"
+    # Every entry must be a plain <meta> dict (renders into <head> safely).
+    assert all(isinstance(m, dict) for m in meta)
+    # Absolutely no component entries that would leak into the body.
+    assert all(not isinstance(m, (Link, Script, Noscript)) for m in meta)
+    # Social preview + dimensions present.
+    assert {"property": "og:image", "content": "https://pre-consult.org/og-image.png"} in meta
+    assert {"property": "og:image:width", "content": "1200"} in meta
+    assert {"property": "og:image:height", "content": "630"} in meta
 
-    # Canonical + hreflang links are <link> components; lang-cookie + JSON-LD are
-    # inline <script> components. All are declared as page meta (hydration-safe).
-    links = [c for c in meta if isinstance(c, Link)]
-    scripts = [c for c in meta if isinstance(c, Script)]
-    assert len(links) >= 4  # en, pt, x-default hreflang + canonical
-    # JSON-LD structured-data source is defined and referenced
-    assert '"@context":"https://schema.org"' in _INDEX_SEO_JSONLD
-    assert len(scripts) >= 1
+
+def test_served_body_has_no_head_leak_markers():
+    """Regression guard: the served SPA <body> must not contain leaked head tags
+    (hreflang, JSON-LD, lang-cookie) that historically caused hydration #418 and
+    a 'Unexpected token <' console error."""
+    import asyncio
+    import httpx
+    from httpx import ASGITransport
+    from reflex_app.preconsult.preconsult import api as app
+
+    async def run():
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/")
+        return resp
+
+    resp = asyncio.run(run())
+    body = resp.text
+    # These markers lived in <head> via injection or leaked into <body> via
+    # add_page(meta=<component>); either way they broke hydration.
+    for marker in ("application/ld+json", "hreflang", "preconsult_lang"):
+        assert marker not in body, f"expected no '{marker}' in served HTML"
+
+
+def test_request_id_header_is_stamped():
+    """Every HTTP response carries an X-Request-ID for correlation."""
+    import asyncio
+    import httpx
+    from httpx import ASGITransport
+    from reflex_app.preconsult.preconsult import api as app
+
+    async def run():
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/health")
+        return resp
+
+    resp = asyncio.run(run())
+    assert resp.headers.get("x-request-id")
+
+
+def test_assets_immutable_cache_and_vary(tmp_path):
+    """JS/CSS under /assets/ get immutable cache headers and a Vary header."""
+    from reflex_app.preconsult.preconsult import CustomStaticFiles
+    import asyncio
+
+    dummy_dir = tmp_path / "static"
+    dummy_dir.mkdir()
+    (dummy_dir / "assets").mkdir()
+    (dummy_dir / "assets" / "app.js").write_text("console.log(1)", encoding="utf-8")
+    static_files = CustomStaticFiles(directory=str(dummy_dir), html=True)
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "scheme": "http",
+        "server": ("test", 80),
+        "client": ("127.0.0.1", 1234),
+        "path": "/assets/app.js",
+        "raw_path": b"/assets/app.js",
+        "root_path": "",
+        "query_string": b"",
+        "headers": [],
+        "http_version": "1.1",
+        "app": {},
+    }
+    response = asyncio.run(static_files.get_response("assets/app.js", scope))
+    assert response.headers.get("cache-control") == "public, max-age=31536000, immutable"
+    assert "Accept-Encoding" in response.headers.get("vary", "")
 
 
 def test_custom_static_backend_passthrough(tmp_path):

@@ -267,6 +267,22 @@ async def test_health_endpoint():
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "healthy"
+    # /health now also reports the state-socket (event channel) status, so a
+    # single endpoint confirms the interactive path, not just REST.
+    assert body["event_channel"] in ("ok", "unavailable")
+
+
+@pytest.mark.asyncio
+async def test_health_event_channel_reports_socket():
+    """/health must surface whether the Reflex event socket is reachable."""
+    import reflex_app.preconsult.preconsult as pcm
+    with patch.object(pcm, "probe_event_channel", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = "ok"
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["event_channel"] == "ok"
+    mock_probe.assert_awaited_once()
 
 
 @pytest.mark.asyncio

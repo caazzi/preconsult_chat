@@ -134,7 +134,7 @@ The test command enforces an **80% coverage gate** (measured over `src/preconsul
 and `reflex_app/preconsult`, branch coverage, excluding the declarative Reflex
 page tree). CI fails the build if coverage drops below the threshold.
 
-The test suite contains **194 tests, one skipped**, with **~85% overall coverage**
+The test suite contains **199 tests, one skipped**, with **~85% overall coverage**
 (branch coverage, measured over `src/preconsult` and `reflex_app/preconsult`,
 excluding the generated Reflex page tree). Coverage is broken down as:
 `errors.py` and `core/parsing.py` 100%, `llm.py` 100%, `endpoints.py` 94%,
@@ -259,7 +259,7 @@ app-preconsult/
 │   ├── analyze_cloudflare_logs.py# Cloudflare HTTP log fetcher & analyzer
 │   ├── analyze_week_humans.py# Weekly human-vs-bot access analysis
 │   └── analyze_all_logs.py  # Unified logs analysis script
-├── tests/                   # 194 tests; 80% coverage gate
+├── tests/                   # 199 tests; 80% coverage gate
 ├── AGENTS.md                # Agent rules (incl. CI/CD-only deploy policy)
 ├── Dockerfile               # Multi-stage container build
 ├── docker-compose.yml       # Local Redis service

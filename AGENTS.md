@@ -57,6 +57,12 @@ These are reflex-specific rules that WILL bite if ignored:
 - Question/emergency parsing lives in `src/preconsult/core/parsing.py` (`split_questions`,
   `is_emergency_trigger`) and is shared by the backend and `state.py`. Update the parser there and
   `tests/test_question_parsing.py` — do NOT re-inline the regex in `state.py`.
+- `/health` probes are TTL-throttled; tests that mock `check_redis_health` /
+  `probe_event_channel` must clear the cache with `_reset_health_probe_cache_unlocked()`
+  (or rely on the conftest fixture) or a warm cache will mask the mock.
+- The served `api` object is wrapped by `_BotGateMiddleware`. Tests POSTing to
+  `/api/*` use httpx's default UA (passes the gate); don't set scanner-like UAs
+  (e.g. `curl`) in API tests or the 403 gate will intercept before the endpoint.
 
 ## Observability & the zero-PHI rule
 
@@ -69,6 +75,40 @@ These are reflex-specific rules that WILL bite if ignored:
   `ai_upstream_error`, `service_unavailable`, `internal_error`). Do not rename/remove codes casually —
   `tests/test_error_handlers.py` and `tests/test_api_integration.py` assert them, and CI/alerts key
   on them. Responses must stay generic (never leak exception internals or user values).
+
+## Redis is reserved for real users (free tier)
+
+The app runs on a **free-tier serverless Redis (Upstash)** with a finite daily
+request quota. Non-user traffic burned the quota (and caused `session_expired`
+outages), so Redis must be reserved for actual patient sessions:
+
+- **NEVER set `redis_url` in `reflex_app/rxconfig.py`.** Pointing Reflex at Redis
+  spins up its `RedisTokenManager` (continuous keyspace/pubsub + per-socket token
+  ops on every `/_event` connect), which exhausts the quota. Reflex state stays
+  in-memory per instance (Cloud Run `--session-affinity`); the app's own
+  `session_service` owns real sessions.
+- **`/health` + `/health/ready` throttle their Redis/socket probes** (~1/min) via
+  `_throttled_probe` in `preconsult.py`. Don't reintroduce a per-request Redis
+  ping — CI/scanners/readiness polling would drain the quota.
+- **The deployed CI smoke test is liveness/socket-only.** Full session/stream/
+  rate-limit/SSE coverage runs in the `test` job against a local `redis:alpine`.
+  Don't add session-create/stream stages to the deployed smoke test.
+- **`State.log_analytics_event` is a no-op until a real session exists**
+  (`session_id` set) — bots that never start the flow must not reach the
+  analytics Redis write path. Keep that gate when touching analytics.
+- **A conservative bot gate** (`_BotGateMiddleware` in `preconsult.py`) blocks
+  scanner/CLI user-agents on Redis-backed `/api/*` paths with a fast `403` before
+  storage. Browsers pass through; `/_event` no longer touches Redis, so it stays
+  ungated.
+
+## Session errors: redis_unavailable vs session_expired
+
+- `get_session` **raises `RedisUnavailableError`** (→ stable 503 `redis_unavailable`)
+  when Redis is down AND there is no in-memory fallback copy; it returns `{}` only
+  for a genuine miss (→ 404 `session_expired`). Do NOT collapse an outage into a
+  misleading `session_expired`.
+- Session CRUD has a best-effort per-worker in-memory fallback for transient Redis
+  errors. It is a resilience shim, not a store of truth.
 
 ## Client-IP & proxy trust
 

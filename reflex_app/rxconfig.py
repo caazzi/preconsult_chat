@@ -1,12 +1,6 @@
 import os
 import reflex as rx
 
-# Lock expiration (ms) for Redux/Redis state transactions. Must comfortably
-# exceed the longest state-mutating handler — `get_interview_questions` streams
-# up to 30s while mutating state, well over the 10s default. This prevents
-# `LockExpiredError` for real users. The warning threshold must stay below it.
-REDIS_LOCK_EXPIRATION_MS = 60000
-
 config = rx.Config(
     app_name="preconsult",
     # The backend URL baked into the client's EVENT socket endpoint. This must
@@ -21,8 +15,13 @@ config = rx.Config(
     # keep the event channel functional. Defaultable/reversible via
     # `REFLEX_TRANSPORT=websocket` without a code change.
     transport=os.environ.get("REFLEX_TRANSPORT", "polling"),
-    redis_url=os.environ.get("REDIS_URL"),
-    redis_lock_expiration=REDIS_LOCK_EXPIRATION_MS,
-    redis_lock_warning_threshold=REDIS_LOCK_EXPIRATION_MS // 2,
+    # IMPORTANT: Reflex state/token management intentionally does NOT use Redis.
+    # Pointing Reflex at REDIS_URL spun up its RedisTokenManager (continuous
+    # keyspace/pubsub + per-socket token ops) on every /_event connect, burning
+    # the serverless Redis request quota and starving real user sessions. Reflex
+    # now uses its in-memory LocalTokenManager; Cloud Run --session-affinity
+    # keeps each user on one instance, and the app's own session store
+    # (preconsult.services.session_service) still owns real-user session state.
+    # Do not re-introduce redis_url here without a dedicated Redis budget.
     show_reflex_badge=False,
 )

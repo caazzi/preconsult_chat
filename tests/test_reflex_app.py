@@ -307,11 +307,21 @@ def test_mobile_ui_layout_responsiveness():
     assert interview is not None
 
 
-def test_rxconfig_redis_url(monkeypatch):
-    import os
+def test_rxconfig_does_not_use_redis_for_state(monkeypatch):
+    """Reflex state/token management must stay OFF Redis.
+
+    Wiring REDIS_URL into the reflex Config made Reflex's RedisTokenManager burn
+    the serverless Redis quota on every /_event connect (keyspace/pubsub/socket
+    token ops), starving real user sessions. Reflex must fall back to its
+    in-memory LocalTokenManager, so redis_url must remain unset even when the
+    env var is present.
+    """
     import reflex_app.rxconfig as rxconfig
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
-    assert rxconfig.config.redis_url == os.environ.get("REDIS_URL")
+    # Re-read config after env is set.
+    import importlib
+    importlib.reload(rxconfig)
+    assert rxconfig.config.redis_url is None
 
 
 def test_rxconfig_polling_transport_is_default(monkeypatch):

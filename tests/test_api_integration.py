@@ -334,6 +334,30 @@ async def test_health_ready_503_when_redis_down(mock_health):
 
 
 @pytest.mark.asyncio
+@patch("preconsult.services.session_service.check_redis_health", new_callable=AsyncMock)
+async def test_health_probe_is_throttled_not_per_request(mock_redis_ping):
+    """Frequent /health hits must not re-probe Redis/socket on every request.
+
+    This is what reserved the serverless Redis quota for real users instead of
+    letting health/CI/scanner polling burn it. The real throttled wrapper should
+    call the underlying Redis ping exactly once across three /health requests.
+    """
+    import reflex_app.preconsult.preconsult as pcm
+    mock_redis_ping.return_value = True
+
+    with patch.object(pcm, "probe_event_channel", new_callable=AsyncMock) as mock_ev:
+        mock_ev.return_value = "ok"
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            for _ in range(3):
+                resp = await client.get("/health")
+                assert resp.status_code == 200
+
+    # The throttle cache means the real Redis ping fired once, not three times.
+    assert mock_redis_ping.await_count == 1
+    assert mock_ev.await_count == 1
+
+
+@pytest.mark.asyncio
 async def test_root_endpoint():
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/health", headers=HEADERS)

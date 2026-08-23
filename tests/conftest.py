@@ -22,10 +22,27 @@ def _reset_session_service_state():
     srv._redis_available = None
 
 
+def _reset_health_probe_cache():
+    """Clear the /health throttle cache so mocked probes are seen by tests.
+
+    The health endpoints cache their redis/event-channel statuses behind a TTL,
+    so a mocked status from one test would otherwise be masked by a warm cache
+    in the next.
+    """
+    try:
+        import reflex_app.preconsult.preconsult as pcm
+
+        pcm._reset_health_probe_cache_unlocked()
+    except Exception:
+        pass
+
+
 def pytest_runtest_setup(item):
     _reset_session_service_state()
+    _reset_health_probe_cache()
 
 
 def pytest_runtest_teardown(item, nextitem):
     _reset_session_service_state()
+    _reset_health_probe_cache()
 

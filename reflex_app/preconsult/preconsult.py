@@ -1,5 +1,7 @@
 import os
+import asyncio
 import logging
+import time
 import reflex as rx
 from starlette.middleware.gzip import GZipMiddleware
 from .state import State, AdminState
@@ -876,13 +878,13 @@ if api_router:
     async def health_ready(request):
         # Readiness: only serve traffic when Redis is reachable (sessions and
         # rate limiting depend on it). 503 means "don't send me requests yet".
+        # Throttled so readiness polling does not burn the serverless Redis quota.
         from starlette.responses import JSONResponse
-        from preconsult.services.session_service import check_redis_health
-        redis_ok = await check_redis_health()
-        if not redis_ok:
+        redis_status = await check_redis_health_throttled()
+        if redis_status != "ok":
             return JSONResponse(
                 status_code=503,
-                content={"status": "not_ready", "redis": "unavailable", "code": "service_unavailable"},
+                content={"status": "not_ready", "redis": redis_status, "code": "service_unavailable"},
             )
         return JSONResponse({"status": "ready", "redis": "ok"})
 
@@ -890,23 +892,24 @@ if api_router:
         # Aggregate endpoint retained for backward compatibility with the
         # existing CI smoke test which asserts `redis` is "ok"/"unavailable".
         # It also surfaces the Reflex event channel status so ops can confirm
-        # the interactive (socket) path works, not just REST/health.
+        # the interactive (socket) path works, not just REST/health. Both probes
+        # are throttled so frequently-hit health endpoints don't consume the
+        # serverless Redis quota.
         from starlette.responses import JSONResponse
-        from preconsult.services.session_service import check_redis_health
         request_id = new_request_id()
-        redis_ok = await check_redis_health()
-        event_channel = await probe_event_channel()
+        redis_ok = await check_redis_health_throttled()
+        event_channel = await _throttled_probe("event_channel", probe_event_channel)
         log_event(
             logging.INFO,
             "health.probe",
             request_id=request_id,
-            redis="ok" if redis_ok else "unavailable",
+            redis=redis_ok,
             event_channel=event_channel,
         )
         return JSONResponse(
             {
                 "status": "healthy",
-                "redis": "ok" if redis_ok else "unavailable",
+                "redis": redis_ok,
                 "event_channel": event_channel,
             }
         )
@@ -1480,6 +1483,49 @@ async def probe_event_channel() -> str:
     except Exception:
         pass
     return "unavailable"
+
+
+# Throttle health probes so frequently-hit health endpoints (CI, scanners, and
+# Cloud Run readiness polling) do not consume the serverless Redis quota. Value
+# is a TTL window in seconds; statuses are recomputed at most once per window and
+# otherwise served from the cache. Requires a worker-global lock to avoid thundering
+# herd on cold start.
+_health_probe_cache: dict[str, tuple[float, str]] = {}
+_health_probe_lock = asyncio.Lock()
+_HEALTH_PROBE_TTL_S = 60.0
+
+
+def _reset_health_probe_cache_unlocked() -> None:
+    """Clear the health-probe throttle cache (mainly for deterministic tests)."""
+    _health_probe_cache.clear()
+
+
+async def _throttled_probe(key: str, probe) -> str:
+    """Return a cached probe status, refreshing at most once per TTL window.
+
+    ``probe`` is an async callable returning a status string (e.g. ``"ok"``).
+    """
+    cache_key = f"health:{key}"
+    async with _health_probe_lock:
+        now = time.monotonic()
+        cached = _health_probe_cache.get(cache_key)
+        if cached is not None and now - cached[0] < _HEALTH_PROBE_TTL_S:
+            return cached[1]
+    # Fresh probe outside the lock (still coalesced by the TTL).
+    status = await probe()
+    async with _health_probe_lock:
+        _health_probe_cache[cache_key] = (time.monotonic(), status)
+    return status
+
+
+async def check_redis_health_throttled() -> str:
+    """Redis reachability as a throttled status string (``ok``/``unavailable``)."""
+    from preconsult.services.session_service import check_redis_health
+
+    async def _probe() -> str:
+        return "ok" if await check_redis_health() else "unavailable"
+
+    return await _throttled_probe("redis", _probe)
 
 
 # Reflex mounts the event socket (EngineIO) as a trailing-slash route ``/_event/``

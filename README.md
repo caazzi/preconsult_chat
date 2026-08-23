@@ -93,6 +93,12 @@ in-memory store during a quota outage** (rate-limit/quota already do), so a real
 Cloud Run's session-affinity instance keeps working through the rest of the quota period; the
 quota renewal (Upstash free tier resets daily) is transparent to them.
 
+The in-memory fallback honours the **same 30-minute ephemeral contract** as Redis: each
+session copy carries a 30-minute TTL, is pruned lazily on access, and the store is capped
+(`_MEMORY_SESSIONS_MAX`, oldest-by-expiry evicted) so a prolonged outage cannot accumulate
+unbounded health data in a worker's RAM. Per-worker, in-memory, non-durable, and wiped on
+process death — consistent with the product's zero-persistence privacy model.
+
 With low real-user volume this keeps the free tier comfortably within budget.
 
 ---
@@ -172,7 +178,7 @@ The test command enforces an **80% coverage gate** (measured over `src/preconsul
 and `reflex_app/preconsult`, branch coverage, excluding the declarative Reflex
 page tree). CI fails the build if coverage drops below the threshold.
 
-The test suite contains **212 tests, one skipped**, with **~85% overall coverage**
+The test suite contains **215 tests, one skipped**, with **~85% overall coverage**
 (branch coverage, measured over `src/preconsult` and `reflex_app/preconsult`,
 excluding the generated Reflex page tree). Coverage is broken down as:
 `errors.py` and `core/parsing.py` 100%, `llm.py` 100%, `endpoints.py` 94%,
@@ -298,7 +304,7 @@ app-preconsult/
 │   ├── analyze_cloudflare_logs.py# Cloudflare HTTP log fetcher & analyzer
 │   ├── analyze_week_humans.py# Weekly human-vs-bot access analysis
 │   └── analyze_all_logs.py  # Unified logs analysis script
-├── tests/                   # 212 tests; 80% coverage gate
+├── tests/                   # 215 tests; 80% coverage gate
 ├── AGENTS.md                # Agent rules (incl. CI/CD-only deploy policy)
 ├── Dockerfile               # Multi-stage container build
 ├── docker-compose.yml       # Local Redis service

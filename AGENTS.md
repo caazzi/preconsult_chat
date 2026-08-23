@@ -115,9 +115,10 @@ outages), so Redis must be reserved for actual patient sessions:
   user.** `create_session`/`update_session` store in memory and succeed; `get_session`
   serves an in-memory copy when present and raises `RedisQuotaExceededError` only when it
   genuinely has nothing for that session id (surface the cause instead of an unknown `{}`).
-  This is a per-worker shim, not a store of truth, but it keeps real users (pinned by
-  Cloud Run `--session-affinity`) working through the quota window until Upstash resets
-  daily.
+  **The in-memory shim honours the same 30-minute TTL as Redis** (each copy expires and is
+  pruned lazily on access) and is **capped at `_MEMORY_SESSIONS_MAX`** (oldest-by-expiry
+  evicted) so a prolonged outage cannot accumulate unbounded PHI in a worker's RAM. Keep
+  those guards when touching the fallback — they protect the zero-persistence privacy claim.
 - Session CRUD has a best-effort per-worker in-memory fallback for transient Redis
   errors. It is a resilience shim, not a store of truth.
 

@@ -88,7 +88,7 @@ async def test_get_session_returns_memory_fallback_when_redis_down():
     import preconsult.services.session_service as srv
 
     # Seed the in-memory shim as if create_session had run during an outage.
-    srv._memory_sessions["sess-x"] = {"chat": None}
+    srv._memory_sessions["sess-x"] = (float("inf"), {"chat": None})
     try:
         with patch("preconsult.services.session_service.get_redis", return_value=None):
             result = await get_session("sess-x")
@@ -114,7 +114,7 @@ async def test_get_session_quota_without_memory_copy_raises_quota_exceeded(mock_
 async def test_get_session_quota_serves_memory_fallback(mock_get_redis):
     """Quota exhausted but a per-worker in-memory copy exists -> still serve it."""
     import preconsult.services.session_service as srv
-    srv._memory_sessions["sess-q"] = {"gender": "Male"}
+    srv._memory_sessions["sess-q"] = (float("inf"), {"gender": "Male"})
     try:
         client = AsyncMock()
         client.hgetall.side_effect = Exception("max requests limit exceeded. Limit: 500000")
@@ -140,6 +140,8 @@ async def test_create_session_quota_degrades_to_memory(mock_get_redis):
     assert session_id
     async with srv._memory_sessions_lock:
         assert session_id in srv._memory_sessions
+
+
 @pytest.mark.asyncio
 @patch("preconsult.services.session_service.get_redis", return_value=None)
 async def test_update_session_redis_unavailable(mock_get_redis):
@@ -198,3 +200,60 @@ async def test_check_redis_health_reconnects_when_latched_down(mock_get_redis, m
 
     srv._redis_pool = None
     srv._redis_available = None
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.get_redis", return_value=None)
+async def test_memory_fallback_treats_expired_entry_as_gone(mock_get_redis):
+    """The in-memory shim must honour the same 30-minute ephemeral contract as
+    Redis: an expired entry is treated as a miss (data gone), not served."""
+    import preconsult.services.session_service as srv
+    srv._memory_sessions["sess-expired"] = (0.0, {"gender": "Male"})  # expires immediately
+    try:
+        with pytest.raises(RedisUnavailableError):
+            await get_session("sess-expired")
+        # Expired entry was pruned on access.
+        async with srv._memory_sessions_lock:
+            assert "sess-expired" not in srv._memory_sessions
+    finally:
+        srv._memory_sessions.clear()
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.get_redis", return_value=None)
+async def test_memory_fallback_refreshes_ttl_on_update(mock_get_redis):
+    import preconsult.services.session_service as srv
+    srv._memory_sessions["sess-upd"] = (float("inf") - 1, {"gender": "Male"})
+    try:
+        await update_session("sess-upd", {"allergies_flag": True})
+        async with srv._memory_sessions_lock:
+            entry = srv._memory_sessions["sess-upd"]
+        assert entry[1]["allergies_flag"] is True
+        # TTL refreshed to the future (not the far-past seed).
+        assert entry[0] > 0
+    finally:
+        srv._memory_sessions.clear()
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.get_redis")
+async def test_memory_fallback_evicts_oldest_over_cap(mock_get_redis):
+    """Past the cap the store evicts the oldest-by-expiry entry so a prolonged
+    outage cannot accumulate unbounded session data in a worker's RAM."""
+    import preconsult.services.session_service as srv
+    client = AsyncMock()
+    client.hset.side_effect = Exception("max requests limit exceeded. Limit: 500000")
+    mock_get_redis.return_value = client
+
+    srv._memory_sessions.clear()
+    try:
+        created = []
+        for i in range(srv._MEMORY_SESSIONS_MAX + 10):
+            sid = await create_session({"gender": str(i)})
+            created.append(sid)
+        async with srv._memory_sessions_lock:
+            assert len(srv._memory_sessions) <= srv._MEMORY_SESSIONS_MAX
+            # Newest entries survive the cap.
+            assert created[-1] in srv._memory_sessions
+    finally:
+        srv._memory_sessions.clear()

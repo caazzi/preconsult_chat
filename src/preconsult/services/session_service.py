@@ -18,12 +18,19 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 _redis_pool = None
 _redis_available: Optional[bool] = None
 
-# Best-effort in-memory session store used when Redis is down/unavailable so a
-# transient storage outage degrades gracefully instead of hard-failing. Per
+# Best-effort in-memory session store used when Redis is down/quota-exhausted so
+# a transient storage outage degrades gracefully instead of hard-failing. Per
 # instance, so it cannot span workers — it is a resilience shim, not a store of
 # truth (the README's model keeps ephemeral session state server-side in Redis).
-_memory_sessions: Dict[str, Dict[str, Any]] = {}
+#
+# To honour the same "30-minute ephemeral" privacy contract Redis provides, each
+# entry carries an expiry timestamp (pruned lazily on access) and the store is
+# bounded by _MEMORY_SESSIONS_MAX (oldest-by-expiry evicted) so a prolonged
+# outage cannot accumulate unbounded health data in one worker's RAM.
+_MemorySessionValue = tuple[float, Dict[str, Any]]
+_memory_sessions: Dict[str, _MemorySessionValue] = {}
 _memory_sessions_lock = asyncio.Lock()
+_MEMORY_SESSIONS_MAX = 512
 
 INCR_EXPIRE_SCRIPT = """
 local key = KEYS[1]
@@ -141,6 +148,23 @@ def _deserialize(raw: Dict[str, Any]) -> Dict[str, Any]:
             result[k] = v
     return result
 
+def _prune_expired_unlocked() -> None:
+    """Drop expired in-memory session entries (caller must hold _memory_sessions_lock)."""
+    now = time.monotonic()
+    expired = [sid for sid, (expires_at, _) in _memory_sessions.items() if now > expires_at]
+    for sid in expired:
+        del _memory_sessions[sid]
+
+
+def _evict_over_cap_unlocked() -> None:
+    """Evict oldest-by-expiry entries when the store exceeds the cap (lock held)."""
+    while len(_memory_sessions) > _MEMORY_SESSIONS_MAX:
+        oldest = min(_memory_sessions.items(), key=lambda item: item[1][0])
+        if oldest[0] is None:
+            break
+        del _memory_sessions[oldest[0]]
+
+
 async def create_session(data: Dict[str, Any]) -> str:
     session_id = str(uuid.uuid4())
     key = f"session:{session_id}"
@@ -167,8 +191,12 @@ async def create_session(data: Dict[str, Any]) -> str:
         logging.info(f"Sessao {session_id} criada em memoria (Redis indisponivel)")
 
     # Best-effort in-memory persistence so the same worker can read it back.
+    # Carry the same 30-minute TTL as Redis and bound the store to the cap so a
+    # prolonged outage can't accumulate unbounded session data in memory.
     async with _memory_sessions_lock:
-        _memory_sessions[session_id] = dict(_serialize(data))
+        _memory_sessions[session_id] = (time.monotonic() + SESSION_TTL, dict(_serialize(data)))
+        _prune_expired_unlocked()
+        _evict_over_cap_unlocked()
     return session_id
 
 
@@ -181,7 +209,15 @@ async def get_session(session_id: str) -> Dict[str, Any]:
 
     async def _memory_lookup() -> Dict[str, Any]:
         async with _memory_sessions_lock:
-            raw = _memory_sessions.get(session_id)
+            now = time.monotonic()
+            entry = _memory_sessions.get(session_id)
+            if entry is None:
+                return {}
+            expires_at, raw = entry
+            if now > expires_at:
+                # Honour the 30-minute contract: expired in-memory copies are gone.
+                del _memory_sessions[session_id]
+                return {}
         return _deserialize(raw) if raw else {}
 
     if client is None:
@@ -239,9 +275,14 @@ async def update_session(session_id: str, new_data: Dict[str, Any]) -> None:
                 logging.error(f"Redis indisponivel ao atualizar sessao, usando memoria: {e}")
 
     async with _memory_sessions_lock:
-        existing = _memory_sessions.get(session_id, {})
-        existing.update(_serialize(new_data))
-        _memory_sessions[session_id] = existing
+        now = time.monotonic()
+        existing_entry = _memory_sessions.get(session_id)
+        raw = existing_entry[1] if existing_entry else {}
+        raw.update(_serialize(new_data))
+        # Refresh the TTL like the Redis path does.
+        _memory_sessions[session_id] = (now + SESSION_TTL, raw)
+        _prune_expired_unlocked()
+        _evict_over_cap_unlocked()
 
 async def check_redis_status() -> str:
     """Probe Redis and return a stable status: ``ok`` | ``quota_exceeded`` | ``unavailable``.

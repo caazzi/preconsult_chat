@@ -64,8 +64,17 @@ RUN groupadd -r preconsult && useradd -r -g preconsult -m preconsult && \
 USER preconsult
 WORKDIR /app/reflex_app
 
-# Run production backend using Gunicorn with Uvicorn workers and bind to the
-# PORT env variable.
+# Run production backend using Gunicorn with a SINGLE Uvicorn worker per
+# instance. Reflex's Socket.IO/Engine.IO session store is in-memory per worker
+# (no `redis_url` — see rxconfig.py, which keeps the free-tier serverless Redis
+# quota for real-user sessions). With >1 workers, long-polling requests for one
+# browser round-robin across workers, each with its own in-memory session, so a
+# poll hitting the "wrong" worker is rejected with `400 "Invalid session <sid>"`
+# and the UI fails to advance ("Cannot connect to server: xhr post error").
+# Cloud Run `--session-affinity` pins a client to one instance, so a single
+# worker per instance reliably owns the whole socket session; horizontal
+# scaling happens at the instance level (uvicorn's asyncio loop serves many
+# concurrent connections).
 #
 # IMPORTANT: invoke gunicorn DIRECTLY from the baked venv (/app/.venv/bin) —
 # NOT via `uv run`. Running `uv run gunicorn` (with or without UV_NO_SYNC) makes
@@ -75,4 +84,4 @@ WORKDIR /app/reflex_app
 # `uv sync --frozen` in the builder bakes the project + venv, so startup stays
 # fast (seconds) with no runtime rebuild. 'exec' ensures signals (like SIGTERM
 # for scale-down) correctly reach gunicorn.
-CMD ["sh", "-c", "exec /app/.venv/bin/gunicorn preconsult.preconsult:api --bind 0.0.0.0:${PORT:-8080} --worker-class uvicorn.workers.UvicornWorker --workers 2 --threads 4"]
+CMD ["sh", "-c", "exec /app/.venv/bin/gunicorn preconsult.preconsult:api --bind 0.0.0.0:${PORT:-8080} --worker-class uvicorn.workers.UvicornWorker --workers 1 --threads 4"]

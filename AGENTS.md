@@ -94,6 +94,15 @@ outages), so Redis must be reserved for actual patient sessions:
   ops on every `/_event` connect), which exhausts the quota. Reflex state stays
   in-memory per instance (Cloud Run `--session-affinity`); the app's own
   `session_service` owns real sessions.
+- **Gunicorn MUST run exactly `--workers 1`** (`Dockerfile` CMD). Reflex's
+  Socket.IO/Engine.IO session store is in-memory **per worker** (AsyncServer with
+  no shared client_manager; no `redis_url`). With >1 workers, a browser's
+  long-poll requests round-robin across workers that each own a different
+  in-memory session, so a poll landing on the "wrong" worker is rejected with
+  `400 "Invalid session <sid>"` and the UI fails to advance ("Cannot connect to
+  server: xhr post error"). Cloud Run `--session-affinity` + a single worker per
+  instance keeps a client's whole session on one worker; vertical scaling is
+  via instances, not workers.
 - **`/health` + `/health/ready` throttle their Redis/socket probes** (~1/min) via
   `_throttled_probe` in `preconsult.py`. Don't reintroduce a per-request Redis
   ping — CI/scanners/readiness polling would drain the quota.

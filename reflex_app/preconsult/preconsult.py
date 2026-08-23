@@ -861,7 +861,26 @@ if api_router:
         google_api_handler,
         generic_handler,
     )
-    custom_api = FastAPI()
+    custom_api = FastAPI(
+        title="PreConsult API",
+        version="1.0.0",
+        description=(
+            "Privacy-first medical intake assistant. Ephemeral sessions (30-min TTL), "
+            "no persistence of health data. Interactive schema auto-generated from the "
+            "FastAPI routes; behavioral contracts (SSE framing, session TTL, rate limits) "
+            "are documented in docs/api-contract.md."
+        ),
+        contact={"name": "PreConsult", "url": "https://pre-consult.org"},
+        openapi_tags=[
+            {"name": "Session Lifecycle", "description": "Create and manage ephemeral patient sessions."},
+            {"name": "Clinical Question Streams", "description": "SSE streams of LLM-generated clinical questions."},
+            {"name": "PDF Report", "description": "Deterministic in-memory PDF generation."},
+            {"name": "Analytics", "description": "Anonymous funnel analytics."},
+        ],
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+    )
     custom_api.add_exception_handler(RedisUnavailableError, redis_unavailable_handler)
     custom_api.add_exception_handler(RedisQuotaExceededError, redis_quota_exceeded_handler)
     custom_api.add_exception_handler(LLMUnavailableError, llm_unavailable_handler)

@@ -96,10 +96,50 @@ class GeneratePdfRequest(BaseModel):
     session_id: str
     qa_pairs: list[QAPair] = Field(..., min_length=1, max_length=5)
 
+# --- OpenAPI Tags & Error Response Schemas ---
+TAG_SESSION = "Session Lifecycle"
+TAG_STREAM = "Clinical Question Streams"
+TAG_PDF = "PDF Report"
+TAG_ANALYTICS = "Analytics"
+
+# Stable machine-readable error codes surfaced by core/errors.py. Documented
+# here so the interactive OpenAPI contract reflects the real error contract.
+_AUTH_FORBIDDEN = {
+    403: {
+        "description": "Missing/invalid X-API-KEY. machine-readable code `auth_failed`.",
+    }
+}
+_RATE_LIMITED = {
+    429: {
+        "description": "Per-IP rate or daily-session quota exceeded. machine-readable "
+        "codes `rate_limited` / `redis_quota_exceeded`.",
+    }
+}
+_SESSION_EXPIRED = {
+    404: {
+        "description": "Session unknown/expired. machine-readable code `session_expired`.",
+    }
+}
+_STRATEGIC_ERRORS = {
+    **_AUTH_FORBIDDEN,
+    **_RATE_LIMITED,
+    **_SESSION_EXPIRED,
+}
+
 # --- API Router ---
 router = APIRouter(dependencies=[Depends(get_api_key)])
 
-@router.post("/session/init")
+@router.post(
+    "/session/init",
+    tags=[TAG_SESSION],
+    summary="Create an ephemeral patient session",
+    description=(
+        "Initializes a new ephemeral session (30-minute TTL) with the full intake form. "
+        "Returns a `session_id` used by all subsequent endpoints. Per-IP rate limited "
+        "(2/min, 20/day). No data is persisted beyond the session TTL and the in-memory fallback."
+    ),
+    responses=_STRATEGIC_ERRORS,
+)
 async def init_session(request: SessionInitRequest, fastapi_req: Request):
     """Initializes a new ephemeral Redis session with full form data."""
     request_id = new_request_id()
@@ -150,7 +190,17 @@ async def init_session(request: SessionInitRequest, fastapi_req: Request):
 
     return {"session_id": session_id}
 
-@router.post("/initial-questions-stream")
+@router.post(
+    "/initial-questions-stream",
+    tags=[TAG_STREAM],
+    summary="Stream initial clinical follow-up questions",
+    description=(
+        "Server-Sent Events (SSE) stream of LLM-generated follow-up questions based on the "
+        "stored chief complaint. Emits `data: <json>` lines; mid-stream errors are served as "
+        "a normal SSE event (never an HTTP error). 5/min per IP."
+    ),
+    responses=_STRATEGIC_ERRORS,
+)
 async def get_initial_questions_streamed(
     request: InitialRequest,
     fastapi_req: Request,
@@ -211,7 +261,17 @@ async def get_initial_questions_streamed(
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-@router.post("/interview-questions-stream")
+@router.post(
+    "/interview-questions-stream",
+    tags=[TAG_STREAM],
+    summary="Stream targeted clinical interview questions",
+    description=(
+        "Server-Sent Events (SSE) stream of targeted interview questions derived from the full "
+        "session context using OPQRST/SAMPLE clinical frameworks. Single LLM call. Emits "
+        "`data: <json>` lines; mid-stream errors are served as a normal SSE event. 5/min per IP."
+    ),
+    responses=_STRATEGIC_ERRORS,
+)
 async def get_interview_questions_streamed(
     request: InterviewRequest,
     fastapi_req: Request,
@@ -267,7 +327,17 @@ async def get_interview_questions_streamed(
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-@router.post("/generate-pdf")
+@router.post(
+    "/generate-pdf",
+    tags=[TAG_PDF],
+    summary="Generate a deterministic in-memory patient report PDF",
+    description=(
+        "Compiles the stored session form data plus the submitted Q&A pairs into a localized "
+        "PDF report entirely in memory (no LLM call). Streamed directly to the client. "
+        "Requires a valid session and 1-5 QA pairs."
+    ),
+    responses=_STRATEGIC_ERRORS,
+)
 async def generate_pdf_endpoint(request: GeneratePdfRequest):
     """Generates PDF deterministically from session form data + Q&A pairs. No LLM call."""
     request_id = new_request_id()
@@ -302,7 +372,17 @@ class AnalyticsEventRequest(BaseModel):
     event: str
 
 
-@router.post("/analytics/event")
+@router.post(
+    "/analytics/event",
+    tags=[TAG_ANALYTICS],
+    summary="Record an anonymous funnel analytics event",
+    description=(
+        "Increments a counter for an anonymous funnel event key. Best-effort: never raises on "
+        "Redis failure. Emitting clients gate events to real sessions (analytics keys documented "
+        "in docs/analytics-contract.md)."
+    ),
+    responses=_AUTH_FORBIDDEN,
+)
 async def log_analytics_event(request: AnalyticsEventRequest):
     try:
         client = get_redis()
@@ -315,7 +395,16 @@ async def log_analytics_event(request: AnalyticsEventRequest):
     return {"status": "ok"}
 
 
-@router.get("/analytics/stats")
+@router.get(
+    "/analytics/stats",
+    tags=[TAG_ANALYTICS],
+    summary="Fetch the 7-day analytics funnel",
+    description=(
+        "Returns per-day recorded funnel counters for the last 7 days (oldest first). "
+        "Best-effort: returns empty buckets if Redis is unavailable."
+    ),
+    responses=_AUTH_FORBIDDEN,
+)
 async def get_analytics_stats():
     data = []
     try:

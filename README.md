@@ -82,6 +82,13 @@ for actual patient sessions:
   on Redis-backed `/api/*` paths with a fast `403` before any storage work. Browsers
   pass through untouched.
 
+**If the quota is ever exhausted, the app no longer fails silently.** An Upstash
+`max requests limit exceeded` error is classified as `redis_quota_exceeded`: it is
+surfaced on `/health` and `/health/ready` (`redis: "quota_exceeded"`, code
+`redis_quota_exceeded`) and returned as a stable `503 redis_quota_exceeded` on the
+session/stream/PDF endpoints — distinct from a general `redis_unavailable` outage,
+so alerts and ops can tell "daily quota spent" apart from a connection problem.
+
 With low real-user volume this keeps the free tier comfortably within budget.
 
 ---
@@ -161,7 +168,7 @@ The test command enforces an **80% coverage gate** (measured over `src/preconsul
 and `reflex_app/preconsult`, branch coverage, excluding the declarative Reflex
 page tree). CI fails the build if coverage drops below the threshold.
 
-The test suite contains **206 tests, one skipped**, with **~85% overall coverage**
+The test suite contains **210 tests, one skipped**, with **~85% overall coverage**
 (branch coverage, measured over `src/preconsult` and `reflex_app/preconsult`,
 excluding the generated Reflex page tree). Coverage is broken down as:
 `errors.py` and `core/parsing.py` 100%, `llm.py` 100%, `endpoints.py` 94%,
@@ -212,9 +219,10 @@ Current categories:
 
 > Every error response carries a stable, machine-readable `code`
 > (`auth_failed`, `rate_limited`, `session_expired`, `validation_failed`,
-> `redis_unavailable`, `llm_unavailable`, `ai_upstream_error`,
-> `service_unavailable`, `internal_error`) alongside the human detail, so
-> alerts and CI can key on codes instead of localized text. Error responses
+> `redis_unavailable`, `redis_quota_exceeded`, `llm_unavailable`,
+> `ai_upstream_error`, `service_unavailable`, `internal_error`) alongside the
+> human detail, so alerts and CI can key on codes instead of localized text.
+> Error responses
 > are deliberately generic and never include exception internals or health data.
 
 ---
@@ -286,7 +294,7 @@ app-preconsult/
 │   ├── analyze_cloudflare_logs.py# Cloudflare HTTP log fetcher & analyzer
 │   ├── analyze_week_humans.py# Weekly human-vs-bot access analysis
 │   └── analyze_all_logs.py  # Unified logs analysis script
-├── tests/                   # 206 tests; 80% coverage gate
+├── tests/                   # 210 tests; 80% coverage gate
 ├── AGENTS.md                # Agent rules (incl. CI/CD-only deploy policy)
 ├── Dockerfile               # Multi-stage container build
 ├── docker-compose.yml       # Local Redis service

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, AsyncMock
-from preconsult.core.errors import RedisUnavailableError
+from preconsult.core.errors import RedisUnavailableError, RedisQuotaExceededError
 from preconsult.services.session_service import create_session, get_session, update_session
 
 @pytest.mark.asyncio
@@ -95,6 +95,30 @@ async def test_get_session_returns_memory_fallback_when_redis_down():
         assert result == {"chat": None}
     finally:
         srv._memory_sessions.clear()
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.get_redis")
+async def test_get_session_classifies_quota_as_quota_exceeded(mock_get_redis):
+    """A redis 'max requests limit exceeded' error must surface as
+    RedisQuotaExceededError (not a generic unavailable/expired)."""
+    client = AsyncMock()
+    client.hgetall.side_effect = Exception("max requests limit exceeded. Limit: 500000")
+    mock_get_redis.return_value = client
+
+    with pytest.raises(RedisQuotaExceededError):
+        await get_session("any-id")
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.get_redis")
+async def test_create_session_classifies_quota_as_quota_exceeded(mock_get_redis):
+    client = AsyncMock()
+    client.hset.side_effect = Exception("ResponseError: max requests limit exceeded. Limit: 500000")
+    mock_get_redis.return_value = client
+
+    with pytest.raises(RedisQuotaExceededError):
+        await create_session({"gender": "Male"})
 @pytest.mark.asyncio
 @patch("preconsult.services.session_service.get_redis", return_value=None)
 async def test_update_session_redis_unavailable(mock_get_redis):

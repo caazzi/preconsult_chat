@@ -13,9 +13,11 @@ from google.api_core.exceptions import GoogleAPIError  # noqa: E402
 from preconsult.core.config import SENTRY_DSN  # noqa: E402
 from preconsult.core.errors import (  # noqa: E402
     RedisUnavailableError,
+    RedisQuotaExceededError,
     LLMUnavailableError,
     http_exception_handler,
     redis_unavailable_handler,
+    redis_quota_exceeded_handler,
     llm_unavailable_handler,
     validation_handler,
     google_api_handler,
@@ -47,6 +49,7 @@ if SENTRY_DSN:
 from reflex_app.preconsult.preconsult import api as app  # noqa: E402
 
 app.add_exception_handler(RedisUnavailableError, redis_unavailable_handler)
+app.add_exception_handler(RedisQuotaExceededError, redis_quota_exceeded_handler)
 app.add_exception_handler(LLMUnavailableError, llm_unavailable_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(ValidationError, validation_handler)

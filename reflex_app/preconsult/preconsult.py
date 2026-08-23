@@ -851,9 +851,11 @@ if api_router:
     from starlette.responses import Response
     from preconsult.core.errors import (
         RedisUnavailableError,
+        RedisQuotaExceededError,
         LLMUnavailableError,
         http_exception_handler,
         redis_unavailable_handler,
+        redis_quota_exceeded_handler,
         llm_unavailable_handler,
         validation_handler,
         google_api_handler,
@@ -861,6 +863,7 @@ if api_router:
     )
     custom_api = FastAPI()
     custom_api.add_exception_handler(RedisUnavailableError, redis_unavailable_handler)
+    custom_api.add_exception_handler(RedisQuotaExceededError, redis_quota_exceeded_handler)
     custom_api.add_exception_handler(LLMUnavailableError, llm_unavailable_handler)
     custom_api.add_exception_handler(HTTPException, http_exception_handler)
     custom_api.add_exception_handler(ValidationError, validation_handler)
@@ -882,9 +885,12 @@ if api_router:
         from starlette.responses import JSONResponse
         redis_status = await check_redis_health_throttled()
         if redis_status != "ok":
+            # A distinct code for quota exhaustion so alerts/ops can distinguish
+            # "daily quota spent" from a general outage.
+            code = "redis_quota_exceeded" if redis_status == "quota_exceeded" else "service_unavailable"
             return JSONResponse(
                 status_code=503,
-                content={"status": "not_ready", "redis": redis_status, "code": "service_unavailable"},
+                content={"status": "not_ready", "redis": redis_status, "code": code},
             )
         return JSONResponse({"status": "ready", "redis": "ok"})
 
@@ -897,22 +903,27 @@ if api_router:
         # serverless Redis quota.
         from starlette.responses import JSONResponse
         request_id = new_request_id()
-        redis_ok = await check_redis_health_throttled()
+        redis_status = await check_redis_health_throttled()
         event_channel = await _throttled_probe("event_channel", probe_event_channel)
         log_event(
             logging.INFO,
             "health.probe",
             request_id=request_id,
-            redis=redis_ok,
+            redis=redis_status,
             event_channel=event_channel,
         )
-        return JSONResponse(
-            {
-                "status": "healthy",
-                "redis": redis_ok,
-                "event_channel": event_channel,
-            }
-        )
+        payload = {
+            "status": "healthy",
+            "redis": redis_status,
+            "event_channel": event_channel,
+        }
+        # Provide a stable machine-readable code when storage is unhealthy so
+        # alerts/CI can key on quota exhaustion as distinct from a general outage.
+        if redis_status == "quota_exceeded":
+            payload["code"] = "redis_quota_exceeded"
+        elif redis_status == "unavailable":
+            payload["code"] = "redis_unavailable"
+        return JSONResponse(payload)
 
     async def robots_txt(request):
         content = (
@@ -1519,13 +1530,15 @@ async def _throttled_probe(key: str, probe) -> str:
 
 
 async def check_redis_health_throttled() -> str:
-    """Redis reachability as a throttled status string (``ok``/``unavailable``)."""
-    from preconsult.services.session_service import check_redis_health
+    """Redis reachability as a throttled status string.
 
-    async def _probe() -> str:
-        return "ok" if await check_redis_health() else "unavailable"
+    Returns ``ok`` | ``quota_exceeded`` | ``unavailable`` so an exhausted
+    serverless Redis quota is surfaced explicitly rather than as a generic
+    outage. Probed at most ~once per minute (see _throttled_probe).
+    """
+    from preconsult.services.session_service import check_redis_status
 
-    return await _throttled_probe("redis", _probe)
+    return await _throttled_probe("redis", check_redis_status)
 
 
 # Reflex mounts the event socket (EngineIO) as a trailing-slash route ``/_event/``

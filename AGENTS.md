@@ -101,12 +101,17 @@ outages), so Redis must be reserved for actual patient sessions:
   storage. Browsers pass through; `/_event` no longer touches Redis, so it stays
   ungated.
 
-## Session errors: redis_unavailable vs session_expired
+## Session errors: redis_unavailable vs session_expired vs redis_quota_exceeded
 
 - `get_session` **raises `RedisUnavailableError`** (→ stable 503 `redis_unavailable`)
   when Redis is down AND there is no in-memory fallback copy; it returns `{}` only
   for a genuine miss (→ 404 `session_expired`). Do NOT collapse an outage into a
   misleading `session_expired`.
+- An Upstash **`max requests limit exceeded`** error (`_is_quota_error`) raises
+  **`RedisQuotaExceededError`** → stable 503 `redis_quota_exceeded`, distinct from
+  `redis_unavailable`, so "daily quota spent" is not confused with a general outage.
+  Session CRUD/`check_redis_status` classify it; `/health` reports
+  `redis: "quota_exceeded"` + code `redis_quota_exceeded`. Keep this distinct signal.
 - Session CRUD has a best-effort per-worker in-memory fallback for transient Redis
   errors. It is a resilience shim, not a store of truth.
 

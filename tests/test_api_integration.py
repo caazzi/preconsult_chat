@@ -161,6 +161,21 @@ async def test_interview_stream_redis_unavailable_not_expired(mock_rate):
     assert response.status_code == 503
     assert response.json()["code"] == "redis_unavailable"
 
+
+@pytest.mark.asyncio
+@patch("preconsult.api.endpoints.check_rate_limit", return_value=True)
+async def test_interview_stream_redis_quota_exceeded(mock_rate):
+    """An exhausted Upstash quota surfaces its own code, distinct from a general
+    outage, so it can be alerted on specifically."""
+    from preconsult.core.errors import RedisQuotaExceededError
+    with patch("preconsult.api.endpoints.get_session", new_callable=AsyncMock) as mock_get:
+        mock_get.side_effect = RedisQuotaExceededError("quota")
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post("/api/interview-questions-stream", json={"session_id": "any"}, headers=HEADERS)
+    assert response.status_code == 503
+    assert response.json()["code"] == "redis_quota_exceeded"
+
+
 @pytest.mark.asyncio
 @patch("preconsult.api.endpoints.generate_pdf_report_in_memory")
 @patch("preconsult.api.endpoints.get_session", new_callable=AsyncMock)
@@ -299,9 +314,9 @@ async def test_health_event_channel_reports_socket():
 
 
 @pytest.mark.asyncio
-@patch("preconsult.services.session_service.check_redis_health", new_callable=AsyncMock)
-async def test_health_reports_ok_when_redis_up(mock_health):
-    mock_health.return_value = True
+@patch("preconsult.services.session_service.check_redis_status", new_callable=AsyncMock)
+async def test_health_reports_ok_when_redis_up(mock_status):
+    mock_status.return_value = "ok"
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/health")
     assert resp.status_code == 200
@@ -309,13 +324,26 @@ async def test_health_reports_ok_when_redis_up(mock_health):
 
 
 @pytest.mark.asyncio
-@patch("preconsult.services.session_service.check_redis_health", new_callable=AsyncMock)
-async def test_health_reports_unavailable_when_redis_down(mock_health):
-    mock_health.return_value = False
+@patch("preconsult.services.session_service.check_redis_status", new_callable=AsyncMock)
+async def test_health_reports_unavailable_when_redis_down(mock_status):
+    mock_status.return_value = "unavailable"
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["redis"] == "unavailable"
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.check_redis_status", new_callable=AsyncMock)
+async def test_health_reports_quota_exceeded(mock_status):
+    """An exhausted Upstash quota is surfaced explicitly, not as a generic outage."""
+    mock_status.return_value = "quota_exceeded"
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["redis"] == "quota_exceeded"
+    assert body["code"] == "redis_quota_exceeded"
 
 
 @pytest.mark.asyncio
@@ -327,9 +355,9 @@ async def test_health_live_always_ready():
 
 
 @pytest.mark.asyncio
-@patch("preconsult.services.session_service.check_redis_health", new_callable=AsyncMock)
-async def test_health_ready_200_when_redis_ok(mock_health):
-    mock_health.return_value = True
+@patch("preconsult.services.session_service.check_redis_status", new_callable=AsyncMock)
+async def test_health_ready_200_when_redis_ok(mock_status):
+    mock_status.return_value = "ok"
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/health/ready")
     assert resp.status_code == 200
@@ -337,9 +365,9 @@ async def test_health_ready_200_when_redis_ok(mock_health):
 
 
 @pytest.mark.asyncio
-@patch("preconsult.services.session_service.check_redis_health", new_callable=AsyncMock)
-async def test_health_ready_503_when_redis_down(mock_health):
-    mock_health.return_value = False
+@patch("preconsult.services.session_service.check_redis_status", new_callable=AsyncMock)
+async def test_health_ready_503_when_redis_down(mock_status):
+    mock_status.return_value = "unavailable"
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/health/ready")
     assert resp.status_code == 503
@@ -347,16 +375,27 @@ async def test_health_ready_503_when_redis_down(mock_health):
 
 
 @pytest.mark.asyncio
-@patch("preconsult.services.session_service.check_redis_health", new_callable=AsyncMock)
-async def test_health_probe_is_throttled_not_per_request(mock_redis_ping):
+@patch("preconsult.services.session_service.check_redis_status", new_callable=AsyncMock)
+async def test_health_ready_503_code_quota_when_quota_exceeded(mock_status):
+    """/health/ready maps quota exhaustion to its own code, not generic unavailable."""
+    mock_status.return_value = "quota_exceeded"
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/health/ready")
+    assert resp.status_code == 503
+    assert resp.json()["code"] == "redis_quota_exceeded"
+
+
+@pytest.mark.asyncio
+@patch("preconsult.services.session_service.check_redis_status", new_callable=AsyncMock)
+async def test_health_probe_is_throttled_not_per_request(mock_status):
     """Frequent /health hits must not re-probe Redis/socket on every request.
 
     This is what reserved the serverless Redis quota for real users instead of
     letting health/CI/scanner polling burn it. The real throttled wrapper should
-    call the underlying Redis ping exactly once across three /health requests.
+    call the underlying Redis check exactly once across three /health requests.
     """
     import reflex_app.preconsult.preconsult as pcm
-    mock_redis_ping.return_value = True
+    mock_status.return_value = "ok"
 
     with patch.object(pcm, "probe_event_channel", new_callable=AsyncMock) as mock_ev:
         mock_ev.return_value = "ok"
@@ -365,8 +404,8 @@ async def test_health_probe_is_throttled_not_per_request(mock_redis_ping):
                 resp = await client.get("/health")
                 assert resp.status_code == 200
 
-    # The throttle cache means the real Redis ping fired once, not three times.
-    assert mock_redis_ping.await_count == 1
+    # The throttle cache means the real Redis probe fired once, not three times.
+    assert mock_status.await_count == 1
     assert mock_ev.await_count == 1
 
 

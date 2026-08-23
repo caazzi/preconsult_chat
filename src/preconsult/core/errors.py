@@ -9,6 +9,16 @@ class RedisUnavailableError(Exception):
     pass
 
 
+class RedisQuotaExceededError(Exception):
+    """Raised when the upstream Redis (Upstash) request quota is exhausted.
+
+    Distinct from :class:`RedisUnavailableError` so clients/ops can tell a
+    deliberate, recoverable quota exhaustion (daily resets) apart from a general
+    outage, and can alert on it specifically.
+    """
+    pass
+
+
 class LLMUnavailableError(Exception):
     pass
 
@@ -55,6 +65,17 @@ async def redis_unavailable_handler(request: Request, exc: RedisUnavailableError
         content={
             "detail": "Servico temporariamente indisponivel. Tente novamente em instantes.",
             "code": "redis_unavailable",
+        },
+    )
+
+
+async def redis_quota_exceeded_handler(request: Request, exc: RedisQuotaExceededError):
+    logging.error(f"Redis quota excedida: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "Servico temporariamente indisponivel. A fila de dados esta cheia; tente novamente mais tarde.",
+            "code": "redis_quota_exceeded",
         },
     )
 

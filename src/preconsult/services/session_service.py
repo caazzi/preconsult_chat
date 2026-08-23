@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional
 from collections import OrderedDict
 import redis.asyncio as redis
 
-from preconsult.core.errors import RedisUnavailableError
+from preconsult.core.errors import RedisUnavailableError, RedisQuotaExceededError
 from preconsult.core.observability import log_event, new_request_id
 
 SESSION_TTL = 30 * 60
@@ -34,6 +34,27 @@ if count == 1 then
 end
 return count
 """
+
+
+def _is_quota_error(exc: BaseException) -> bool:
+    """Whether a redis error is an Upstash request-quota exhaustion.
+
+    Upstash raises ``ResponseError`` whose message contains
+    ``max requests limit exceeded``. Quota exhaustion is distinct from a general
+    outage: it is intentional, resets daily, and deserves its own alert/signal.
+    """
+    return "max requests limit" in str(exc).lower()
+
+
+def _mark_quota_exceeded(where: str) -> None:
+    global _redis_available
+    _redis_available = False
+    log_event(
+        logging.ERROR,
+        "redis.quota_exceeded",
+        request_id=new_request_id(),
+        where=where,
+    )
 
 
 def _mark_redis_down(where: str) -> None:
@@ -132,6 +153,9 @@ async def create_session(data: Dict[str, Any]) -> str:
             logging.info(f"Criada sessao {session_id} no Redis")
             return session_id
         except Exception as e:
+            if _is_quota_error(e):
+                _mark_quota_exceeded("create_session")
+                raise RedisQuotaExceededError() from e
             _mark_redis_down("create_session")
             logging.error(f"Redis indisponivel ao criar sessao, usando memoria: {e}")
     else:
@@ -166,6 +190,9 @@ async def get_session(session_id: str) -> Dict[str, Any]:
     try:
         raw_data = await client.hgetall(key)
     except Exception as e:
+        if _is_quota_error(e):
+            _mark_quota_exceeded("get_session")
+            raise RedisQuotaExceededError() from e
         _mark_redis_down("get_session")
         logging.error(f"Redis indisponivel ao ler sessao, usando memoria: {e}")
         data = await _memory_lookup()
@@ -193,6 +220,9 @@ async def update_session(session_id: str, new_data: Dict[str, Any]) -> None:
             logging.debug(f"Atualizada sessao {session_id} no Redis: {list(new_data.keys())}")
             return
         except Exception as e:
+            if _is_quota_error(e):
+                _mark_quota_exceeded("update_session")
+                raise RedisQuotaExceededError() from e
             _mark_redis_down("update_session")
             logging.error(f"Redis indisponivel ao atualizar sessao, usando memoria: {e}")
 
@@ -201,30 +231,43 @@ async def update_session(session_id: str, new_data: Dict[str, Any]) -> None:
         existing.update(_serialize(new_data))
         _memory_sessions[session_id] = existing
 
-async def check_redis_health() -> bool:
-    """Actively probe Redis connectivity (used by /health and reconnect logic).
+async def check_redis_status() -> str:
+    """Probe Redis and return a stable status: ``ok`` | ``quota_exceeded`` | ``unavailable``.
 
-    Sets _redis_available to reflect the live state and returns whether Redis
-    is reachable. Attempts a reconnect if Redis was previously flagged down.
-    Never raises.
+    Used by /health and /health/ready so an exhausted Upstash quota is surfaced
+    explicitly (quota_exceeded) instead of being reported as a generic outage.
     """
     global _redis_available
     client = get_redis()
     if client is None:
         if not _reconnect_redis():
-            return False
+            return "unavailable"
         client = get_redis()
         if client is None:
-            return False
+            return "unavailable"
     try:
         pong = await client.ping()
         ok = bool(pong)
         _redis_available = ok
-        return ok
+        if not ok:
+            log_event(logging.WARNING, "redis.ping_failed", request_id=new_request_id())
+        return "ok" if ok else "unavailable"
     except Exception as e:
         _redis_available = False
+        if _is_quota_error(e):
+            _mark_quota_exceeded("health")
+            return "quota_exceeded"
         logging.error(f"Redis ping falhou: {e}")
-        return False
+        return "unavailable"
+
+
+async def check_redis_health() -> bool:
+    """Probe Redis and return whether it is reachable and healthy.
+
+    ``check_redis_status() == 'ok'``. Retained as a convenience bool for the
+    throttled health path and existing callers.
+    """
+    return (await check_redis_status()) == "ok"
 
 
 def _reconnect_redis() -> bool:

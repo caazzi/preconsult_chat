@@ -190,6 +190,13 @@ jobs:
             VERTEX_AI_REGION=us-central1
             GOOGLE_CLOUD_PROJECT=securemed-chat-494521
             LLM_MODEL=gemini-2.5-flash
+            # Reflex/engine.io socket idle timeout (seconds). Raised from the
+            # 120s default so an idle user's session is less likely to be closed
+            # server-side while the page is open; a late click then re-handshakes
+            # cleanly instead of hitting a stale-session failure. (The 400
+            # translation in _RequestIDMiddleware is the real fix; this lowers the
+            # frequency of the racy case.)
+            REFLEX_SOCKET_TIMEOUT=600
           secrets: |
             REDIS_URL=REDIS_URL:latest
             PRECONSULT_API_KEY=SECUREMED_API_KEY:latest

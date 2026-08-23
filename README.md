@@ -57,6 +57,33 @@ No health data is ever written to disk. Every design decision flows from this co
   complaints/answers; error responses carry stable codes and never include
   exception internals or user data.
 
+## Redis is reserved for real users (free-tier friendly)
+
+PreConsult runs on a **free-tier serverless Redis** (e.g. Upstash) with a finite
+daily request quota, so non-user traffic must not consume it. To keep the quota
+for actual patient sessions:
+
+- **Reflex state is in-memory**, not Redis (`rxconfig` has no `redis_url`). Reflex's
+  `RedisTokenManager` (continuous keyspace/pubsub + per-socket token ops) used to
+  burn the quota on every `/_event` connect; Cloud Run `--session-affinity` keeps
+  Reflex state co-located with the user, and the app's own session store still owns
+  real sessions.
+- **`/health` and `/health/ready` throttle** their Redis/socket probes (≈1/min) so
+  CI, scanners and readiness polling don't hammer storage.
+- **The deployed CI smoke test is liveness/socket-only.** Full session/stream/
+  rate-limit/SSE coverage runs in the `test` job against a local `redis:alpine`;
+  the deployed test no longer creates/reads real sessions against production Redis
+  on every push.
+- **Analytics are gated to real sessions** — wizard events are only emitted once a
+  session exists, so bots that never start the flow can't reach the analytics write
+  path.
+- **A conservative bot gate** blocks unambiguous scanner/CLI user-agents
+  (`curl`, `wget`, `python-requests/urllib`, `go-http-client`, common SEO crawlers)
+  on Redis-backed `/api/*` paths with a fast `403` before any storage work. Browsers
+  pass through untouched.
+
+With low real-user volume this keeps the free tier comfortably within budget.
+
 ---
 
 ## Tech Stack
@@ -134,7 +161,7 @@ The test command enforces an **80% coverage gate** (measured over `src/preconsul
 and `reflex_app/preconsult`, branch coverage, excluding the declarative Reflex
 page tree). CI fails the build if coverage drops below the threshold.
 
-The test suite contains **199 tests, one skipped**, with **~85% overall coverage**
+The test suite contains **206 tests, one skipped**, with **~85% overall coverage**
 (branch coverage, measured over `src/preconsult` and `reflex_app/preconsult`,
 excluding the generated Reflex page tree). Coverage is broken down as:
 `errors.py` and `core/parsing.py` 100%, `llm.py` 100%, `endpoints.py` 94%,
@@ -259,7 +286,7 @@ app-preconsult/
 │   ├── analyze_cloudflare_logs.py# Cloudflare HTTP log fetcher & analyzer
 │   ├── analyze_week_humans.py# Weekly human-vs-bot access analysis
 │   └── analyze_all_logs.py  # Unified logs analysis script
-├── tests/                   # 199 tests; 80% coverage gate
+├── tests/                   # 206 tests; 80% coverage gate
 ├── AGENTS.md                # Agent rules (incl. CI/CD-only deploy policy)
 ├── Dockerfile               # Multi-stage container build
 ├── docker-compose.yml       # Local Redis service

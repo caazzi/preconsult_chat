@@ -27,6 +27,13 @@ test = [
     "httpx",
     "ruff",
 ]
+# Browser E2E. Kept separate from `test` so the coverage-gated unit suite stays
+# lean and the Playwright specs (which drive a real backend + browser, not the
+# Python state machine) don't enter the 80% branch-coverage gate.
+e2e = [
+    "playwright",
+    "pytest-playwright",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -34,8 +41,22 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-markers = ["asyncio: marks tests as async"]
-addopts = "--strict-markers"
+markers = [
+    "asyncio: marks tests as async",
+    "e2e: browser end-to-end tests (drive a real backend via Playwright)",
+]
+# `-m 'not e2e'` keeps browser specs out of the default suite (they need the
+# `e2e` extra + Playwright + a booted backend). scripts/run_e2e.sh overrides
+# with an explicit `-m e2e`.
+addopts = "--strict-markers -m 'not e2e'"
+norecursedirs = [
+    ".git",
+    ".venv",
+    ".direnv",
+    "node_modules",
+    ".web",
+    "tests/e2e",
+]
 
 [tool.coverage.run]
 source = ["src/preconsult", "reflex_app/preconsult"]

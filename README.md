@@ -178,6 +178,20 @@ The test command enforces an **80% coverage gate** (measured over `src/preconsul
 and `reflex_app/preconsult`, branch coverage, excluding the declarative Reflex
 page tree). CI fails the build if coverage drops below the threshold.
 
+#### Browser E2E (Playwright)
+
+An optional hermetic **E2E** suite boots the real backend under a single gunicorn
+worker and drives a headless browser over the real Socket.IO path. It guards the
+socket-session stability (the multi-worker `400 "Invalid session"` bug) and the
+landing→Step-1 wizard transition, with no live Vertex AI or serverless Redis.
+
+```bash
+uv sync --extra e2e
+uv run python -m playwright install --with-deps chromium
+scripts/run_e2e.sh                  # green with --workers 1 (the fixed config)
+E2E_WORKERS=2 scripts/run_e2e.sh    # deliberately reproduces the bug (must FAIL)
+```
+
 The test suite contains **215 tests, one skipped**, with **~85% overall coverage**
 (branch coverage, measured over `src/preconsult` and `reflex_app/preconsult`,
 excluding the generated Reflex page tree). Coverage is broken down as:

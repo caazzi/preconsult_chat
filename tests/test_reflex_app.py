@@ -88,63 +88,48 @@ def test_state_question_index():
     state.set_question_index(3)
     assert state.question_index == 3
 
-def test_custom_static_files_injection(tmp_path):
+def test_custom_static_files_serves_html_unchanged(tmp_path):
+    """The built SPA must be served byte-for-byte so React hydration succeeds.
+
+    This used to string-inject <head> tags (MockWebSocket, og:image, hreflang,
+    schema, SEO) into the built index.html. Those injected tags are absent from
+    the client render, so React threw hydration error #418 and never attached
+    event handlers (the whole app was un-interactive). The page-level SEO now
+    lives via add_page(meta=...), so CustomStaticFiles must NOT mutate the HTML.
+    """
     from reflex_app.preconsult.preconsult import CustomStaticFiles
-    from fastapi.staticfiles import StaticFiles
-    
-    # Create a dummy index.html in a temp directory
+    from fastapi.responses import FileResponse
+    import asyncio
+
     dummy_dir = tmp_path / "static"
     dummy_dir.mkdir()
-    index_file = dummy_dir / "index.html"
-    index_file.write_text(
-        '<html><head><link href="/assets/__reflex_global_styles-xyz.css" rel="stylesheet" type="text/css"/>'
-        'content="favicon.ico" property="og:image"</head><body></body></html>',
-        encoding="utf-8"
+    (dummy_dir / "index.html").write_text(
+        '<html><head><title>PreConsult</title></head>'
+        '<body><div id="root"></div></body></html>',
+        encoding="utf-8",
     )
-    
-    # Instantiate CustomStaticFiles pointing to the temp directory
+
     static_files = CustomStaticFiles(directory=str(dummy_dir), html=True)
-    
-    # Mock the super().get_response to return a Response with the path
-    from fastapi.responses import FileResponse
-    class MockFileResponse(FileResponse):
-        pass
-    
-    # We will simulate calling get_response
-    # Inside get_response, it checks: path in ("", ".", "index.html")
-    # and reads response.path
-    import asyncio
-    scope = {"type": "http", "method": "GET"}
-    
-    # We patch super().get_response by subclassing or monkeypatching
-    original_get_response = StaticFiles.get_response
-    async def mock_get_response(self, path, scope):
-        res = MockFileResponse(path=str(index_file))
-        return res
-        
-    StaticFiles.get_response = mock_get_response
-    
-    try:
-        response = asyncio.run(static_files.get_response("index.html", scope))
-        assert response is not None
-        html_body = response.body.decode("utf-8")
-        
-        # The state socket must work: the page must NOT override window.WebSocket
-        # with the legacy MockWebSocket stub, which broke the /_event connection.
-        assert "MockWebSocket" not in html_body
-        
-        # Verify the legitimate lang-cookie script is still injected (proves the
-        # </head> injection seam is intact)
-        assert "preconsult_lang" in html_body
-        
-        # Verify other replacements happened
-        assert "https://pre-consult.org/og-image.png" in html_body
-        assert "hreflang" in html_body
-        assert "schema.org" in html_body
-        assert "WebPage" in html_body
-        assert "preload" in html_body
-    finally:
-        StaticFiles.get_response = original_get_response
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "scheme": "http",
+        "server": ("test", 80),
+        "client": ("127.0.0.1", 1234),
+        "path": "/index.html",
+        "raw_path": b"/index.html",
+        "root_path": "",
+        "query_string": b"",
+        "headers": [],
+        "http_version": "1.1",
+        "app": {},
+    }
+
+    response = asyncio.run(static_files.get_response("index.html", scope))
+    # Unmodified file-backed response, NOT a synthesized HTMLResponse with
+    # injected <head> tags.
+    assert isinstance(response, FileResponse)
+    assert response.path.endswith("index.html")
 
 
 def test_bot_scanner_blocking(tmp_path):
@@ -158,6 +143,27 @@ def test_bot_scanner_blocking(tmp_path):
     response = asyncio.run(static_files.get_response("wp-admin/install.php", scope))
     assert response.status_code == 404
     assert response.body == b"Not Found"
+
+
+def test_index_page_meta_includes_seo_hydration_safe():
+    """SEO/tracking head tags must be declared via add_page(meta=...) so the
+    server and client render the same <head> (no hydration error #418)."""
+    from reflex_app.preconsult.preconsult import build_index_meta, _INDEX_SEO_JSONLD
+    from reflex_components_core.el.elements import Link, Script
+
+    meta = build_index_meta()
+    # og:image + dimensions are <meta> dicts
+    metas = [m for m in meta if isinstance(m, dict)]
+    assert {"property": "og:image", "content": "https://pre-consult.org/og-image.png"} in metas
+
+    # Canonical + hreflang links are <link> components; lang-cookie + JSON-LD are
+    # inline <script> components. All are declared as page meta (hydration-safe).
+    links = [c for c in meta if isinstance(c, Link)]
+    scripts = [c for c in meta if isinstance(c, Script)]
+    assert len(links) >= 4  # en, pt, x-default hreflang + canonical
+    # JSON-LD structured-data source is defined and referenced
+    assert '"@context":"https://schema.org"' in _INDEX_SEO_JSONLD
+    assert len(scripts) >= 1
 
 
 def test_custom_static_backend_passthrough(tmp_path):

@@ -1,3 +1,4 @@
+import os
 import reflex as rx
 from starlette.middleware.gzip import GZipMiddleware
 from .state import State, AdminState
@@ -1354,11 +1355,111 @@ def admin_dashboard() -> rx.Component:
     )
 
 
+# Page-level <head> metadata. These MUST be declared through Reflex's own page
+# machinery (add_page(meta=...)) rather than string-injected into the served
+# HTML at request time: Reflex renders the same head on the server AND client,
+# which keeps React hydration identical. Historically we rewrote <head> in
+# CustomStaticFiles.get_response, but those tags were absent from the client
+# render, so React threw hydration error #418 and never attached event handlers
+# (the whole app was un-interactive). SEO/analytics live here now.
+#
+# note: meta entries (dicts) become <meta> tags; component entries (links,
+# scripts) become their elements — both are placed in the document <head>.
+_INDEX_SEO_JSONLD = (
+    '<script type="application/ld+json">'
+    '{"@context":"https://schema.org","@graph":['
+    '{"@type":"WebSite","@id":"https://pre-consult.org/#website",'
+    '"name":"PreConsult","description":"Privacy-first AI medical intake assistant. '
+    'Prepare for your doctor appointment in minutes.",'
+    '"url":"https://pre-consult.org/","inLanguage":["en","pt"],'
+    '"alternateName":"PreConsult — AI Patient Intake"},'
+    '{"@type":"WebPage","@id":"https://pre-consult.org/#webpage",'
+    '"name":"PreConsult — Privacy-First Medical Intake Assistant",'
+    '"description":"Guided AI interview helper for patient intake with zero data persistence.",'
+    '"url":"https://pre-consult.org/","isPartOf":{"@id":"https://pre-consult.org/#website"},'
+    '"inLanguage":["en","pt"],"about":{"@type":"Thing",'
+    '"name":"Medical Intake Preparation"}}]}</script>'
+)
+
+_LANG_COOKIE_META_SCRIPT = (
+    '(function(){var lang=(document.cookie.match(/(?:^|;\\s*)preconsult_lang=([^;]*)/)||[])[1];'
+    'if(lang==="pt"||lang==="en"){document.addEventListener("DOMContentLoaded",function(){'
+    'var u=new URL(window.location.href);if(!u.searchParams.has("lang")){'
+    'u.searchParams.set("lang",lang);window.history.replaceState({},"",u.toString());}});}})();'
+)
+
+
+def build_index_meta():
+    from reflex_components_core.el.elements import link, script, noscript
+
+    meta_list = [
+        {"property": "og:image", "content": "https://pre-consult.org/og-image.png"},
+        {"property": "og:image:width", "content": "1200"},
+        {"property": "og:image:height", "content": "630"},
+    ]
+
+    # Multilingual + canonical SEO links
+    meta_list += [
+        link(rel="alternate", hreflang="en", href="https://pre-consult.org/?lang=en"),
+        link(rel="alternate", hreflang="pt", href="https://pre-consult.org/?lang=pt"),
+        link(rel="alternate", hreflang="x-default", href="https://pre-consult.org/"),
+        link(rel="canonical", href="https://pre-consult.org/"),
+    ]
+
+    # Language cookie persistence (functional)
+    meta_list.append(script(_LANG_COOKIE_META_SCRIPT))
+
+    # Schema.org structured data (inline JSON-LD)
+    meta_list.append(script(_INDEX_SEO_JSONLD))
+
+    # Analytics / conversion tagging. Evaluated at build time; if the IDs are
+    # not present in the build environment, no tag is emitted (same as before).
+    gtm_id = os.environ.get("GTM_ID", "")
+    gtag_id = os.environ.get("GTAG_ID", "")
+    gtag_micro_label = os.environ.get("GTAG_MICRO_CONVERSION_LABEL", "")
+    if gtm_id:
+        meta_list += [
+            script(
+                "(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':"
+                "new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],"
+                "j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;"
+                "j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;"
+                "f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','%s');"
+                % gtm_id
+            ),
+            noscript(
+                '<iframe src="https://www.googletagmanager.com/ns.html?id=%s" '
+                'height="0" width="0" style="display:none;visibility:hidden"></iframe>' % gtm_id
+            ),
+        ]
+    elif gtag_id:
+        meta_list += [
+            script(src="https://www.googletagmanager.com/gtag/js?id=%s" % gtag_id),
+            script(
+                "window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}"
+                "gtag('js',new Date());gtag('config','%s');"
+                "function gtag_report_conversion(url){var cb=function(){"
+                "if(typeof(url)!='undefined'){window.location=url;}};"
+                "gtag('event','conversion',{'send_to':'%s/sxIaCJzM7dMcEJiyw6hE',"
+                "'value':1.0,'currency':'BRL','event_callback':cb});return false;}"
+                "function gtag_report_micro_conversion(){if(typeof gtag!=='undefined'){"
+                "var ml='%s';if(ml){gtag('event','conversion',{'send_to':'%s/'+ml,"
+                "'value':0.5,'currency':'BRL'});}gtag('event','summary_generated',"
+                "{'event_category':'engagement','event_label':'intake_summary_completed'});}}"
+                % (gtag_id, gtag_id, gtag_micro_label, gtag_id)
+            ),
+        ]
+
+    return meta_list
+
+
 app.add_page(
     index,
     on_load=State.detect_lang,
     title="PreConsult — Privacy-First Medical Intake Assistant",
-    description="Guided AI interview helper for patient intake with zero data persistence."
+    description="Guided AI interview helper for patient intake with zero data persistence.",
+    image="https://pre-consult.org/og-image.png",
+    meta=build_index_meta(),
 )
 app.add_page(
     admin_dashboard,
@@ -1368,27 +1469,8 @@ app.add_page(
     description="Analytics funnel dashboard for PreConsult administrators."
 )
 
-import os  # noqa: E402
-import re  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
-from fastapi.responses import HTMLResponse, Response  # noqa: E402
-
-_LANG_COOKIE_SCRIPT = r"""
-<script>
-(function() {
-    var lang = (document.cookie.match(/(?:^|;\s*)preconsult_lang=([^;]*)/) || [])[1];
-    if (lang === "pt" || lang === "en") {
-        document.addEventListener("DOMContentLoaded", function() {
-            var url = new URL(window.location.href);
-            if (!url.searchParams.has("lang")) {
-                url.searchParams.set("lang", lang);
-                window.history.replaceState({}, "", url.toString());
-            }
-        });
-    }
-})();
-</script>
-"""
+from fastapi.responses import Response  # noqa: E402
 
 class CustomStaticFiles(StaticFiles):
     # Reflex backend endpoints must never be answered by the SPA fallback. The
@@ -1412,181 +1494,17 @@ class CustomStaticFiles(StaticFiles):
             return Response("Not Found", status_code=404, media_type="text/plain")
 
         response = await super().get_response(path, scope)
-        
+
+        # The built index.html is Reflex's own SSR output and must be served
+        # byte-for-byte so React hydration succeeds. Historically we used to
+        # string-inject <head> tags (SEO, og:image, an anti-FOUC <style>, the
+        # lang-cookie script, gtag/GTM) into this HTML, but those tags are NOT
+        # present in the client render, so React threw hydration error #418 and
+        # never attached event handlers (making the whole app un-interactive).
+        # SEO + analytics live on the Reflex page via add_page(meta=...) now, so
+        # the server HTML and the client render stay identical.
         if "assets/" in path or path.startswith("assets/"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-            
-        elif path in ("", ".", "index.html"):
-            if hasattr(response, "path") and os.path.exists(response.path):
-                try:
-                    with open(response.path, "r", encoding="utf-8") as f:
-                        html_content = f.read()
-                    
-                    pattern = r'<link href="(/assets/__reflex_global_styles-[^"]+\.css)" rel="stylesheet" type="text/css"/>'
-                    match = re.search(pattern, html_content)
-                    if match:
-                        css_url = match.group(1)
-                        preload_link = (
-                            f'<link rel="preload" href="{css_url}" as="style"/>'
-                            f'<link href="{css_url}" rel="stylesheet" type="text/css"/>'
-                        )
-                        html_content = html_content.replace(match.group(0), preload_link)
-                    
-                    critical_style = """
-                    <style>
-                    @font-face { font-display: swap; }
-                    html, body {
-                        background: radial-gradient(circle at top right, #0a192f, #001f3f, #001529) !important;
-                        margin: 0;
-                        padding: 0;
-                        min-height: 100vh;
-                        font-family: system-ui, -apple-system, sans-serif;
-                    }
-                    html.light, html.light body {
-                        background: radial-gradient(circle at top right, #f8fafc, #f1f5f9, #e2e8f0) !important;
-                    }
-                    .sr-only {
-                        position: absolute;
-                        width: 1px;
-                        height: 1px;
-                        padding: 0;
-                        margin: -1px;
-                        overflow: hidden;
-                        clip: rect(0, 0, 0, 0);
-                        white-space: nowrap;
-                        border: 0;
-                    }
-                    </style>
-                    """
-                    gtag_id = os.environ.get("GTAG_ID", "")
-                    gtm_id = os.environ.get("GTM_ID", "")
-                    gtag_micro_label = os.environ.get("GTAG_MICRO_CONVERSION_LABEL", "")
-                    gtag_script = ""
-                    if gtm_id:
-                        gtag_script = f"""
-                        <!-- Google Tag Manager -->
-                        <script>(function(w,d,s,l,i){{w[l]=w[l]||[];w[l].push({{'gtm.start':new Date().getTime(),event:'gtm.js'}});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);}})(window,document,'script','dataLayer','{gtm_id}');</script>
-                        <noscript><iframe src="https://www.googletagmanager.com/ns.html?id={gtm_id}" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-                        """
-                    elif gtag_id:
-                        gtag_script = f"""
-                        <!-- Google tag (gtag.js) -->
-                        <script async src="https://www.googletagmanager.com/gtag/js?id={gtag_id}"></script>
-                        <script>
-                          window.dataLayer = window.dataLayer || [];
-                          function gtag(){{dataLayer.push(arguments);}}
-                          gtag('js', new Date());
-                          gtag('config', '{gtag_id}');
-                          function gtag_report_conversion(url) {{
-                            var callback = function () {{
-                              if (typeof(url) != 'undefined') {{
-                                window.location = url;
-                              }}
-                            }};
-                            gtag('event', 'conversion', {{
-                                'send_to': '{gtag_id}/sxIaCJzM7dMcEJiyw6hE',
-                                'value': 1.0,
-                                'currency': 'BRL',
-                                'event_callback': callback
-                            }});
-                            return false;
-                          }}
-                          function gtag_report_micro_conversion() {{
-                            if (typeof gtag !== 'undefined') {{
-                              var micro_label = '{gtag_micro_label}';
-                              if (micro_label) {{
-                                gtag('event', 'conversion', {{
-                                    'send_to': '{gtag_id}/' + micro_label,
-                                    'value': 0.5,
-                                    'currency': 'BRL'
-                                }});
-                              }}
-                              gtag('event', 'summary_generated', {{
-                                  'event_category': 'engagement',
-                                  'event_label': 'intake_summary_completed'
-                              }});
-                            }}
-                          }}
-                        </script>
-                        """
-
-                    # hreflang tags for multilingual SEO
-                    hreflang_tags = """
-                    <link rel="alternate" hreflang="en" href="https://pre-consult.org/?lang=en"/>
-                    <link rel="alternate" hreflang="pt" href="https://pre-consult.org/?lang=pt"/>
-                    <link rel="alternate" hreflang="x-default" href="https://pre-consult.org/"/>
-                    """
-
-                    # Canonical tag — always points to root, ignoring ?lang= params
-                    canonical_tag = '<link rel="canonical" href="https://pre-consult.org/"/>'
-
-                    # Schema.org JSON-LD — WebSite + WebPage
-                    schema_jsonld = """
-                    <script type="application/ld+json">
-                    {
-                      "@context": "https://schema.org",
-                      "@graph": [
-                        {
-                          "@type": "WebSite",
-                          "@id": "https://pre-consult.org/#website",
-                          "name": "PreConsult",
-                          "description": "Privacy-first AI medical intake assistant. Prepare for your doctor appointment in minutes.",
-                          "url": "https://pre-consult.org/",
-                          "inLanguage": ["en", "pt"],
-                          "alternateName": "PreConsult — AI Patient Intake"
-                        },
-                        {
-                          "@type": "WebPage",
-                          "@id": "https://pre-consult.org/#webpage",
-                          "name": "PreConsult — Privacy-First Medical Intake Assistant",
-                          "description": "Guided AI interview helper for patient intake with zero data persistence.",
-                          "url": "https://pre-consult.org/",
-                          "isPartOf": {"@id": "https://pre-consult.org/#website"},
-                          "inLanguage": ["en", "pt"],
-                          "about": {
-                            "@type": "Thing",
-                            "name": "Medical Intake Preparation"
-                          }
-                        }
-                      ]
-                    }
-                    </script>
-                    """
-
-                    seo_tags = hreflang_tags + canonical_tag + schema_jsonld
-                    html_content = html_content.replace("</head>", f"{critical_style}{_LANG_COOKIE_SCRIPT}{gtag_script}{seo_tags}</head>")
-
-                    # Fix og:image — use dedicated 1200x630 PNG for social previews
-                    html_content = html_content.replace(
-                        'content="favicon.ico" property="og:image"',
-                        'content="https://pre-consult.org/og-image.png" property="og:image"'
-                    )
-                    # Insert og:image dimensions after the og:image tag
-                    html_content = html_content.replace(
-                        'content="https://pre-consult.org/og-image.png" property="og:image"',
-                        'content="https://pre-consult.org/og-image.png" property="og:image"/>\n'
-                        '    <meta property="og:image:width" content="1200"/>\n'
-                        '    <meta property="og:image:height" content="630"/>'
-                    )
-
-                    # Suppress React Router scroll-restoration console.error.
-                    # sessionStorage may be blocked (private mode, restrictive CSP, iframe)
-                    # causing JSON.parse to throw → console.error(error). The error is
-                    # benign (storage is cleared in the catch), but Lighthouse flags it.
-                    html_content = html_content.replace(
-                        'console.error(error);\n      sessionStorage.removeItem("react-router-scroll-positions");',
-                        '/* sessionStorage unavailable */ sessionStorage.removeItem("react-router-scroll-positions");'
-                    )
-
-                    new_response = HTMLResponse(content=html_content, status_code=response.status_code)
-                    for key, val in response.headers.items():
-                        if key.lower() not in ("content-length", "content-type"):
-                            new_response.headers[key] = val
-                    new_response.headers["Vary"] = "Accept-Encoding"
-                    new_response.headers["Cache-Control"] = "no-cache, must-revalidate"
-                    return new_response
-                except Exception:
-                    pass
         response.headers["Vary"] = "Accept-Encoding"
         return response
 

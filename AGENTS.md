@@ -107,11 +107,17 @@ outages), so Redis must be reserved for actual patient sessions:
   when Redis is down AND there is no in-memory fallback copy; it returns `{}` only
   for a genuine miss (→ 404 `session_expired`). Do NOT collapse an outage into a
   misleading `session_expired`.
-- An Upstash **`max requests limit exceeded`** error (`_is_quota_error`) raises
-  **`RedisQuotaExceededError`** → stable 503 `redis_quota_exceeded`, distinct from
-  `redis_unavailable`, so "daily quota spent" is not confused with a general outage.
-  Session CRUD/`check_redis_status` classify it; `/health` reports
-  `redis: "quota_exceeded"` + code `redis_quota_exceeded`. Keep this distinct signal.
+- An Upstash **`max requests limit exceeded`** error (`_is_quota_error`) is classified
+  as `redis_quota_exceeded`, distinct from `redis_unavailable`, so "daily quota spent"
+  is not confused with a general outage. Session CRUD/`check_redis_status` classify it;
+  `/health` reports `redis: "quota_exceeded"` + code `redis_quota_exceeded`.
+- **Quota exhaustion degrades to the per-worker in-memory store, it does NOT block the
+  user.** `create_session`/`update_session` store in memory and succeed; `get_session`
+  serves an in-memory copy when present and raises `RedisQuotaExceededError` only when it
+  genuinely has nothing for that session id (surface the cause instead of an unknown `{}`).
+  This is a per-worker shim, not a store of truth, but it keeps real users (pinned by
+  Cloud Run `--session-affinity`) working through the quota window until Upstash resets
+  daily.
 - Session CRUD has a best-effort per-worker in-memory fallback for transient Redis
   errors. It is a resilience shim, not a store of truth.
 

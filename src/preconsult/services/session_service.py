@@ -154,10 +154,15 @@ async def create_session(data: Dict[str, Any]) -> str:
             return session_id
         except Exception as e:
             if _is_quota_error(e):
+                # Quota exhausted: degrade to the per-worker in-memory store so
+                # the user can still proceed (Cloud Run --session-affinity keeps
+                # the session on this instance). We do NOT raise here — a
+                # session-not-created would block the user over infrastructure.
                 _mark_quota_exceeded("create_session")
-                raise RedisQuotaExceededError() from e
-            _mark_redis_down("create_session")
-            logging.error(f"Redis indisponivel ao criar sessao, usando memoria: {e}")
+                logging.error(f"Redis quota excedida ao criar sessao, usando memoria: {e}")
+            else:
+                _mark_redis_down("create_session")
+                logging.error(f"Redis indisponivel ao criar sessao, usando memoria: {e}")
     else:
         logging.info(f"Sessao {session_id} criada em memoria (Redis indisponivel)")
 
@@ -192,7 +197,13 @@ async def get_session(session_id: str) -> Dict[str, Any]:
     except Exception as e:
         if _is_quota_error(e):
             _mark_quota_exceeded("get_session")
-            raise RedisQuotaExceededError() from e
+            # Degrade to the in-memory store; only surface the outage if we
+            # genuinely have nothing to serve for this session id.
+            data = await _memory_lookup()
+            if not data:
+                raise RedisQuotaExceededError() from e
+            logging.warning("Redis quota excedida; servindo sessao do fallback em memoria")
+            return data
         _mark_redis_down("get_session")
         logging.error(f"Redis indisponivel ao ler sessao, usando memoria: {e}")
         data = await _memory_lookup()
@@ -222,9 +233,10 @@ async def update_session(session_id: str, new_data: Dict[str, Any]) -> None:
         except Exception as e:
             if _is_quota_error(e):
                 _mark_quota_exceeded("update_session")
-                raise RedisQuotaExceededError() from e
-            _mark_redis_down("update_session")
-            logging.error(f"Redis indisponivel ao atualizar sessao, usando memoria: {e}")
+                logging.error(f"Redis quota excedida ao atualizar sessao, usando memoria: {e}")
+            else:
+                _mark_redis_down("update_session")
+                logging.error(f"Redis indisponivel ao atualizar sessao, usando memoria: {e}")
 
     async with _memory_sessions_lock:
         existing = _memory_sessions.get(session_id, {})

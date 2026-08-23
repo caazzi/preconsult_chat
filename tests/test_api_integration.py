@@ -41,6 +41,29 @@ async def test_init_session(mock_inc, mock_quota, mock_rate, mock_create):
     assert response.json()["session_id"] == "fake-session-id"
     mock_create.assert_called_once()
 
+
+@pytest.mark.asyncio
+async def test_init_session_degrades_to_memory_when_redis_quota_exceeded():
+    """When Upstash rejects writes with 'max requests limit exceeded', session/init
+    must STILL succeed (degraded to the per-worker in-memory store), not block the
+    user over infrastructure."""
+
+    def quota_fail(*args, **kwargs):
+        raise Exception("max requests limit exceeded. Limit: 500000")
+
+    class FakeRedis:
+        async def eval(self, *a, **k): quota_fail()
+        async def get(self, *a, **k): return None
+        async def hset(self, *a, **k): quota_fail()
+        async def expire(self, *a, **k): quota_fail()
+
+    import preconsult.services.session_service as srv
+    with patch.object(srv, "get_redis", return_value=FakeRedis()):
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post("/api/session/init", json=FULL_SESSION_PAYLOAD, headers=HEADERS)
+    assert response.status_code == 200
+    assert response.json()["session_id"]
+
 @pytest.mark.asyncio
 @patch("preconsult.api.endpoints.create_session", new_callable=AsyncMock)
 @patch("preconsult.api.endpoints.check_rate_limit", new_callable=AsyncMock)

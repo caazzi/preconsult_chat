@@ -82,12 +82,16 @@ for actual patient sessions:
   on Redis-backed `/api/*` paths with a fast `403` before any storage work. Browsers
   pass through untouched.
 
-**If the quota is ever exhausted, the app no longer fails silently.** An Upstash
-`max requests limit exceeded` error is classified as `redis_quota_exceeded`: it is
+**If the quota is ever exhausted, the app degrades gracefully instead of blocking the user.** An
+Upstash `max requests limit exceeded` error is classified as `redis_quota_exceeded`: it is
 surfaced on `/health` and `/health/ready` (`redis: "quota_exceeded"`, code
-`redis_quota_exceeded`) and returned as a stable `503 redis_quota_exceeded` on the
-session/stream/PDF endpoints — distinct from a general `redis_unavailable` outage,
-so alerts and ops can tell "daily quota spent" apart from a connection problem.
+`redis_quota_exceeded`) and, when a session genuinely can't be served, returned as a stable
+`503 redis_quota_exceeded` on the session/stream/PDF endpoints — distinct from a general
+`redis_unavailable` outage, so alerts and ops can tell "daily quota spent" apart from a
+connection problem. **Crucially, session create/read/update fall back to the per-worker
+in-memory store during a quota outage** (rate-limit/quota already do), so a real user on
+Cloud Run's session-affinity instance keeps working through the rest of the quota period; the
+quota renewal (Upstash free tier resets daily) is transparent to them.
 
 With low real-user volume this keeps the free tier comfortably within budget.
 
@@ -168,7 +172,7 @@ The test command enforces an **80% coverage gate** (measured over `src/preconsul
 and `reflex_app/preconsult`, branch coverage, excluding the declarative Reflex
 page tree). CI fails the build if coverage drops below the threshold.
 
-The test suite contains **210 tests, one skipped**, with **~85% overall coverage**
+The test suite contains **212 tests, one skipped**, with **~85% overall coverage**
 (branch coverage, measured over `src/preconsult` and `reflex_app/preconsult`,
 excluding the generated Reflex page tree). Coverage is broken down as:
 `errors.py` and `core/parsing.py` 100%, `llm.py` 100%, `endpoints.py` 94%,
@@ -294,7 +298,7 @@ app-preconsult/
 │   ├── analyze_cloudflare_logs.py# Cloudflare HTTP log fetcher & analyzer
 │   ├── analyze_week_humans.py# Weekly human-vs-bot access analysis
 │   └── analyze_all_logs.py  # Unified logs analysis script
-├── tests/                   # 210 tests; 80% coverage gate
+├── tests/                   # 212 tests; 80% coverage gate
 ├── AGENTS.md                # Agent rules (incl. CI/CD-only deploy policy)
 ├── Dockerfile               # Multi-stage container build
 ├── docker-compose.yml       # Local Redis service

@@ -1756,6 +1756,44 @@ class _RequestIDMiddleware:
 
         try:
             await self.app(scope, receive, send_with_id)
+        except KeyError as exc:
+            # python-engineio's POST branch (async_server.py:328) calls
+            # _get_socket(sid) OUTSIDE its try/except (unlike the GET branch).
+            # When a browser POSTs an event with a session the server has already
+            # closed (idle ping_timeout) but is still in the socket dict, that
+            # raises KeyError('Session is disconnected') which is not an
+            # EngineIOError and so escapes unhandled as an HTTP 500 — breaking the
+            # UI with "Cannot connect to server: xhr post error" on /_event.
+            # Translate that specific, recoverable case into a clean 400 so the
+            # client's engine.io re-handshakes and gets a fresh session; any other
+            # 500 is left to surface so it stays alarmable.
+            if path.startswith("/_event") and "session" in str(exc).lower():
+                _inc("socket.session_invalid")
+                log_event(
+                    logging.WARNING,
+                    "socket.session_invalid",
+                    request_id=request_id,
+                    method=method,
+                    path=safe_path,
+                    reason=str(exc)[:120],
+                )
+                # Respond directly (not via send_with_id, whose /_event-400 branch
+                # would mislabel this recovery as a protocol handshake rejection).
+                body = b"Invalid session"
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 400,
+                        "headers": [
+                            (b"content-type", b"text/plain; charset=UTF-8"),
+                            (b"x-request-id", request_id.encode("ascii")),
+                        ],
+                    }
+                )
+                await send({"type": "http.response.body", "body": body})
+                status_holder["status"] = 400
+                return
+            raise
         finally:
             status = status_holder.get("status")
             if status is not None:

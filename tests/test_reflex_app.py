@@ -421,6 +421,54 @@ def test_middleware_events_include_revision(caplog):
     )
 
 
+def test_stale_session_keyerror_returns_400_not_500():
+    """A POST to /_event with a session the server has already closed raises
+    KeyError('Session is disconnected') inside python-engineio's unguarded POST
+    branch. That must be surfaced as a clean recoverable 400 (so the client
+    re-handshakes) rather than an unhandled 500 that breaks the UI."""
+    import asyncio
+
+    import httpx
+    from httpx import ASGITransport
+    from preconsult.core.observability import reset_counters, snapshot_counters
+    from reflex_app.preconsult.preconsult import _RequestIDMiddleware
+
+    async def boom(scope, receive, send):
+        # Simulates engineio/_get_socket on a closed session.
+        raise KeyError("Session is disconnected")
+
+    app = _RequestIDMiddleware(boom)
+
+    async def run():
+        reset_counters()
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/_event/?EIO=4&transport=polling&sid=stale-123")
+        return resp
+
+    resp = asyncio.run(run())
+    assert resp.status_code == 400
+    assert b"Invalid session" in resp.content
+    counters = snapshot_counters()
+    assert counters.get("socket.session_invalid", 0) == 1
+    # Must not be counted as a generic HTTP 500.
+    assert counters.get("http.status.500", 0) == 0
+
+    # Non-/_event paths with an unrelated KeyError still propagate unchanged
+    # (httpx ASGITransport surfaces the exception rather than a 500 response,
+    # which is exactly the intent: only the recoverable socket case is handled).
+    async def boom_other(scope, receive, send):
+        raise KeyError("some other key")
+
+    app2 = _RequestIDMiddleware(boom_other)
+
+    async def run2():
+        async with httpx.AsyncClient(transport=ASGITransport(app=app2), base_url="http://test") as client:
+            await client.post("/api/foo")
+
+    with pytest.raises(KeyError):
+        asyncio.run(run2())
+
+
 def test_state_scroll_and_draft_scripts():
     state = State()
     scroll_script = state._scroll_top_script()

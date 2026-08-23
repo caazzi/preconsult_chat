@@ -20,6 +20,23 @@ from conftest import E2E_BASE  # tests/e2e is inserted on sys.path by pytest
 pytestmark = pytest.mark.e2e
 
 
+def _open_landing(page):
+    """Load the app and wait until the interactive UI is actually ready.
+
+    We deliberately do NOT use ``wait_until="networkidle"``: the frontend keeps a
+    persistent Engine.IO **long-poll** to /_event (transport=polling), so there
+    is always an in-flight request and the network never reaches "idle" — that
+    made the old specs deterministically time out on CI while passing locally on
+    timing luck. Instead, wait until the document loads, then until the real
+    interactive marker ("Start Preparing") is visible, which only happens after
+    the socket connects and the wizard renders.
+    """
+    page.goto(f"{E2E_BASE}/", wait_until="load", timeout=45000)
+    page.get_by_text("Start Preparing", exact=True).first.wait_for(
+        state="visible", timeout=20000
+    )
+
+
 def _dribble_interactions(page, clicks: int = 6):
     """Force enough socket round-trips on one page to surface an intermittently
     lost Engine.IO session. Every button press emits a /_event event; with a
@@ -34,15 +51,14 @@ def _dribble_interactions(page, clicks: int = 6):
 
 def test_socket_session_holds_with_zero_errors(page):
     """Core regression guard: sustained interaction must never lose the socket."""
-    page.goto(f"{E2E_BASE}/", wait_until="networkidle", timeout=45000)
-    page.wait_for_timeout(1000)
+    _open_landing(page)
     _dribble_interactions(page, clicks=8)
     page.wait_for_timeout(1000)
 
     socket_404 = [e for e in page.socket_errors if e["kind"] == "response"]
     assert socket_404 == [], (
-        "Socket session was lost during interaction (see /_event 4xx). "
-        "This is the multi-worker 'Invalid session' symptom. "
+        "Socket session was lost during interaction (see /_event non-2xx). "
+        "This is the multi-worker 'Invalid session' or stale-session symptom. "
         f"observed={page.socket_errors}"
     )
 
@@ -54,7 +70,7 @@ def test_start_preparing_advances_to_step1(page):
     """'Start Preparing' must transition the wizard from the landing page to
     Patient Intake without a connection error (purely client-side state over
     the socket — needs no Redis/LLM)."""
-    page.goto(f"{E2E_BASE}/", wait_until="networkidle", timeout=45000)
+    _open_landing(page)
     page.get_by_text("Start Preparing", exact=True).first.click(timeout=5000)
     page.wait_for_timeout(2500)
 
@@ -69,7 +85,7 @@ def test_start_preparing_advances_to_step1(page):
 
 def test_language_switch_keeps_socket_alive(page):
     """Toggling EN/PT language emits socket events and must not drop the session."""
-    page.goto(f"{E2E_BASE}/", wait_until="networkidle", timeout=45000)
+    _open_landing(page)
     page.get_by_text("Start Preparing", exact=True).first.click(timeout=5000)
     page.wait_for_timeout(1500)
 

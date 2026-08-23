@@ -282,16 +282,6 @@ jobs:
             exit 1
           fi
 
-          # 1b. Redis connectivity assertion (health must report redis: ok)
-          echo "==== Stage 1b: Redis Health Assertion ===="
-          HEALTH_BODY=$(curl -s --connect-timeout 15 --max-time 45 "$HEALTH_URL")
-          echo "Health body: $HEALTH_BODY"
-          REDIS_STATE=$(echo "$HEALTH_BODY" | jq -r '.redis // "missing"')
-          if [ "$REDIS_STATE" != "ok" ]; then
-            echo "::error::Redis reported as '$REDIS_STATE'. Expected 'ok'. Health body: $HEALTH_BODY"
-            exit 1
-          fi
-
           # 1c. Reflex event-channel assertion.
           # Reflex drives all state mutations (e.g. the "Start Preparing" button)
           # over the event channel. Historically only /health and the REST/SSE
@@ -328,88 +318,14 @@ jobs:
           fi
           echo "Event channel (${TRANSPORT}) OK"
 
-          # 2. Get API Key from GCP Secret Manager
-          echo "==== Stage 2: Retrieve API Key ===="
-          API_KEY=$(gcloud secrets versions access latest --secret="SECUREMED_API_KEY")
-          if [ -z "$API_KEY" ]; then
-            echo "::error::Failed to retrieve SECUREMED_API_KEY from Secret Manager"
-            exit 1
-          fi
-          echo "API Key retrieved successfully."
-
-          # 3. Session Initialization Test
-          echo "==== Stage 3: Session Initialization ===="
-          INIT_PAYLOAD='{
-            "age_bracket": "26-35",
-            "sex": "Female",
-            "lang": "en",
-            "specialist": "Cardiology",
-            "chief_complaint": "Chest pain for smoke test",
-            "duration": "Days",
-            "complaint_detail": "Mild pain",
-            "conditions": [],
-            "medications": [],
-            "allergies": "",
-            "family_history": [],
-            "smoking": "Never",
-            "alcohol": "Rarely"
-          }'
-
-          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
-            -X POST "${BASE_URL}/api/session/init" \
-            -H "Content-Type: application/json" \
-            -H "X-API-KEY: ${API_KEY}" \
-            -d "$INIT_PAYLOAD" \
-            --connect-timeout 15 --max-time 45 || echo -e "\nHTTP_STATUS:000")
-
-          RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
-          HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1 | cut -d':' -f2)
-
-          echo "Init Status: $HTTP_STATUS"
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "::error::Session initialization failed!"
-            echo "Response Body: $RESPONSE_BODY"
-            exit 1
-          fi
-
-          SESSION_ID=$(echo "$RESPONSE_BODY" | jq -r '.session_id')
-          if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
-            echo "::error::Failed to parse session_id from response!"
-            echo "Response Body: $RESPONSE_BODY"
-            exit 1
-          fi
-          echo "Session initialized successfully with ID: $SESSION_ID"
-
-          # 4. Stream Validation Test
-          echo "==== Stage 4: AI Question Stream Validation ===="
-          STREAM_PAYLOAD=$(printf '{"session_id": "%s"}' "$SESSION_ID")
-          
-          STREAM_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
-            -X POST "${BASE_URL}/api/interview-questions-stream" \
-            -H "Content-Type: application/json" \
-            -H "X-API-KEY: ${API_KEY}" \
-            -d "$STREAM_PAYLOAD" \
-            --connect-timeout 15 --max-time 60 || echo -e "\nHTTP_STATUS:000")
-
-          STREAM_BODY=$(echo "$STREAM_RESPONSE" | sed '$d')
-          STREAM_STATUS=$(echo "$STREAM_RESPONSE" | tail -n 1 | cut -d':' -f2)
-
-          echo "Stream HTTP Status: $STREAM_STATUS"
-          if [ "$STREAM_STATUS" != "200" ]; then
-            echo "::error::Stream endpoint failed!"
-            echo "Response Body: $STREAM_BODY"
-            exit 1
-          fi
-
-          if [[ "$STREAM_BODY" != *"data:"* ]]; then
-            echo "::error::Stream body is invalid! Missing 'data:' event format."
-            echo "Response Body: $STREAM_BODY"
-            exit 1
-          fi
-
-          echo "First 150 characters of stream payload:"
-          echo "${STREAM_BODY}" | head -c 150
-          echo ""
+          # NOTE: the Redis-backed session init + AI question stream are NOT
+          # exercised here against the deployed (serverless/Upstash) Redis. Each
+          # push used to create + read a real session, burning the free-tier
+          # Redis request quota for no coverage gain. The full session/stream/
+          # rate-limit/SSE coverage runs in the `test` job against a local
+          # redis:alpine service. This deployed smoke test focuses on whether
+          # the served container is up and the interactive (socket) channel
+          # works — the paths most prone to silent breakage.
 
           # 5. Reflex State-Socket Connectivity Test
           #

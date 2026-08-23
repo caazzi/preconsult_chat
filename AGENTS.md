@@ -4,6 +4,11 @@ Rules for any agent (or human) working in this repository.
 
 ## Deployment: CI/CD is the ONLY path
 
+**Never push; commit and stop.** Agents do NOT run `git push`, `git merge`/merge PRs, or any
+remote-write operation. Commit changes locally and stop — the human decides when and how to get
+them to `main`. Deploying is the human's job and happens only via the pipeline below (or their own
+push). Note that pushing may also fail for auth reasons unless the token has the `workflow` scope.
+
 **Do not deploy to production with ad-hoc commands.** The serving container is deployed EXCLUSIVELY
 through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
 

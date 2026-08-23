@@ -129,8 +129,13 @@ def test_custom_static_files_injection(tmp_path):
         assert response is not None
         html_body = response.body.decode("utf-8")
         
-        # Verify MockWebSocket script is injected
-        assert "MockWebSocket" in html_body
+        # The state socket must work: the page must NOT override window.WebSocket
+        # with the legacy MockWebSocket stub, which broke the /_event connection.
+        assert "MockWebSocket" not in html_body
+        
+        # Verify the legitimate lang-cookie script is still injected (proves the
+        # </head> injection seam is intact)
+        assert "preconsult_lang" in html_body
         
         # Verify other replacements happened
         assert "https://pre-consult.org/og-image.png" in html_body

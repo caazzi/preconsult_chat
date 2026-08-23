@@ -1390,140 +1390,6 @@ _LANG_COOKIE_SCRIPT = r"""
 </script>
 """
 
-_MOCK_WEBSOCKET_SCRIPT = """
-<script>
-(function() {
-    // Suppress benign React hydration mismatch errors, WebSocket errors, and browser console warnings globally
-    var origError = console.error;
-    var origWarn = console.warn;
-
-    function shouldSuppress(args) {
-        if (!args || !args.length) return false;
-        var str = "";
-        for (var i = 0; i < args.length; i++) {
-            var item = args[i];
-            if (!item) continue;
-            if (typeof item === "string") {
-                str += " " + item;
-            } else if (item instanceof Error) {
-                str += " " + item.message + " " + (item.stack || "");
-            } else {
-                try { str += " " + JSON.stringify(item); } catch(e) { str += " " + String(item); }
-            }
-        }
-        var lower = str.toLowerCase();
-        return (
-            lower.indexOf("react.dev/errors/418") !== -1 ||
-            lower.indexOf("react.dev/errors/422") !== -1 ||
-            lower.indexOf("react.dev/errors/423") !== -1 ||
-            lower.indexOf("react.dev/errors/425") !== -1 ||
-            lower.indexOf("hydration failed") !== -1 ||
-            lower.indexOf("text content does not match") !== -1 ||
-            lower.indexOf("did not match") !== -1 ||
-            lower.indexOf("minified react error") !== -1 ||
-            lower.indexOf("websocket") !== -1 ||
-            lower.indexOf("sessionstorage") !== -1 ||
-            lower.indexOf("react-router-scroll-positions") !== -1 ||
-            lower.indexOf("gtm") !== -1 ||
-            lower.indexOf("gtag") !== -1
-        );
-    }
-
-    console.error = function() {
-        if (shouldSuppress(arguments)) return;
-        origError.apply(console, arguments);
-    };
-
-    console.warn = function() {
-        if (shouldSuppress(arguments)) return;
-        origWarn.apply(console, arguments);
-    };
-
-    window.addEventListener("unhandledrejection", function(event) {
-        if (event && event.reason && shouldSuppress([event.reason])) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-    }, true);
-
-    window.addEventListener("error", function(event) {
-        if (event && (shouldSuppress([event.message]) || shouldSuppress([event.error]))) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-    }, true);
-
-    var NativeWebSocket = window.WebSocket;
-    class MockWebSocket {
-        constructor(url, protocols) {
-            this.url = url;
-            this.readyState = 0;
-            this.extensions = "";
-            this.protocol = "";
-            this.binaryType = "blob";
-            this._listeners = {};
-            var self = this;
-            setTimeout(function() {
-                self.readyState = 1;
-                var openEvent = { type: "open", target: self };
-                if (self.onopen) self.onopen(openEvent);
-                self.dispatchEvent(openEvent);
-            }, 10);
-        }
-        send(data) {}
-        close() {
-            this.readyState = 3;
-            var self = this;
-            setTimeout(function() {
-                var closeEvent = { type: "close", target: self, wasClean: true, code: 1000, reason: "Mock" };
-                if (self.onclose) self.onclose(closeEvent);
-                self.dispatchEvent(closeEvent);
-            }, 10);
-        }
-        addEventListener(type, listener) {
-            if (!this._listeners[type]) this._listeners[type] = [];
-            this._listeners[type].push(listener);
-        }
-        removeEventListener(type, listener) {
-            if (!this._listeners[type]) return;
-            var idx = this._listeners[type].indexOf(listener);
-            if (idx !== -1) this._listeners[type].splice(idx, 1);
-        }
-        dispatchEvent(event) {
-            var type = event.type;
-            if (this._listeners[type]) {
-                for (var i = 0; i < this._listeners[type].length; i++) {
-                    try { this._listeners[type][i](event); } catch(e) {}
-                }
-            }
-        }
-    }
-
-    if (NativeWebSocket) {
-        function PatchedWebSocket(url, protocols) {
-            var urlStr = typeof url === "string" ? url : "";
-            var hostname = window.location.hostname;
-            var isLocal = ["localhost", "127.0.0.1", "0.0.0.0", "::1"].indexOf(hostname) !== -1 || hostname.indexOf(".local") !== -1;
-            
-            // Use MockWebSocket for /_event or non-local WebSocket connections
-            if (!isLocal || urlStr.indexOf("_event") !== -1) {
-                return new MockWebSocket(url, protocols);
-            }
-            try {
-                return new NativeWebSocket(url, protocols);
-            } catch(e) {
-                return new MockWebSocket(url, protocols);
-            }
-        }
-        PatchedWebSocket.prototype = NativeWebSocket.prototype;
-        window.WebSocket = PatchedWebSocket;
-    } else {
-        window.WebSocket = MockWebSocket;
-    }
-})();
-</script>
-"""
-
 class CustomStaticFiles(StaticFiles):
     # Reflex backend endpoints must never be answered by the SPA fallback. The
     # bare /_event path is handled by an explicit redirect route, but keep this
@@ -1688,7 +1554,7 @@ class CustomStaticFiles(StaticFiles):
                     """
 
                     seo_tags = hreflang_tags + canonical_tag + schema_jsonld
-                    html_content = html_content.replace("</head>", f"{critical_style}{_LANG_COOKIE_SCRIPT}{_MOCK_WEBSOCKET_SCRIPT}{gtag_script}{seo_tags}</head>")
+                    html_content = html_content.replace("</head>", f"{critical_style}{_LANG_COOKIE_SCRIPT}{gtag_script}{seo_tags}</head>")
 
                     # Fix og:image — use dedicated 1200x630 PNG for social previews
                     html_content = html_content.replace(
@@ -1744,11 +1610,9 @@ def _backend_redirect(request):
 
 app._api.add_route("/_event", _backend_redirect, methods=["GET", "POST"])
 
-static_dir_vite = os.path.join(os.getcwd(), ".web", "build", "client")
-static_dir_legacy = os.path.join(os.getcwd(), ".web", "_static")
-static_dir = static_dir_vite if os.path.exists(static_dir_vite) else static_dir_legacy
-if os.path.exists(static_dir):
-    app._api.mount("/", CustomStaticFiles(directory=static_dir, html=True), name="static")
+_STATIC_DIR = os.path.join(os.getcwd(), ".web", "build", "client")
+if os.path.exists(_STATIC_DIR):
+    app._api.mount("/", CustomStaticFiles(directory=_STATIC_DIR, html=True), name="static")
 
 # Enable application-level Gzip compression for payloads >= 500 bytes (HTML, CSS, JS, API JSON)
 app._api.add_middleware(GZipMiddleware, minimum_size=500)

@@ -129,6 +129,22 @@ outages), so Redis must be reserved for actual patient sessions:
   fronting proxy — otherwise spoofed headers bypass per-IP rate limits / quotas. Tests in
   `tests/test_client_ip.py` lock this policy.
 
+## Serving & the CDN/edge cache reality
+
+- `pre-consult.org` is **DNS-only**: A/AAAA records point at Google Frontend IPs (`216.239.*`,
+  `2001:4860:*`), **not** Cloudflare proxy IPs. Cloudflare hosts DNS but does **not** sit in the request
+  path, so **purging the "Cloudflare cache" has no effect** on what users receive. Cache invalidation
+  for the served document must target Google Frontend/Cloud CDN + a browser hard-refresh.
+- The served **`index.html` shell is `no-store`** and its JS/CSS chunks are content-hashed +
+  immutable. A stale `index.html` (cached before `no-store` shipped) references old chunk URLs that
+  404 on the current revision, the app JS fails to load, and the browser falls back to an old socket
+  client — producing the engine-io **"unsupported version of the Socket.IO or Engine.IO protocols"**
+  400 on `/_event`. If that error recurs, first **hard-purge the document** (it is a stale-shell
+  symptom, **not** a server protocol bug). Do not "fix" it by changing Engine.IO versions.
+- The CI smoke test asserts the `no-store` document contract + the full `index.html` asset graph
+  resolves (Stages 6 & 7). A deploy that regresses document caching or ships an incomplete bundle
+  fails loudly.
+
 ## Secrets & environment
 
 - `.env` is secret and must not be read or edited for value changes without care; secrets live in

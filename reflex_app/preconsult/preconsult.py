@@ -1487,7 +1487,22 @@ class CustomStaticFiles(StaticFiles):
         # SEO + analytics live on the Reflex page via add_page(meta=...) now, so
         # the server HTML and the client render stay identical.
         if "assets/" in path or path.startswith("assets/"):
+            # Content-hashed build artifacts are immutable: once a URL exists it
+            # never changes content, so they can be cached at the edge for a year.
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            # HTML *documents* (the shell that references the hashed chunks) MUST
+            # be revalidated on every navigation. If index.html is cached while
+            # the build advances, the browser resolves stale chunk URLs that 404
+            # on the new revision, can't load the app, and falls back to an old
+            # socket client — surfacing as "unsupported version of the Socket.IO
+            # or Engine.IO protocols" on /_event. Because chunk names are
+            # content-hashed, an uncacheable document always points at valid
+            # current assets, so this is the single lever that prevents the class
+            # of stale-shell breakage seen in production.
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
         response.headers["Vary"] = "Accept-Encoding"
         return response
 
@@ -1600,6 +1615,17 @@ class _RequestIDMiddleware:
     Only the request method + path are logged (no query string, no headers, no
     body) so nothing user-supplied is captured. The id correlates the request
     across Cloud Run logs and the structured backend events.
+
+    Also captures the response status so the log is alertable by outcome, and
+    emits focused WARNING events for the failure classes that produced the
+    production socket incident:
+      - a rejected Engine.IO handshake (status 400) on ``/_event`` — the
+        "unsupported version of the Socket.IO or Engine.IO protocols" symptom of
+        a stale-shell/stale-client, even though the origin itself answers EIO=4.
+      - a 404 on a static asset under ``/assets`` — the tell that a cached
+        index.html shell references chunk URLs that no longer exist.
+    These aggregate into "how many users are hitting the stale build" so the
+    regression is visible before a user files a bug.
     """
 
     def __init__(self, app):
@@ -1613,24 +1639,64 @@ class _RequestIDMiddleware:
         request_id = new_request_id()
         scope["request_id"] = request_id
         path = scope.get("path", "")
+        method = scope.get("method", "")
+        safe_path = path if len(path) <= 200 else path[:200]
         log_event(
             logging.DEBUG,
             "http.request",
             request_id=request_id,
-            method=scope.get("method", ""),
-            path=path if len(path) <= 200 else path[:200],
+            method=method,
+            path=safe_path,
         )
+
+        status_holder = {}
 
         async def send_with_id(message):
             if message["type"] == "http.response.start":
+                status = message.get("status", 0)
+                status_holder["status"] = status
                 headers = message.get("headers", [])
                 message["headers"] = [
                     *headers,
                     (b"x-request-id", request_id.encode("ascii")),
                 ]
+                # Correlate a prod/user-facing outcome to a structured event.
+                # Only path + status are captured (no query, headers or body),
+                # preserving the zero-PHI guarantee.
+                if path.startswith("/_event") and status == 400:
+                    log_event(
+                        logging.WARNING,
+                        "socket.handshake_rejected",
+                        request_id=request_id,
+                        path=safe_path,
+                        status=status,
+                        reason="engineio_protocol_or_transport",
+                    )
+                elif path.startswith("/assets") and status == 404:
+                    log_event(
+                        logging.WARNING,
+                        "static.asset_404",
+                        request_id=request_id,
+                        path=safe_path,
+                        status=status,
+                    )
             await send(message)
 
-        await self.app(scope, receive, send_with_id)
+        try:
+            await self.app(scope, receive, send_with_id)
+        finally:
+            status = status_holder.get("status")
+            if status is not None:
+                # Surface non-2xx outcomes at INFO so failures are queryable by
+                # path+status; 2xx stays at DEBUG to keep log volume modest.
+                log_event(
+                    logging.INFO if status >= 400 else logging.DEBUG,
+                    "http.status",
+                    request_id=request_id,
+                    method=method,
+                    path=safe_path,
+                    status=status,
+                )
 
 
 class _BotGateMiddleware:

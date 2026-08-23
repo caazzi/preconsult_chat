@@ -273,6 +273,8 @@ scripts/deploy_backend.sh cost_optimized \
 
 The app is served at **pre-consult.org** via Cloud Run domain mapping. Cloudflare is used as a DNS-only provider (proxy disabled) — DNS A records point to Google's IPs (`216.239.{32,34,36,38}.21`), and Google handles SSL termination. Note: Cloudflare WAF/rate-limit rules and Bot Shield can only take effect if DNS for the domain is actually proxied through Cloudflare; if the apex uses the Google-hosted A records above, they are DNS-only. Any DNS proxy change is a high-risk production change and must be validated against a smoke test after rollout.
 
+Because traffic reaches the service at **Google Frontend** (not through a Cloudflare cache), the served `index.html` shell is served **`no-store`** while its JS/CSS chunks are content-hashed + immutable. A stale cached shell (referencing old chunk URLs that 404 on the current revision) breaks the app and surfaces as an Engine.IO **"unsupported version of the Socket.IO or Engine.IO protocols"** 400 on `/_event` — a stale-`index.html` symptom, **not** a socket protocol bug. On that error, hard-purge the document and hard-refresh; do not change Engine.IO versions. The CI smoke test asserts the `no-store` document contract and the full asset graph (Stages 6 & 7).
+
 ---
 
 ## Project Structure

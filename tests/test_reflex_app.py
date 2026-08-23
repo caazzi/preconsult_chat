@@ -251,6 +251,49 @@ def test_custom_static_backend_passthrough(tmp_path):
         assert response.body == b"Not Found"
 
 
+def test_html_document_is_uncacheable_but_assets_stay_immutable(tmp_path):
+    """The HTML shell that references hashed chunks must never be cached; if a
+    stale index.html survives, the browser resolves chunk URLs that 404 on the
+    current revision and falls back to an old socket client (the production
+    'unsupported version of the Socket.IO or Engine.IO protocols' bug). Hashed
+    assets, by contrast, remain immutable+long-cached."""
+    import asyncio
+    from reflex_app.preconsult.preconsult import CustomStaticFiles
+
+    dummy_dir = tmp_path / "static"
+    dummy_dir.mkdir()
+    (dummy_dir / "index.html").write_text("<html>preconsult</html>", encoding="utf-8")
+    (dummy_dir / "assets").mkdir()
+    (dummy_dir / "assets" / "app-C0ffee.js").write_text("window.app=1", encoding="utf-8")
+
+    static_files = CustomStaticFiles(directory=str(dummy_dir), html=True)
+
+    def scope(path):
+        return {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": path,
+            "raw_path": path.encode(),
+            "query_string": b"",
+            "root_path": "",
+            "headers": [],
+            "client": ("testclient", 50000),
+            "server": ("testserver", 80),
+            "state": {},
+        }
+
+    doc = asyncio.run(static_files.get_response("index.html", scope("index.html")))
+    assert doc.headers.get("cache-control") == "no-store, no-cache, must-revalidate"
+    assert doc.headers.get("pragma") == "no-cache"
+    assert doc.headers.get("expires") == "0"
+
+    asset = asyncio.run(static_files.get_response("assets/app-C0ffee.js", scope("assets/app-C0ffee.js")))
+    assert asset.headers.get("cache-control") == "public, max-age=31536000, immutable"
+    assert asset.headers.get("pragma") is None
+
+
 def test_bare_event_redirects_instead_of_spa_fallback():
     """The browser polls the bare /_event path; it must reach the socket
     (via a reflex-style 307 redirect) rather than being swallowed by the SPA
@@ -271,6 +314,58 @@ def test_bare_event_redirects_instead_of_spa_fallback():
     assert resp.headers.get("location") == "/_event/?EIO=4&transport=polling"
     # Must never return the SPA HTML for the socket path.
     assert "text/html" not in resp.headers.get("content-type", "")
+
+
+def test_observability_logs_socket_handshake_rejection(caplog):
+    """A rejected Engine.IO handshake on /_event must emit a focused
+    socket.handshake_rejected event so a stale-client/stale-shell regression is
+    visible in logs (the production 'unsupported version of the Socket.IO or
+    Engine.IO protocols' symptom)."""
+    import asyncio
+    import logging
+
+    import httpx
+    from httpx import ASGITransport
+    from reflex_app.preconsult.preconsult import api as app
+
+    async def run():
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # EIO=3 is an Engine.IO v3 client; the v4 server must reject with 400.
+            resp = await client.get("/_event/?EIO=3&transport=polling")
+        return resp
+
+    # INFO captures both the focused WARNING event and the generic http.status
+    # (which is emitted at INFO for non-2xx outcomes).
+    with caplog.at_level(logging.INFO, logger="preconsult.observability"):
+        resp = asyncio.run(run())
+
+    assert resp.status_code == 400
+    assert any("event=socket.handshake_rejected" in r.message for r in caplog.records)
+    assert any("status=400" in r.message for r in caplog.records)
+    assert any("event=http.status" in r.message and "status=400" in r.message for r in caplog.records)
+
+
+def test_observability_logs_missing_asset_404(caplog):
+    """A 404 on a static asset under /assets must emit static.asset_404 — the
+    signal that a cached index.html references a chunk URL that no longer
+    exists on the current revision."""
+    import asyncio
+    import logging
+
+    import httpx
+    from httpx import ASGITransport
+    from reflex_app.preconsult.preconsult import api as app
+
+    async def run():
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get("/assets/definitely-not-on-this-revision-12345.js")
+        return resp
+
+    with caplog.at_level(logging.WARNING, logger="preconsult.observability"):
+        resp = asyncio.run(run())
+
+    assert resp.status_code == 404
+    assert any("event=static.asset_404" in r.message for r in caplog.records)
 
 
 def test_state_scroll_and_draft_scripts():

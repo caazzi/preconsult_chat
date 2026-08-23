@@ -377,4 +377,49 @@ jobs:
           echo "State-socket handshake OK: ${EVENT_BODY}" | head -c 120
           echo ""
 
+          # 6. Index.html cache-control guard
+          #
+          # The served HTML shell MUST be uncacheable (no-store). It references
+          # content-hashed chunks; if a stale shell is cached (at the Google
+          # Frontend edge or browser) while the build advances, the browser
+          # resolves old chunk URLs that 404 on the new revision, fails to load
+          # the app JS and falls back to an old socket client — surfacing as the
+          # production "unsupported version of the Socket.IO or Engine.IO
+          # protocols" error on /_event. Assert the no-store contract on the
+          # origin so a future deploy can't silently re-whitelist document
+          # caching.
+          echo "==== Stage 6: index.html must be uncacheable ===="
+          curl -s -D /tmp/idx_headers.txt -o /dev/null "${BASE_URL}/" \
+            --connect-timeout 15 --max-time 30
+          DOC_CTRL=$(tr -d '\r' < /tmp/idx_headers.txt | grep -i -m1 '^cache-control:' | sed -e 's/^[Cc]ache-[Cc]ontrol:[[:space:]]*//')
+          echo "index.html cache-control: '${DOC_CTRL}'"
+          if [ -z "$DOC_CTRL" ] || ! echo "$DOC_CTRL" | grep -qi "no-store"; then
+            echo "::error::index.html is cacheable (cache-control: '${DOC_CTRL}'). A stale shell can 404 its chunks and break the socket."
+            exit 1
+          fi
+          echo "index.html no-store contract OK"
+
+          # 7. Asset-graph integrity
+          #
+          # Every /assets/* reference in the served index.html must resolve to
+          # 200. This is the direct guard against the stale-shell failure mode:
+          # if the shell names chunks that don't exist (or a build left the
+          # bundle internally inconsistent), the app JS never loads for users.
+          echo "==== Stage 7: Served index.html asset graph is resolvable ===="
+          DOC_HTML=$(curl -s "${BASE_URL}/" --connect-timeout 15 --max-time 30)
+          FAILED=0
+          for asset in $(echo "$DOC_HTML" | grep -oE '(src|href)="/[^"]+"' | sed -E 's/(src|href)="([^"]+)"/\2/' | grep -E '\.(js|css)$'); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}${asset}" --connect-timeout 15 --max-time 30 || echo "000")
+            echo "  $CODE  $asset"
+            if [ "$CODE" != "200" ]; then
+              echo "::error::index.html references missing asset: $asset (HTTP $CODE)"
+              FAILED=1
+            fi
+          done
+          if [ "$FAILED" = "1" ]; then
+            echo "::error::index.html asset graph is incomplete; a cached/stale shell would break the socket."
+            exit 1
+          fi
+          echo "Asset graph OK: all index.html-referenced chunks resolve 200"
+
           echo "==== Smoke Test Passed Successfully! ===="

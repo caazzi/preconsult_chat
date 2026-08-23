@@ -36,7 +36,8 @@ if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ZONE_ID" ]; then
 fi
 
 # Target Cloud Run domain (update with 'gcloud run services describe preconsult --region=us-central1 --format="value(status.url)"' hostname)
-TARGET_URL=${CLOUD_RUN_TARGET_URL:-"preconsult-tcjbweemnq-uc.us-central1.run.app"}
+# NOTE: status.url is the `*.a.run.app` hostname (not the legacy `*.uc.us-central1.run.app`).
+TARGET_URL=${CLOUD_RUN_TARGET_URL:-"preconsult-tcjbweemnq-uc.a.run.app"}
 
 echo "🛰️ 1. Ensuring DNS record for pre-consult.org -> $TARGET_URL (Proxied: true)..."
 

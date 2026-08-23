@@ -318,6 +318,24 @@ jobs:
           fi
           echo "Event channel (${TRANSPORT}) OK"
 
+          # Protocol-version guard: the deployed server must speak Engine.IO v4
+          # (EIO=4). A v3 client probe must be rejected with 400 "unsupported
+          # version" — if the server instead accepts EIO=3, the runtime and the
+          # built client bundle are skewed (e.g. a locally re-synced reflex that
+          # disagreed with the CI-`--frozen` build) and interactive state will
+          # 400 in real browsers. Pin the v4 contract so the regression can't
+          # deploy green.
+          EIO3_STATUS=$(curl -s -o /tmp/event_eio3.txt -w "%{http_code}" \
+            "${BASE_URL}/_event/socket.io/?EIO=3&transport=polling" \
+            --connect-timeout 15 --max-time 30 || echo "000")
+          echo "Engine.IO v3 client probe HTTP Status: $EIO3_STATUS"
+          if [ "$EIO3_STATUS" != "400" ] || ! grep -q "unsupported version" /tmp/event_eio3.txt; then
+            echo "::error::Server did not reject Engine.IO v3 client with the expected 400 'unsupported version'. Protocol skew detected."
+            echo "Body: $(cat /tmp/event_eio3.txt)"
+            exit 1
+          fi
+          echo "Engine.IO protocol v4 contract OK (v3 client correctly rejected)"
+
           # NOTE: the Redis-backed session init + AI question stream are NOT
           # exercised here against the deployed (serverless/Upstash) Redis. Each
           # push used to create + read a real session, burning the free-tier

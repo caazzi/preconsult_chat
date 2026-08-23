@@ -107,7 +107,7 @@ With low real-user volume this keeps the free tier comfortably within budget.
 
 | Layer | Technology |
 |---|---|
-| Core | Reflex 0.9.6 (Unified Frontend & API Host) |
+| Core | Reflex 0.9.8.post1 (Unified Frontend & API Host) |
 | Backend | FastAPI (0.136.1, integrated into Reflex backend) |
 | Session | Redis (6.4.0, ephemeral, 30-min TTL, in-memory fallback for rate limiting) |
 | AI | Vertex AI Gemini 2.5 Flash Lite (`langchain-google-vertexai` 2.1.2) |

@@ -136,3 +136,45 @@ class TestP8_BuildMode:
                 os.environ["BUILD_MODE"] = saved_build
             else:
                 os.environ.pop("BUILD_MODE", None)
+
+
+def test_bot_gate_blocks_scanner_before_redis():
+    """Obvious scanner/cli user-agents on Redis-backed paths must be blocked with
+    403 BEFORE any session/analytics Redis work, so a scan burst can't exhaust the
+    serverless Redis quota."""
+    import asyncio
+    import httpx
+    from httpx import ASGITransport
+    from reflex_app.preconsult.preconsult import api as app
+
+    async def run(ua):
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/api/session/init", json={}, headers={"X-API-KEY": "x", "User-Agent": ua})
+        return resp
+
+    blocked = asyncio.run(run("curl/8.0 (x86_64)"))
+    assert blocked.status_code == 403
+    assert "Forbidden" in blocked.text
+
+
+def test_bot_gate_allows_real_browser_user_agent():
+    """A normal browser user-agent must NOT be blocked by the conservative gate."""
+    import asyncio
+    import httpx
+    from httpx import ASGITransport
+    from reflex_app.preconsult.preconsult import api as app
+
+    async def run():
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/session/init",
+                json={},
+                headers={"X-API-KEY": "ci_test_key_123", "User-Agent": "Mozilla/5.0"},
+            )
+        return resp
+
+    resp = asyncio.run(run())
+    # Not blocked by the bot gate (200 from the endpoint/memory fallback). The
+    # only 403 on this path would be the gate, so asserting != 403 proves the
+    # browser UA was not rejected by the scanner filter.
+    assert resp.status_code != 403

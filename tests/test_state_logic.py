@@ -146,6 +146,26 @@ def test_setters_and_toggle_conditions():
     assert s.conditions == []
 
 
+@pytest.mark.asyncio
+async def test_analytics_only_fired_after_session_exists():
+    """Analytics events must not reach the Redis write path until a real
+    session exists, so bots that never start the flow can't burn quota."""
+    from unittest.mock import patch
+
+    with patch("reflex_app.preconsult.state.log_analytics_event", new_callable=AsyncMock) as mock_api:
+        s = State()
+        # No session_id yet -> event is dropped before the HTTP/REDIS call.
+        s.log_analytics_event("intake_started")
+        assert mock_api.await_count == 0
+
+        # With a real session_id the event is fanned out (create_task on the loop).
+        s.session_id = "sess-abc"
+        s.log_analytics_event("summary_generated")
+        # Allow the background task to be scheduled/awaited.
+        await asyncio.sleep(0.05)
+        assert mock_api.await_count >= 1
+        s.session_id = ""
+
 def test_toggle_family_history():
     s = State()
     s.toggle_family_history("cancer")

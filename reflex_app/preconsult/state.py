@@ -343,6 +343,11 @@ class State(rx.State):
         self.question_index = idx
 
     def log_analytics_event(self, event_name: str):
+        # Only emit analytics once a real (Redis-backed) session exists. Bots or
+        # casual visitors who never start the session flow must not reach the
+        # analytics write path, which otherwise burned serverless Redis quota.
+        if not self.session_id:
+            return
         import asyncio
         try:
             loop = asyncio.get_running_loop()

@@ -113,6 +113,9 @@ reflex_app/reflex.lock/
 scratch/
 .venv_test/
 
+# Local research / decision notes (not part of the product)
+FE_REWRITE_RESEARCH.md
+
 # Secrets
 .env
 .env.*

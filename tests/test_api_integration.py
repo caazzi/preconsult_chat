@@ -149,6 +149,19 @@ async def test_interview_stream_session_not_found(mock_chain, mock_rate, mock_ge
     assert response.status_code == 404
 
 @pytest.mark.asyncio
+@patch("preconsult.api.endpoints.check_rate_limit", return_value=True)
+async def test_interview_stream_redis_unavailable_not_expired(mock_rate):
+    """When Redis is down and there's no in-memory fallback, surface a real
+    redis_unavailable (503), NOT a misleading 'session expired' (404)."""
+    from preconsult.core.errors import RedisUnavailableError
+    with patch("preconsult.api.endpoints.get_session", new_callable=AsyncMock) as mock_get:
+        mock_get.side_effect = RedisUnavailableError("redis down")
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post("/api/interview-questions-stream", json={"session_id": "any"}, headers=HEADERS)
+    assert response.status_code == 503
+    assert response.json()["code"] == "redis_unavailable"
+
+@pytest.mark.asyncio
 @patch("preconsult.api.endpoints.generate_pdf_report_in_memory")
 @patch("preconsult.api.endpoints.get_session", new_callable=AsyncMock)
 @patch("preconsult.api.endpoints.check_rate_limit", return_value=True)

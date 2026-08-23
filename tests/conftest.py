@@ -20,6 +20,7 @@ def _reset_session_service_state():
 
     srv._redis_pool = None
     srv._redis_available = None
+    srv._memory_sessions.clear()
 
 
 def _reset_health_probe_cache():

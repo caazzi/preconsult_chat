@@ -8,12 +8,22 @@ from typing import Dict, Any, Optional
 from collections import OrderedDict
 import redis.asyncio as redis
 
+from preconsult.core.errors import RedisUnavailableError
+from preconsult.core.observability import log_event, new_request_id
+
 SESSION_TTL = 30 * 60
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
 _redis_pool = None
 _redis_available: Optional[bool] = None
+
+# Best-effort in-memory session store used when Redis is down/unavailable so a
+# transient storage outage degrades gracefully instead of hard-failing. Per
+# instance, so it cannot span workers — it is a resilience shim, not a store of
+# truth (the README's model keeps ephemeral session state server-side in Redis).
+_memory_sessions: Dict[str, Dict[str, Any]] = {}
+_memory_sessions_lock = asyncio.Lock()
 
 INCR_EXPIRE_SCRIPT = """
 local key = KEYS[1]
@@ -24,6 +34,17 @@ if count == 1 then
 end
 return count
 """
+
+
+def _mark_redis_down(where: str) -> None:
+    global _redis_available
+    _redis_available = False
+    log_event(
+        logging.WARNING,
+        "redis.unavailable",
+        request_id=new_request_id(),
+        where=where,
+    )
 
 
 class MemoryRateLimitStore:
@@ -105,39 +126,80 @@ async def create_session(data: Dict[str, Any]) -> str:
 
     client = get_redis()
     if client is not None:
-        await client.hset(key, mapping=_serialize(data))
-        await client.expire(key, SESSION_TTL)
-        logging.info(f"Criada sessao {session_id} no Redis")
+        try:
+            await client.hset(key, mapping=_serialize(data))
+            await client.expire(key, SESSION_TTL)
+            logging.info(f"Criada sessao {session_id} no Redis")
+            return session_id
+        except Exception as e:
+            _mark_redis_down("create_session")
+            logging.error(f"Redis indisponivel ao criar sessao, usando memoria: {e}")
     else:
         logging.info(f"Sessao {session_id} criada em memoria (Redis indisponivel)")
+
+    # Best-effort in-memory persistence so the same worker can read it back.
+    async with _memory_sessions_lock:
+        _memory_sessions[session_id] = dict(_serialize(data))
     return session_id
+
 
 async def get_session(session_id: str) -> Dict[str, Any]:
     if not session_id:
         return {}
 
     client = get_redis()
-    if client is None:
-        return {}
     key = f"session:{session_id}"
-    raw_data = await client.hgetall(key)
+
+    async def _memory_lookup() -> Dict[str, Any]:
+        async with _memory_sessions_lock:
+            raw = _memory_sessions.get(session_id)
+        return _deserialize(raw) if raw else {}
+
+    if client is None:
+        data = await _memory_lookup()
+        if not data:
+            # Redis unavailable and we have no in-memory copy: surface the real
+            # cause (redis_unavailable) rather than a misleading session_expired.
+            raise RedisUnavailableError()
+        return data
+
+    try:
+        raw_data = await client.hgetall(key)
+    except Exception as e:
+        _mark_redis_down("get_session")
+        logging.error(f"Redis indisponivel ao ler sessao, usando memoria: {e}")
+        data = await _memory_lookup()
+        if not data:
+            raise RedisUnavailableError() from e
+        return data
 
     if raw_data:
         await client.expire(key, SESSION_TTL)
         return _deserialize(raw_data)
-    return {}
+    # Genuine miss in Redis; fall back to the (per-worker) in-memory shim.
+    return await _memory_lookup()
+
 
 async def update_session(session_id: str, new_data: Dict[str, Any]) -> None:
     if not session_id or not new_data:
         return
 
     client = get_redis()
-    if client is None:
-        return
     key = f"session:{session_id}"
-    await client.hset(key, mapping=_serialize(new_data))
-    await client.expire(key, SESSION_TTL)
-    logging.debug(f"Atualizada sessao {session_id} no Redis: {list(new_data.keys())}")
+    if client is not None:
+        try:
+            await client.hset(key, mapping=_serialize(new_data))
+            await client.expire(key, SESSION_TTL)
+            logging.debug(f"Atualizada sessao {session_id} no Redis: {list(new_data.keys())}")
+            return
+        except Exception as e:
+            _mark_redis_down("update_session")
+            logging.error(f"Redis indisponivel ao atualizar sessao, usando memoria: {e}")
+
+    async with _memory_sessions_lock:
+        existing = _memory_sessions.get(session_id, {})
+        existing.update(_serialize(new_data))
+        _memory_sessions[session_id] = existing
 
 async def check_redis_health() -> bool:
     """Actively probe Redis connectivity (used by /health and reconnect logic).

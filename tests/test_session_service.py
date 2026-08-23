@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import patch, AsyncMock
+from preconsult.core.errors import RedisUnavailableError
 from preconsult.services.session_service import create_session, get_session, update_session
 
 @pytest.mark.asyncio
@@ -75,11 +76,25 @@ async def test_create_session_redis_unavailable(mock_get_redis):
 
 @pytest.mark.asyncio
 @patch("preconsult.services.session_service.get_redis", return_value=None)
-async def test_get_session_redis_unavailable(mock_get_redis):
-    result = await get_session("any-id")
-    assert result == {}
+async def test_get_session_redis_unavailable_raises_redis_unavailable(mock_get_redis):
+    # Redis is unavailable and there is no in-memory copy: surface the real
+    # cause (redis_unavailable), not a misleading session_expired.
+    with pytest.raises(RedisUnavailableError):
+        await get_session("any-id")
 
 
+@pytest.mark.asyncio
+async def test_get_session_returns_memory_fallback_when_redis_down():
+    import preconsult.services.session_service as srv
+
+    # Seed the in-memory shim as if create_session had run during an outage.
+    srv._memory_sessions["sess-x"] = {"chat": None}
+    try:
+        with patch("preconsult.services.session_service.get_redis", return_value=None):
+            result = await get_session("sess-x")
+        assert result == {"chat": None}
+    finally:
+        srv._memory_sessions.clear()
 @pytest.mark.asyncio
 @patch("preconsult.services.session_service.get_redis", return_value=None)
 async def test_update_session_redis_unavailable(mock_get_redis):

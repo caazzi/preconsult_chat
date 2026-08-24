@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_profile:
-        description: 'Deployment Profile (cost_optimized = 1 CPU/2GB/min=0/cpu-throttling [scale-to-zero, default], high_performance = 2 CPU/2GB/min=2/no-throttle)'
+        description: 'Deployment Profile (cost_optimized = 1 CPU/2GB/min=1/cpu-throttling [keeps one warm instance so the in-memory Engine.IO socket session survives, default], high_performance = 2 CPU/2GB/min=2/no-throttle)'
         required: true
         default: 'cost_optimized'
         type: choice
@@ -177,10 +177,20 @@ jobs:
           # request reset with 502 "Invalid HTTP request received". HTTP/1.1
           # (the `http1` port name, used by the verified-working revisions) is
           # what uvicorn serves cleanly.
+          # min-instances=1 on the default (cost_optimized) profile is a CORRECTNESS
+          # requirement, not a latency nice-to-have. The app runs a SINGLE gunicorn
+          # worker with no Redis token manager, so the whole Engine.IO session store
+          # lives in one worker's memory. With scale-to-zero (min=0) the instance is
+          # recycled at idle, so the browser's already-connected socket POSTs its
+          # next state event ("Start Preparing") to a fresh instance with no session,
+          # the server must 400 it, and reflex's client silently drops it — the
+          # wizard never advances. Holding one warm instance keeps the socket alive,
+          # and --session-affinity keeps the browser on it. Cost bounded to one idle
+          # 1 vCPU / 2Gi instance.
           if [ "$PROFILE" = "high_performance" ]; then
             echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=10 --min-instances=2 --concurrency=40 --cpu=2 --memory=2Gi --no-cpu-throttling" >> "$GITHUB_OUTPUT"
           else
-            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=5 --min-instances=0 --concurrency=80 --cpu=1 --memory=2Gi --cpu-throttling" >> "$GITHUB_OUTPUT"
+            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=5 --min-instances=1 --concurrency=80 --cpu=1 --memory=2Gi --cpu-throttling" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy to Cloud Run

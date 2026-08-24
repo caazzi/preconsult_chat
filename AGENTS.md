@@ -20,11 +20,16 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   1. Commit + push to `main` (CI auto-deploys on merge), **or** trigger
      **GitHub Actions → PreConsult CI/CD → *Run workflow*** (workflow_dispatch).
   2. Confirm the deployed revision passes a smoke test (e.g. `GET /health` → 200) before marking done.
-- **The `cost_optimized` profile (the default) runs `--min-instances 0` (scale-to-zero).** The
-  container only bills while serving requests; idle instances scale down and stop billing. Do not
-  reintroduce `--min-instances >= 1` in the default profile — it sustains a 24/7 vCPU/RAM charge
-  for no traffic. (`high_performance` intentionally keeps `min=2` for latency, but is opt-in only.)
-  The CI smoke test warms the cold-started instance, so a scaled-to-zero deploy still passes.
+- **The `cost_optimized` profile (the default) runs `--min-instances 1`.** This is a CORRECTNESS
+  requirement, not a latency choice: the app runs a **single** gunicorn worker with no Redis token
+  manager, so the whole Engine.IO session store lives in one worker's in-memory. With scale-to-zero
+  (`min-instances 0`) the instance is recycled at idle, and a browser that was connected then comes
+  back POSTs its next state event ("Start Preparing") to a fresh instance with no session — the
+  server 400s it and reflex's client silently drops the event ("nothing happens"). Holding one warm
+  instance keeps the socket alive; `--session-affinity` keeps the client pinned to it. This sustains
+  an idle 24/7 1 vCPU / 2Gi charge as the deliberate, bounded cost of reliable state delivery. Do
+  NOT drop this back to `min-instances 0` unless the single-worker in-memory session design is also
+  reworked. (`high_performance` intentionally keeps `min=2` for latency, but is opt-in only.)
 - If you must deploy an already-built CI image without rebuilding, use
   `scripts/deploy_backend.sh cost_optimized [image_ref]`. This script never runs `--source`.
 

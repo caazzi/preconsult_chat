@@ -547,28 +547,29 @@ def test_rxconfig_does_not_use_redis_for_state(monkeypatch):
     assert rxconfig.config.redis_url is None
 
 
-def test_rxconfig_polling_transport_is_default(monkeypatch):
-    # Cloud Run's frontend offers HTTP/2 and cannot upgrade a browser's
-    # WebSocket over it (Google issue 194314805), which breaks Reflex events.
-    # The event transport must default to HTTP long-polling so "Start
-    # Preparing" and all state mutations work on the deployed host.
+def test_rxconfig_websocket_transport_is_default(monkeypatch):
+    # We deploy with `--no-use-http2`, so the frontend speaks HTTP/1.1, over which
+    # the browser CAN upgrade to a WebSocket (the old "cannot upgrade from HTTP/2"
+    # caveat no longer applies). Long-polling over Cloud Run proved unstable, so
+    # the event transport defaults to websocket for "Start Preparing" and all
+    # state mutations on the deployed host.
     import reflex_app.rxconfig as rxconfig
     monkeypatch.delenv("REFLEX_TRANSPORT", raising=False)
     monkeypatch.delenv("REFLEX_API_URL", raising=False)
 
-    assert rxconfig.config.transport == "polling"
+    assert rxconfig.config.transport == "websocket"
     assert rxconfig.config.api_url == "https://pre-consult.org"
 
 
 def test_rxconfig_transport_is_env_overridable(monkeypatch):
-    # Allow rolling back to websocket (or a staging origin) without a code
+    # Allow rolling back to polling (or a staging origin) without a code
     # change via REFLEX_TRANSPORT / REFLEX_API_URL.
-    monkeypatch.setenv("REFLEX_TRANSPORT", "websocket")
+    monkeypatch.setenv("REFLEX_TRANSPORT", "polling")
     monkeypatch.setenv("REFLEX_API_URL", "https://staging.example.com")
     import importlib
     import reflex_app.rxconfig as rxconfig
     importlib.reload(rxconfig)
-    assert rxconfig.config.transport == "websocket"
+    assert rxconfig.config.transport == "polling"
     assert rxconfig.config.api_url == "https://staging.example.com"
 
 

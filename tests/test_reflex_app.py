@@ -425,44 +425,71 @@ def test_stale_session_keyerror_returns_400_not_500():
     """A POST to /_event with a session the server has already closed raises
     KeyError('Session is disconnected') inside python-engineio's unguarded POST
     branch. That must be surfaced as a clean recoverable 400 (so the client
-    re-handshakes) rather than an unhandled 500 that breaks the UI."""
+    re-handshakes) rather than an unhandled 500 that breaks the UI.
+
+    This reproduces the PRODUCTION layering: the recovery middleware is a Starlette
+    user middleware on app._api, i.e. it lives INSIDE the inner ServerErrorMiddleware
+    that would otherwise convert the KeyError into a 500 before any outer wrapper
+    could intervene. Building an outer-middleware-only stack (as this test used to)
+    masked the double-send bug that 500'd in production."""
     import asyncio
 
     import httpx
     from httpx import ASGITransport
+    from starlette.applications import Starlette
+    from starlette.routing import Route
     from preconsult.core.observability import reset_counters, snapshot_counters
-    from reflex_app.preconsult.preconsult import _RequestIDMiddleware
+    from reflex_app.preconsult.preconsult import (
+        _RequestIDMiddleware,
+        _StaleSocketSessionMiddleware,
+    )
 
-    async def boom(scope, receive, send):
+    async def boom_route(request):
         # Simulates engineio/_get_socket on a closed session.
         raise KeyError("Session is disconnected")
 
-    app = _RequestIDMiddleware(boom)
+    async def boom_other(request):
+        raise KeyError("some other key")
 
-    async def run():
+    def build_stack(route_handler):
+        # Mirror app._api: Starlette app (with ServerErrorMiddleware) + the
+        # recovery middleware added via add_middleware + the routes. The browser
+        # polls the trailing-slash mount /_event/ (reflex mounts the EngineIO
+        # app there; the bare /_event path 307-redirects to it in production).
+        inner = Starlette(routes=[Route("/_event/", route_handler, methods=["POST"])])
+        inner.add_middleware(_StaleSocketSessionMiddleware)
+        return _RequestIDMiddleware(inner)
+
+    async def run(stack, path):
         reset_counters()
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/_event/?EIO=4&transport=polling&sid=stale-123")
+        async with httpx.AsyncClient(transport=ASGITransport(app=stack), base_url="http://test") as client:
+            resp = await client.post(path)
         return resp
 
-    resp = asyncio.run(run())
+    stack = build_stack(boom_route)
+    resp = asyncio.run(run(stack, "/_event/?EIO=4&transport=polling&sid=stale-123"))
     assert resp.status_code == 400
     assert b"Invalid session" in resp.content
     counters = snapshot_counters()
     assert counters.get("socket.session_invalid", 0) == 1
-    # Must not be counted as a generic HTTP 500.
+    # Must not be counted as a generic HTTP 500, nor mislabelled as a protocol
+    # handshake rejection.
     assert counters.get("http.status.500", 0) == 0
+    assert counters.get("http.status.400", 0) == 1
+    assert counters.get("socket.handshake_rejected", 0) == 0
 
     # Non-/_event paths with an unrelated KeyError still propagate unchanged
     # (httpx ASGITransport surfaces the exception rather than a 500 response,
     # which is exactly the intent: only the recoverable socket case is handled).
-    async def boom_other(scope, receive, send):
+    async def boom_unrelated(request):
         raise KeyError("some other key")
 
-    app2 = _RequestIDMiddleware(boom_other)
-
+    stack3 = Starlette(routes=[Route("/_event/", boom_route, methods=["POST"]),
+                               Route("/api/foo", boom_unrelated, methods=["POST"])])
+    stack3.add_middleware(_StaleSocketSessionMiddleware)
+    stack3 = _RequestIDMiddleware(stack3)
     async def run2():
-        async with httpx.AsyncClient(transport=ASGITransport(app=app2), base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=ASGITransport(app=stack3), base_url="http://test") as client:
             await client.post("/api/foo")
 
     with pytest.raises(KeyError):

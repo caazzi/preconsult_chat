@@ -87,6 +87,17 @@ These are reflex-specific rules that WILL bite if ignored:
   `ai_upstream_error`, `service_unavailable`, `internal_error`). Do not rename/remove codes casually —
   `tests/test_error_handlers.py` and `tests/test_api_integration.py` assert them, and CI/alerts key
   on them. Responses must stay generic (never leak exception internals or user values).
+- Stale Engine.IO sessions ("Start Preparing does nothing") surface as a `500` on `/_event` (counters
+  `socket.session_invalid` + `http.status.500`), surfacing in the UI as "Cannot connect to server:
+  xhr post error". The recovery **must live in a Starlette user middleware registered on `app._api`
+  via `add_middleware` (`_StaleSocketSessionMiddleware`), i.e. INSIDE `ServerErrorMiddleware`**. It
+  must NOT be attempted in `_RequestIDMiddleware` (which wraps `app._api` and is OUTSIDE reflex's
+  `ServerErrorMiddleware`) — by the time an exception reaches that outer layer Starlette has already
+  emitted the `500`, so `send()`ing a clean `400` there double-sends and raises
+  `RuntimeError: ... after response already completed` (older tests wrapped `_RequestIDMiddleware`
+  directly and missed this). `/health/metrics` must show `socket.session_invalid` paired with
+  `http.status.400` (never 500). Keep `socket.handshake_rejected` separate: a recoverable stale
+  session is `session_invalid`, not a protocol mismatch.
 
 ## Redis is reserved for real users (free tier)
 

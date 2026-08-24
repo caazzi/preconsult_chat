@@ -1673,6 +1673,79 @@ def _sentry_throttled_event(event_name: str, **context) -> None:
             pass
 
 
+class _StaleSocketSessionMiddleware:
+    """Turn a stale-session EngineIO POST into a recoverable 400, not a 500.
+
+    This runs as a Starlette *user* middleware registered on ``app._api`` via
+    ``add_middleware``, i.e. it is layered INSIDE reflex's ServerErrorMiddleware.
+    That placement matters: python-engineio's unguarded POST branch
+    (async_server.py:328) raises ``KeyError('Session is disconnected')`` when a
+    browser long-polls an event with a ``sid`` the server has already drained
+    (idle ping_timeout, e.g. after a scale-to-zero cold start). If that exception
+    escapes, Starlette's ServerErrorMiddleware — which is OUTER to this
+    middleware — converts it into an HTTP 500, surfacing in the UI as
+    "Cannot connect to server: xhr post error" and freezing the wizard on a
+    click such as "Start Preparing".
+
+    Catching here (inner to ServerErrorMiddleware) means the response has not
+    been finalized yet, so we can return a clean 400 that the engine.io client
+    re-handshakes on. We flag the scope so the outer _RequestIDMiddleware does not
+    also attribute this 400 to a protocol mismatch (socket.handshake_rejected);
+    a recoverable stale-session is a distinct tell (socket.session_invalid).
+    """
+
+    _SCOPE_RECOVERED = "socket.session_recovery"
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        try:
+            await self.app(scope, receive, send)
+        except KeyError as exc:
+            path = scope.get("path", "")
+            method = scope.get("method", "")
+            if path.startswith("/_event") and "session" in str(exc).lower():
+                scope[self._SCOPE_RECOVERED] = True
+                _inc("socket.session_invalid")
+                log_event(
+                    logging.WARNING,
+                    "socket.session_invalid",
+                    request_id=scope.get("request_id") or new_request_id(),
+                    method=method,
+                    path=path[:200],
+                    reason=str(exc)[:120],
+                )
+                _sentry_throttled_event(
+                    "socket.session_invalid",
+                    request_id=scope.get("request_id") or new_request_id(),
+                    path=path[:200],
+                    method=method,
+                    reason=str(exc)[:120],
+                )
+                # Respond directly so the inner error is not double-sent by
+                # ServerErrorMiddleware (which stays "start not sent" because we
+                # return normally here).
+                body = b"Invalid session"
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 400,
+                        "headers": [
+                            (b"content-type", b"text/plain; charset=UTF-8"),
+                            (b"x-request-id", (scope.get("request_id") or new_request_id()).encode("ascii")),
+                        ],
+                    }
+                )
+                await send({"type": "http.response.body", "body": body})
+                return
+            raise
+
+
 class _RequestIDMiddleware:
     """Stamp an X-Request-ID on every response and emit a PHI-safe request log.
 
@@ -1728,21 +1801,25 @@ class _RequestIDMiddleware:
                 # Only path + status are captured (no query, headers or body),
                 # preserving the zero-PHI guarantee.
                 if path.startswith("/_event") and status == 400:
-                    _inc("socket.handshake_rejected")
-                    log_event(
-                        logging.WARNING,
-                        "socket.handshake_rejected",
-                        request_id=request_id,
-                        path=safe_path,
-                        status=status,
-                        reason="engineio_protocol_or_transport",
-                    )
-                    _sentry_throttled_event(
-                        "socket.handshake_rejected",
-                        request_id=request_id,
-                        path=safe_path,
-                        status=status,
-                    )
+                    # A recoverable stale-session 400 is produced (and counted)
+                    # by the inner _StaleSocketSessionMiddleware; do not also
+                    # misattribute it as a protocol handshake rejection.
+                    if not scope.get(_StaleSocketSessionMiddleware._SCOPE_RECOVERED):
+                        _inc("socket.handshake_rejected")
+                        log_event(
+                            logging.WARNING,
+                            "socket.handshake_rejected",
+                            request_id=request_id,
+                            path=safe_path,
+                            status=status,
+                            reason="engineio_protocol_or_transport",
+                        )
+                        _sentry_throttled_event(
+                            "socket.handshake_rejected",
+                            request_id=request_id,
+                            path=safe_path,
+                            status=status,
+                        )
                 elif path.startswith("/assets") and status == 404:
                     _inc("static.asset_404")
                     log_event(
@@ -1756,43 +1833,13 @@ class _RequestIDMiddleware:
 
         try:
             await self.app(scope, receive, send_with_id)
-        except KeyError as exc:
-            # python-engineio's POST branch (async_server.py:328) calls
-            # _get_socket(sid) OUTSIDE its try/except (unlike the GET branch).
-            # When a browser POSTs an event with a session the server has already
-            # closed (idle ping_timeout) but is still in the socket dict, that
-            # raises KeyError('Session is disconnected') which is not an
-            # EngineIOError and so escapes unhandled as an HTTP 500 — breaking the
-            # UI with "Cannot connect to server: xhr post error" on /_event.
-            # Translate that specific, recoverable case into a clean 400 so the
-            # client's engine.io re-handshakes and gets a fresh session; any other
-            # 500 is left to surface so it stays alarmable.
-            if path.startswith("/_event") and "session" in str(exc).lower():
-                _inc("socket.session_invalid")
-                log_event(
-                    logging.WARNING,
-                    "socket.session_invalid",
-                    request_id=request_id,
-                    method=method,
-                    path=safe_path,
-                    reason=str(exc)[:120],
-                )
-                # Respond directly (not via send_with_id, whose /_event-400 branch
-                # would mislabel this recovery as a protocol handshake rejection).
-                body = b"Invalid session"
-                await send(
-                    {
-                        "type": "http.response.start",
-                        "status": 400,
-                        "headers": [
-                            (b"content-type", b"text/plain; charset=UTF-8"),
-                            (b"x-request-id", request_id.encode("ascii")),
-                        ],
-                    }
-                )
-                await send({"type": "http.response.body", "body": body})
-                status_holder["status"] = 400
-                return
+        except KeyError:
+            # Stale-session recovery is handled by the inner
+            # _StaleSocketSessionMiddleware (layered inside ServerErrorMiddleware,
+            # where the response has not been finalized yet). By the time an
+            # exception reaches this outer layer the ASGI response lifecycle may
+            # already be complete, so re-raising (rather than attempting a second
+            # send) is the only safe behaviour here.
             raise
         finally:
             status = status_holder.get("status")
@@ -1898,5 +1945,13 @@ class _BotGateMiddleware:
 
 
 app._api.router.lifespan_context = app._run_lifespan_tasks
+
+# Recover stale Engine.IO sessions as clean 400s instead of 500s. Must be a
+# Starlette user middleware on app._api (i.e. INSIDE ServerErrorMiddleware) so
+# the KeyError from python-engineio's unguarded POST branch is caught before
+# ServerErrorMiddleware finalizes it as an HTTP 500 (the "Cannot connect to
+# server: xhr post error" that froze the wizard on "Start Preparing").
+app._api.add_middleware(_StaleSocketSessionMiddleware)
+
 api = _BotGateMiddleware(_RequestIDMiddleware(app._context_middleware(app._api)))
 

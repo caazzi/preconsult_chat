@@ -103,6 +103,15 @@ These are reflex-specific rules that WILL bite if ignored:
   directly and missed this). `/health/metrics` must show `socket.session_invalid` paired with
   `http.status.400` (never 500). Keep `socket.handshake_rejected` separate: a recoverable stale
   session is `session_invalid`, not a protocol mismatch.
+- The server-side 400 recovery alone does NOT restore a dropped event: reflex's client
+  (`socket.emit`, `reconnection:false`, no `error`-handler on an already-connected socket) silently
+  drops a state event whose POST returns `400 "Invalid session"`. A **tracked client patch** fixes
+  this: `reflex_app/web_utils/state.js` re-queues the most recent `reflex___state*` event once on a
+  socket `error` and forces a fresh handshake (replay). `.web/` and `.venv/` are gitignored and
+  re-materialized on each clean build, so the patch MUST be applied to the installed reflex-base
+  template before `reflex export` — the Dockerfile and `scripts/run_e2e.sh` both `cp` the tracked
+  file over the root reflex-base template (`reflex_base/.templates/web/utils/state.js`). On any
+  reflex upgrade, re-port the patch against the new template (it is pinned to `reflex==0.9.8.post1`).
 
 ## Redis is reserved for real users (free tier)
 

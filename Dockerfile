@@ -23,6 +23,14 @@ COPY . .
 # `Building preconsult @ file:///app` CPU work that happened on every cold start.
 RUN uv sync --frozen
 
+# Apply the tracked reflex-client socket-replay patch onto the reflex-base web
+# template so `reflex export` compiles it into the frontend bundle. Without
+# this, a fresh .web (re-materialized from the installed reflex package on each
+# clean build) would drop the dead-session event-replay fix. Keep state.js in
+# sync with the reflex-base template for the pinned reflex version (0.9.8.post1).
+RUN cp /app/reflex_app/web_utils/state.js \
+       /app/.venv/lib/python3.11/site-packages/reflex_base/.templates/web/utils/state.js
+
 # Build Reflex frontend
 WORKDIR /app/reflex_app
 ARG API_URL="https://pre-consult.org"

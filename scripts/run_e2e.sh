@@ -29,7 +29,18 @@ BASE="http://${HOST}:${PORT}"
 
 echo "== PreConsult Playwright E2E (backend=${BASE}, workers=${WORKERS}) =="
 
-# 1. Build the frontend for the local backend origin so the baked client's
+# 1. Apply the tracked reflex-client socket-replay patch onto the installed
+#    reflex-base template (the live .web may otherwise be a re-materialized,
+#    unpatched copy). Must mirror the Dockerfile hook.
+TPL="${ROOT}/.venv/lib/python3.11/site-packages/reflex_base/.templates/web/utils/state.js"
+if [ -f "$TPL" ]; then
+  cp "${ROOT}/reflex_app/web_utils/state.js" "$TPL"
+  echo "--- applied reflex-client socket-replay patch ---"
+else
+  echo "!! reflex-base template not found at $TPL; export below will use the unpatched client"
+fi
+
+# 2. Build the frontend for the local backend origin so the baked client's
 #    EVENT/PING/API URLs point here (not at pre-consult.org).
 echo "--- building frontend for ${BASE} ---"
 (
@@ -38,7 +49,7 @@ echo "--- building frontend for ${BASE} ---"
     BUILD_MODE=true "${ROOT}/.venv/bin/python" -m reflex export --frontend-only --no-zip
 )
 
-# 2. Ensure Playwright browsers are present (no-op if already installed).
+# 3. Ensure Playwright browsers are present (no-op if already installed).
 echo "--- ensure Playwright system deps + browser ---"
 "${ROOT}/.venv/bin/python" -m playwright install chromium >/dev/null 2>&1 || true
 

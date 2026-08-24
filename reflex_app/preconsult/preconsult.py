@@ -1712,6 +1712,15 @@ class _StaleSocketSessionMiddleware:
             if path.startswith("/_event") and "session" in str(exc).lower():
                 scope[self._SCOPE_RECOVERED] = True
                 _inc("socket.session_invalid")
+                # Extract the engine.io sid from the query string (if present).
+                # Random short session id, not user content; PHI-safe. Truncated.
+                sid = None
+                qs = scope.get("query_string", b"")
+                if qs:
+                    for part in qs.decode("latin-1", "replace").split("&"):
+                        if part.startswith("sid="):
+                            sid = part.split("=", 1)[1][-8:]  # tail only
+                            break
                 log_event(
                     logging.WARNING,
                     "socket.session_invalid",
@@ -1719,6 +1728,7 @@ class _StaleSocketSessionMiddleware:
                     method=method,
                     path=path[:200],
                     reason=str(exc)[:120],
+                    sid=sid,
                 )
                 _sentry_throttled_event(
                     "socket.session_invalid",

@@ -59,7 +59,7 @@ COPY --from=builder /app /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH="/app/src" \
-    REFLEX_TRANSPORT="polling"
+    REFLEX_TRANSPORT="websocket"
 
 # Expose ports (Reflex default is 8000 for backend, 3000 for frontend, 
 # but in prod it's consolidated or served differently)

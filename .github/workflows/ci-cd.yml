@@ -158,7 +158,13 @@ jobs:
           tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
           build-args: |
             API_URL=https://pre-consult.org
-            REFLEX_TRANSPORT=polling
+            # TRIAL: WebSocket transport. We deploy with --no-use-http2 (HTTP/1.1),
+            # where a browser can upgrade to a WebSocket (the AGENTS.md 'cannot
+            # upgrade' warning was for HTTP/2). Long-polling over Cloud Run has been
+            # torn down between polls (endless engine.io re-handshake, no state
+            # delta); if GFE serves the WS upgrade this removes the entire socket
+            # instability. Revert to `polling` if GFE will not serve WS.
+            REFLEX_TRANSPORT=websocket
           cache-from: type=gha
           # Scope the write cache to this run's SHA so the shared `main` scope
           # does not accumulate unbounded buildx blobs run over run (each push
@@ -330,7 +336,8 @@ jobs:
       - name: Run Multi-Stage Smoke Tests
         env:
           BASE_URL: ${{ steps.url.outputs.url }}
-          REFLEX_TRANSPORT: polling
+          # Must match the deployed transport (WebSocket trial).
+          REFLEX_TRANSPORT: websocket
           EXPECTED_REVISION: ${{ needs.deploy.outputs.latest_ready_revision }}
         run: |
           # 1. Warm-up and Liveness check

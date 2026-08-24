@@ -8,13 +8,12 @@ config = rx.Config(
     # `localhost`). The CI build arg `API_URL` is NOT consumed by Reflex; the
     # control field is this config attribute (or `REFLEX_API_URL`).
     api_url=os.environ.get("REFLEX_API_URL", "https://pre-consult.org"),
-    # Reflex event transport. The project is served on Cloud Run, whose frontend
-    # always offers HTTP/2 to browsers but cannot upgrade a browser's HTTP/2
-    # connection to a WebSocket (Google issue 194314805). HTTP long-polling
-    # avoids WebSockets entirely and works over HTTP/2, so we default to it to
-    # keep the event channel functional. Defaultable/reversible via
-    # `REFLEX_TRANSPORT=websocket` without a code change.
-    transport=os.environ.get("REFLEX_TRANSPORT", "polling"),
+    # Reflex event transport. We deploy with `--no-use-http2`, so the browser
+    # talks HTTP/1.1 and CAN upgrade to a WebSocket there (the old "cannot upgrade
+    # from HTTP/2" warning applied to the pre-`--no-use-http2` setup). Long-polling
+    # over Cloud Run proved unstable (endless re-handshake, no state delta), so we
+    # trial `websocket`. Defaultable/reversible via `REFLEX_TRANSPORT`.
+    transport=os.environ.get("REFLEX_TRANSPORT", "websocket"),
     # IMPORTANT: Reflex state/token management intentionally does NOT use Redis.
     # Pointing Reflex at REDIS_URL spun up its RedisTokenManager (continuous
     # keyspace/pubsub + per-socket token ops) on every /_event connect, burning

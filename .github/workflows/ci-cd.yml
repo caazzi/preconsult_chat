@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_profile:
-        description: 'Deployment Profile (cost_optimized = 1 CPU/2GB/min=1/cpu-throttling [Option B], high_performance = 2 CPU/2GB/min=2/no-throttle)'
+        description: 'Deployment Profile (cost_optimized = 1 CPU/2GB/min=0/cpu-throttling [scale-to-zero, default], high_performance = 2 CPU/2GB/min=2/no-throttle)'
         required: true
         default: 'cost_optimized'
         type: choice
@@ -160,7 +160,11 @@ jobs:
             API_URL=https://pre-consult.org
             REFLEX_TRANSPORT=polling
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Scope the write cache to this run's SHA so the shared `main` scope
+          # does not accumulate unbounded buildx blobs run over run (each push
+          # used to append ~1GB of layer blobs to the default scope, driving the
+          # Actions cache to >10GB). Reads still hit the prior stable cache.
+          cache-to: type=gha,mode=max,scope=${{ github.sha }}
 
       - name: Set Deployment Flags for Profile
         id: profile
@@ -176,7 +180,7 @@ jobs:
           if [ "$PROFILE" = "high_performance" ]; then
             echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=10 --min-instances=2 --concurrency=40 --cpu=2 --memory=2Gi --no-cpu-throttling" >> "$GITHUB_OUTPUT"
           else
-            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=5 --min-instances=1 --concurrency=80 --cpu=1 --memory=2Gi --cpu-throttling" >> "$GITHUB_OUTPUT"
+            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=5 --min-instances=0 --concurrency=80 --cpu=1 --memory=2Gi --cpu-throttling" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy to Cloud Run

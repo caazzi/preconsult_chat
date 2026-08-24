@@ -67,7 +67,9 @@ if [ "$PROFILE" = "high_performance" ]; then
 else
     # 2Gi guards against worker SIGABRT/OOM during streaming LLM/PDF sessions
     # (2 Uvicorn workers x 4 threads compete for the 1Gi budget otherwise).
-    PROFILE_FLAGS="--min-instances 1 --max-instances 5 --concurrency 60 --cpu 1 --memory 2Gi --cpu-throttling"
+    # min-instances 0 (scale-to-zero): container only bills while serving; the
+    # health probe / first request warms it. Keep 0 unless opt-in high_performance.
+    PROFILE_FLAGS="--min-instances 0 --max-instances 5 --concurrency 60 --cpu 1 --memory 2Gi --cpu-throttling"
 fi
 
 echo "🐳 Deploying image to Cloud Run ($SERVICE_NAME in $PROJECT_ID)..."

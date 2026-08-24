@@ -114,7 +114,7 @@ With low real-user volume this keeps the free tier comfortably within budget.
 | PDF | ReportLab 5.0.0 (in-memory, deterministic, localized EN/PT) |
 | UI/UX | Glassmorphism, mobile-first, 48px touch targets, prefers-reduced-motion, EN/PT i18n |
 | Monitoring | Sentry SDK (2.65.0, PII-safe, env/release-tagged) + structured, PHI-safe request logging + stable error codes + `GET /health`, `/health/live`, `/health/ready` |
-| Deployment | GCP Cloud Run, us-central1 (two profiles: `high_performance` / `standard`, selectable via CI/CD) |
+| Deployment | GCP Cloud Run, us-central1 (two profiles: `cost_optimized` [default, scale-to-zero `min=0`] / `high_performance` [`min=2`], selectable via CI/CD) |
 | CI/CD | GitHub Actions (tests + WIF auth + Cloud Run deploy) — **exclusive deploy path** (see Deployment section) |
 
 ---
@@ -271,6 +271,13 @@ Current categories:
 >
 > Agents (and humans): if the change affects anything the container runs, the change is NOT "done"
 > until it has gone through the CI/CD deploy path and the served revision passes a smoke test.
+>
+> **Scaling & cost:** the default `cost_optimized` profile deploys with `--min-instances 0`
+> (scale-to-zero) — instances remain within the `max-instances=5` cap, cold-start on idle and stop
+> billing when unused, so the container only charges while actually serving requests. Keep
+> `min-instances` at `0` unless you explicitly opt into the `high_performance` profile (which
+> intentionally holds `min=2` for latency). A user request (or the CI smoke test) warms a
+> cold-started instance, so a scaled-to-zero deploy still satisfies liveness checks.
 
 ### Manual helper (CI-built images only)
 

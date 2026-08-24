@@ -20,6 +20,11 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   1. Commit + push to `main` (CI auto-deploys on merge), **or** trigger
      **GitHub Actions → PreConsult CI/CD → *Run workflow*** (workflow_dispatch).
   2. Confirm the deployed revision passes a smoke test (e.g. `GET /health` → 200) before marking done.
+- **The `cost_optimized` profile (the default) runs `--min-instances 0` (scale-to-zero).** The
+  container only bills while serving requests; idle instances scale down and stop billing. Do not
+  reintroduce `--min-instances >= 1` in the default profile — it sustains a 24/7 vCPU/RAM charge
+  for no traffic. (`high_performance` intentionally keeps `min=2` for latency, but is opt-in only.)
+  The CI smoke test warms the cold-started instance, so a scaled-to-zero deploy still passes.
 - If you must deploy an already-built CI image without rebuilding, use
   `scripts/deploy_backend.sh cost_optimized [image_ref]`. This script never runs `--source`.
 

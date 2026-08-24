@@ -211,6 +211,13 @@ jobs:
             # translation in _RequestIDMiddleware is the real fix; this lowers the
             # frequency of the racy case.)
             REFLEX_SOCKET_TIMEOUT=600
+            # Shorten the engine.io server->client ping interval so the long-poll
+            # is refreshed frequently enough to outrun any proxy/idle keepalive
+            # between polls. Default is 25s; the Google Frontend/HTTP1 poll reset we
+            # observed (endless fresh handshake, no state delta) is consistent with a
+            # between-poll teardown longer than ~25s — a more frequent ping keeps the
+            # connection's sid alive server-side so state deltas get delivered.
+            REFLEX_SOCKET_INTERVAL=10
           secrets: |
             REDIS_URL=REDIS_URL:latest
             PRECONSULT_API_KEY=SECUREMED_API_KEY:latest

@@ -45,7 +45,7 @@ fi
 echo "--- building frontend for ${BASE} ---"
 (
   cd reflex_app
-  REFLEX_API_URL="${BASE}" REFLEX_TRANSPORT="${REFLEX_TRANSPORT:-polling}" \
+  REFLEX_API_URL="${BASE}" REFLEX_TRANSPORT="${REFLEX_TRANSPORT:-websocket}" \
     BUILD_MODE=true "${ROOT}/.venv/bin/python" -m reflex export --frontend-only --no-zip
 )
 

@@ -1524,24 +1524,41 @@ class CustomStaticFiles(StaticFiles):
         return response
 
 async def probe_event_channel() -> str:
-    """Confirm the Reflex event socket (/_event/) answers a handshake.
+    """Confirm the Reflex event socket is reachable.
 
-    Performs an in-process Engine.IO handshake and reports only a status string
-    (``ok`` / ``unavailable``). PHI-safe: never returns body content. This is the
-    same probe the CI smoke test makes, so /health and CI agree on whether the
-    interactive state channel is reachable.
+    For the ``polling`` transport this performs an in-process Engine.IO HTTP
+    handshake and reports ``ok``/``unavailable``. For the ``websocket`` transport
+    an in-process HTTP probe cannot complete a real WebSocket upgrade (the engine
+    rejects a plain HTTP GET with ``400 Invalid websocket upgrade``), so instead
+    we confirm the socket engine is configured to serve ``websocket`` — the actual
+    interactive channel is asserted by the browser-based E2E (test_socket_session)
+    and the CI smoke test's real client. PHI-safe: only a status string.
     """
-    import httpx
-    from httpx import ASGITransport
+    from reflex_app import rxconfig
 
+    if rxconfig.config.transport != "websocket":
+        import httpx
+        from httpx import ASGITransport
+
+        try:
+            async with httpx.AsyncClient(
+                transport=ASGITransport(app=app._api), base_url="http://health"
+            ) as client:
+                resp = await client.get("/_event/?EIO=4&transport=polling")
+            body = resp.content or b""
+            if resp.status_code == 200 and body.startswith(b"0"):
+                return "ok"
+        except Exception:
+            pass
+        return "unavailable"
+
+    # websocket transport: verify the engine advertises the websocket transport.
     try:
-        async with httpx.AsyncClient(
-            transport=ASGITransport(app=app._api), base_url="http://health"
-        ) as client:
-            resp = await client.get("/_event/?EIO=4&transport=polling")
-        body = resp.content or b""
-        if resp.status_code == 200 and body.startswith(b"0"):
-            return "ok"
+        sio = getattr(app, "sio", None)
+        if sio is not None:
+            transports = getattr(sio, "eio", None).transports
+            if "websocket" in transports:
+                return "ok"
     except Exception:
         pass
     return "unavailable"

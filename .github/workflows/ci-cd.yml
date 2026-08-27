@@ -406,13 +406,67 @@ jobs:
             # upgrade, so use Node's built-in WebSocket (present on the runner).
             # First send an Engine.IO open packet and require a handshake reply,
             # proving the state socket is reachable ahead of the SPA catch-all.
+            #
+            # The first upgrade after a cold start / instance warm-up can take
+            # much longer than a steady-state open (a warm HTTP /health returns
+            # in <1s while the instance's first WS upgrade can stall several
+            # seconds behind the Google Frontend). A single 12s attempt has
+            # proven flaky in CI even though the WS genuinely opens (the server
+            # logs a 101) — so retry the upgrade across several fresh
+            # connections and only fail when all attempts time out or error.
             node - <<'NJS'
           const url = process.env.BASE_URL + "/_event/?EIO=4&transport=websocket";
-          const ws = new WebSocket(url);
-          const timer = setTimeout(() => { console.error("::error::websocket open timed out"); process.exit(1); }, 12000);
-          ws.onopen = () => { clearTimeout(timer); ws.send("40/"); setTimeout(() => process.exit(0), 500); };
-          ws.onmessage = (e) => { console.log("websocket message:", String(e.data).slice(0, 80)); };
-          ws.onerror = (e) => { console.error("::error::Reflex websocket upgrade failed:", (e && e.message) || "WS error"); clearTimeout(timer); process.exit(1); };
+          const MAX_ATTEMPTS = 5;
+          const ATTEMPT_TIMEOUT_MS = 15000;
+          let attempt = 0;
+          let settled = false;
+          function tryConnect() {
+            if (settled) return;
+            attempt++;
+            let ws;
+            try { ws = new WebSocket(url); } catch (e) { return retry("new failed: " + e.message); }
+            const timer = setTimeout(() => {
+              if (settled) return;
+              console.log("websocket attempt " + attempt + ": open timed out (" + ATTEMPT_TIMEOUT_MS + "ms)");
+              try { ws.close(); } catch (_) {}
+              retry("open timed out");
+            }, ATTEMPT_TIMEOUT_MS);
+            ws.onopen = () => {
+              if (settled) return;
+              console.log("websocket attempt " + attempt + ": OPEN");
+              // Prove the state socket speaks Engine.IO v4: expect the open
+              // packet `0{"sid":...}`; sending 40/ completes the socket.io (not
+              // engine.io) negotiation so a `40{...}` reply confirms it further.
+              ws.send("40/");
+            };
+            ws.onmessage = (e) => {
+              if (settled) return;
+              clearTimeout(timer);
+              const m = String(e.data);
+              console.log("websocket message:", m.slice(0, 80));
+              // Require at least one Engine.IO packet back (the `0{"sid"}` open
+              // packet or a `40{...}` after the 40/ we sent).
+              if (/^0\{"sid"/.test(m) || m.startsWith("40")) { settled = true; console.log("websocket state socket OK"); process.exit(0); }
+            };
+            ws.onerror = (e) => {
+              if (settled) return;
+              clearTimeout(timer);
+              console.log("websocket attempt " + attempt + ": ERROR " + ((e && e.message) || "WS error"));
+              retry("error");
+            };
+            ws.onclose = () => {
+              if (settled) return;
+              clearTimeout(timer);
+              retry("closed before handshake");
+            };
+          }
+          function retry(reason) {
+            if (settled) return;
+            if (attempt < MAX_ATTEMPTS) { console.log("retrying (" + reason + "), attempt " + attempt + " of " + MAX_ATTEMPTS); setTimeout(tryConnect, 1000); }
+            else { settled = true; fail(reason); }
+          }
+          function fail(reason) { console.error("::error::Reflex websocket upgrade failed after " + MAX_ATTEMPTS + " attempts (" + reason + ")"); process.exit(1); }
+          tryConnect();
           NJS
           fi
           echo "Event channel (${TRANSPORT}) OK"

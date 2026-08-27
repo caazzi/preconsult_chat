@@ -1534,9 +1534,13 @@ async def probe_event_channel() -> str:
     interactive channel is asserted by the browser-based E2E (test_socket_session)
     and the CI smoke test's real client. PHI-safe: only a status string.
     """
-    from reflex_app import rxconfig
-
-    if rxconfig.config.transport != "websocket":
+    # The event transport is the runtime env var REFLEX_TRANSPORT, the same single
+    # source of truth rxconfig.config.transport reads (rxconfig.debug config attr).
+    # Read it directly here instead of `from reflex_app import rxconfig`: the
+    # container starts with WORKDIR /app/reflex_app (see Dockerfile), so the parent
+    # `reflex_app` package is NOT importable and that import raised
+    # ModuleNotFoundError, crashing /health with a 500. Default matches rxconfig.
+    if os.environ.get("REFLEX_TRANSPORT", "websocket") != "websocket":
         import httpx
         from httpx import ASGITransport
 

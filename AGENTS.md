@@ -27,7 +27,10 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   back POSTs its next state event ("Start Preparing") to a fresh instance with no session — the
   server 400s it and reflex's client silently drops the event ("nothing happens"). Holding one warm
   instance keeps the socket alive; `--session-affinity` keeps the client pinned to it. This sustains
-  an idle 24/7 1 vCPU / 2Gi charge as the deliberate, bounded cost of reliable state delivery. Do
+  an idle 24/7 **0.5 vCPU / 1Gi** allocation (the `cost_optimized` profile runs `--cpu 0.5`) as the
+  deliberate, bounded cost of reliable state delivery. Note `--concurrency` must be `1` to pair with
+  `cpu=0.5` — Cloud Run rejects `cpu < 1` when `concurrency > 1` — which suits this portfolio app's
+  serial usage. Do
   NOT drop this back to `min-instances 0` unless the single-worker in-memory session design is also
   reworked. (`high_performance` intentionally keeps `min=2` for latency, but is opt-in only.)
 - If you must deploy an already-built CI image without rebuilding, use

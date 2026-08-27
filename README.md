@@ -114,7 +114,7 @@ With low real-user volume this keeps the free tier comfortably within budget.
 | PDF | ReportLab 5.0.0 (in-memory, deterministic, localized EN/PT) |
 | UI/UX | Glassmorphism, mobile-first, 48px touch targets, prefers-reduced-motion, EN/PT i18n |
 | Monitoring | Sentry SDK (2.65.0, PII-safe, env/release-tagged) + structured, PHI-safe request logging + stable error codes + `GET /health`, `/health/live`, `/health/ready` |
-| Deployment | GCP Cloud Run, us-central1 (two profiles: `cost_optimized` [default, `min=1` to keep the in-memory Engine.IO session alive] / `high_performance` [`min=2`], selectable via CI/CD) |
+| Deployment | GCP Cloud Run, us-central1 (two profiles: `cost_optimized` [default, 0.5 CPU/1Gi, `min=1`/`concurrency=1` to keep the in-memory Engine.IO session alive] / `high_performance` [2 CPU/2Gi, `min=2`], selectable via CI/CD) |
 | CI/CD | GitHub Actions (tests + WIF auth + Cloud Run deploy) — **exclusive deploy path** (see Deployment section) |
 
 ---
@@ -277,9 +277,11 @@ Current categories:
 > store is in-memory (no Redis token manager), so a scale-to-zero recycle would terminate a
 > browser's already-connected session and its next state event ("Start Preparing") would be
 > silently lost. Keeping one warm instance — plus `--session-affinity` — preserves the session
-> across idle at the cost of a 24/7 ~1 vCPU / 2GB charge. Instances stay within the `max=5` cap and
-> scale further only under load. Do not drop `min-instances` to `0` unless the single-worker
-> in-memory session design is reworked.
+> across idle at the cost of a 24/7 charged allocation of **0.5 vCPU / 1Gi** (the fixed cost is
+> what Cloud Run allocates for the warm instance, `cpu=0.5`). `--concurrency 1` pairs with
+> `cpu=0.5` (Cloud Run rejects cpu < 1 when concurrency > 1) and suits this portfolio app's serial
+> usage. Instances stay within the `max=5` cap and scale further only under load. Do not drop
+> `min-instances` to `0` unless the single-worker in-memory session design is reworked.
 
 ### Manual helper (CI-built images only)
 

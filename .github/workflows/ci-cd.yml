@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_profile:
-        description: 'Deployment Profile (cost_optimized = 0.5 CPU/1Gi/min=1/cpu-throttling [keeps one warm instance so the in-memory Engine.IO socket session survives, default], high_performance = 2 CPU/2Gi/min=2/no-throttle)'
+        description: 'Deployment Profile (cost_optimized = 0.5 CPU/1Gi/min=1/concurrency=1/throttling [keeps one warm instance so the in-memory Engine.IO socket session survives, default], high_performance = 2 CPU/2Gi/min=2/concurrency=40/no-throttle)'
         required: true
         default: 'cost_optimized'
         type: choice
@@ -196,10 +196,17 @@ jobs:
           # --cpu=0.5 / --memory=1Gi is right-sized: a single async uvicorn worker
           # (not "2 workers", which is a stale note) doesn't saturate 1 vCPU, and 1Gi
           # still clears the in-memory PDF + 512-session shim headroom.
+          # --concurrency=1 is REQUIRED to pair with --cpu=0.5: Cloud Run rejects
+          # cpu < 1 when concurrency > 1 ("Total cpu < 1 is not supported with
+          # concurrency > 1"). This is a portfolio app with effectively serial use,
+          # so a single in-flight request per instance is correct; --min-instances 1
+          # + --session-affinity keep the single warm instance and its in-memory
+          # Engine.IO session intact, which is the correctness invariant that must
+          # never revert to min=0.
           if [ "$PROFILE" = "high_performance" ]; then
             echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=10 --min-instances=2 --concurrency=40 --cpu=2 --memory=2Gi --no-cpu-throttling" >> "$GITHUB_OUTPUT"
           else
-            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=5 --min-instances=1 --concurrency=80 --cpu=0.5 --memory=1Gi --cpu-throttling" >> "$GITHUB_OUTPUT"
+            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=5 --min-instances=1 --concurrency=1 --cpu=0.5 --memory=1Gi --cpu-throttling" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy to Cloud Run

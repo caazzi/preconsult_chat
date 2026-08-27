@@ -75,7 +75,10 @@ else
     # would be dropped. Keep one warm instance so the session survives idle and
     # --session-affinity keeps the client pinned. Mirrors the CI cost_optimized
     # profile.
-    PROFILE_FLAGS="--min-instances 1 --max-instances 5 --concurrency 60 --cpu 0.5 --memory 1Gi --cpu-throttling"
+    # concurrency must be 1 to pair with cpu=0.5 (Cloud Run rejects cpu < 1 when
+    # concurrency > 1). This is a portfolio app with serial usage, so one in-flight
+    # request per instance is the intended, deliberate tradeoff.
+    PROFILE_FLAGS="--min-instances 1 --max-instances 5 --concurrency 1 --cpu 0.5 --memory 1Gi --cpu-throttling"
 fi
 
 echo "🐳 Deploying image to Cloud Run ($SERVICE_NAME in $PROJECT_ID)..."

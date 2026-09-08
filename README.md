@@ -108,12 +108,12 @@ With low real-user volume this keeps the free tier comfortably within budget.
 | Layer | Technology |
 |---|---|
 | Core | Reflex 0.9.8.post1 (Unified Frontend & API Host) |
-| Backend | FastAPI (0.136.1, integrated into Reflex backend) |
+| Backend | FastAPI (0.141.1, integrated into Reflex backend) |
 | Session | Redis (6.4.0, ephemeral, 30-min TTL, in-memory fallback for rate limiting) |
 | AI | Vertex AI Gemini 2.5 Flash Lite (`langchain-google-vertexai` 2.1.2) |
 | PDF | ReportLab 5.0.0 (in-memory, deterministic, localized EN/PT) |
 | UI/UX | Glassmorphism, mobile-first, 48px touch targets, prefers-reduced-motion, EN/PT i18n |
-| Monitoring | Sentry SDK (2.65.0, PII-safe, env/release-tagged) + structured, PHI-safe request logging + stable error codes + `GET /health`, `/health/live`, `/health/ready` |
+| Monitoring | Sentry SDK (2.68.0, PII-safe, env/release-tagged) + structured, PHI-safe request logging + stable error codes + `GET /health`, `/health/live`, `/health/ready` |
 | Deployment | GCP Cloud Run, us-central1 (two profiles: `cost_optimized` [default, 0.5 CPU/1Gi, `min=1`/`concurrency=1` to keep the in-memory Engine.IO session alive] / `high_performance` [2 CPU/2Gi, `min=2`], selectable via CI/CD) |
 | CI/CD | GitHub Actions (tests + WIF auth + Cloud Run deploy) — **exclusive deploy path** (see Deployment section) |
 

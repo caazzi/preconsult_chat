@@ -5,10 +5,18 @@ updates:
   # triggers a full Cloud Run deploy.
   #
   # Strategy (long-term friendly): don't HIDE deps forever via `ignore`.
-  #   - patch/minor: grouped into one weekly PR -> auto-mergeable, low risk.
+  #   - patch/minor: grouped into one weekly PR -> low risk, easy to review.
+  #     (No merge queue / auto-merge workflow is wired up yet, so each PR is
+  #     approved and merged manually.)
   #   - major: still surfaced as its own PR (group "major"), clearly labelled,
   #     so breaking upgrades (reflex, langchain, aiplatform, ...) stay visible
   #     and can be batched/reviewed deliberately instead of silently forgotten.
+  #
+  # Manifest: deps live in PEP 621 `pyproject.toml` (root); there is no
+  # requirements.txt. Dependabot resolves the pip update from pyproject.toml —
+  # the same manifest `uv sync --frozen` installs from in the Docker build.
+  # Note: only `[project.dependencies]` (runtime) ship to the container;
+  # the `test`/`e2e` extras are dev-only and don't trigger deploys.
   - package-ecosystem: "pip"
     directory: "/"
     schedule:

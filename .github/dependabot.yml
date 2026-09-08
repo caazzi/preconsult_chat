@@ -8,9 +8,11 @@ updates:
   #   - patch/minor: grouped into one weekly PR -> low risk, easy to review.
   #     (No merge queue / auto-merge workflow is wired up yet, so each PR is
   #     approved and merged manually.)
-  #   - major: still surfaced as its own PR (group "major"), clearly labelled,
-  #     so breaking upgrades (reflex, langchain, aiplatform, ...) stay visible
-  #     and can be batched/reviewed deliberately instead of silently forgotten.
+  #   - major: deliberately NOT grouped. Each semver-major update therefore
+  #     lands as its own PR so breaking upgrades (langchain, vertexai,
+  #     aiplatform, redis, ...) are migrated and reviewed one at a time —
+  #     every one of them is a separate deploy-affecting change. Do not merge
+  #     multiple majors in a single bullet.
   #
   # Manifest: deps live in PEP 621 `pyproject.toml` (root); there is no
   # requirements.txt. Dependabot resolves the pip update from pyproject.toml —
@@ -32,9 +34,6 @@ updates:
       patch-minor:
         applies-to: version-updates
         update-types: ["patch", "minor"]
-      major:
-        applies-to: version-updates
-        update-types: ["major"]
 
   # --- GitHub Actions -----------------------------------------------------
   # CI-only tooling; upgrading never affects the shipped container, so group

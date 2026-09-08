@@ -6,17 +6,17 @@ readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi==0.141.1",
-    "gunicorn==26.1.0",
+    "gunicorn==26.2.0",
     "langchain-google-vertexai==2.1.2",
     "langchain==0.3.27",
-    "pydantic==2.13.4",
-    "reportlab==5.0.0",
+    "pydantic==2.13.5",
+    "reportlab==5.0.1",
     "uvicorn[standard]==0.52.4",
     "google-cloud-aiplatform==1.165.0",
     "python-dotenv==1.2.3",
     "redis==6.4.0",
-    "reflex==0.9.8.post1",
-    "sentry-sdk==2.68.0",
+    "reflex==0.9.10.post1",
+    "sentry-sdk==2.68.1",
 ]
 
 [project.optional-dependencies]

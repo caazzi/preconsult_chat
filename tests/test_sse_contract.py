@@ -123,7 +123,7 @@ async def test_stream_error_token_is_emitted_and_client_visible(mock_update, moc
 
     async def gen():
         yield "partial chunk"
-        raise RuntimeError("vertex AI down")
+        raise RuntimeError("bedrock AI down")
 
     mock_stream.side_effect = lambda *a, **k: gen()
 
@@ -139,4 +139,4 @@ async def test_stream_error_token_is_emitted_and_client_visible(mock_update, moc
     # caught server-side and served as a normal SSE event)
     decoded_lines = [_json_payload(ln) for ln in _lines(body)]
     assert any("Service temporarily unavailable" in d for d in decoded_lines)
-    assert "vertex AI down" not in body  # server internals never leak
+    assert "bedrock AI down" not in body  # server internals never leak

@@ -1,21 +1,21 @@
 import logging
-from langchain_google_vertexai import ChatVertexAI
-from .config import LLM_MODEL, VERTEX_REGION, PROJECT_ID
+from langchain_aws import ChatBedrockConverse
+from .config import LLM_MODEL, BEDROCK_REGION
 
 _llm = None
 
-def get_llm() -> ChatVertexAI:
+
+def get_llm() -> ChatBedrockConverse:
     global _llm
     if _llm is None:
-        logging.info("Initializing Vertex AI LLM for the first time...")
-        _llm = ChatVertexAI(
-            model_name=LLM_MODEL,
+        logging.info("Initializing AWS Bedrock LLM for the first time...")
+        _llm = ChatBedrockConverse(
+            model=LLM_MODEL,
+            region_name=BEDROCK_REGION,
             temperature=0.2,
-            project=PROJECT_ID,
-            location=VERTEX_REGION,
-            streaming=True,
-            max_retries=3,
-            model_kwargs={"timeout": 30.0}
+            max_tokens=1024,
+            # Streaming is the default for ChatBedrockConverse; requests use the
+            # InvokeModelWithResponseStream API so `astream` yields token deltas.
         )
-        logging.info("Vertex AI LLM initialized successfully.")
+        logging.info("Bedrock LLM initialized successfully.")
     return _llm

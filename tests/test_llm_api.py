@@ -4,8 +4,6 @@ import pytest
 from unittest.mock import patch
 from langchain_core.language_models import FakeListChatModel
 
-_REAL_PROJECT = "securemed-chat-494521"
-
 pytestmark = pytest.mark.asyncio
 
 
@@ -13,6 +11,31 @@ pytestmark = pytest.mark.asyncio
 def _reset_singletons():
     import preconsult.services.agent_service as agent_service
     agent_service._interview_chain = None
+
+
+# ── Provider wiring (Bedrock) ─────────────────────────────────
+
+
+async def test_get_llm_builds_bedrock_client_and_is_singleton():
+    """get_llm must construct a Bedrock Converse client from config and cache it."""
+    import preconsult.core.llm as llm_module
+
+    original = llm_module._llm
+    llm_module._llm = None
+    try:
+        with patch("preconsult.core.llm.ChatBedrockConverse") as mock_chat:
+            instance = mock_chat.return_value
+            first = llm_module.get_llm()
+            assert first is instance
+            mock_chat.assert_called_once()
+            kwargs = mock_chat.call_args.kwargs
+            assert kwargs["model"] == llm_module.LLM_MODEL
+            assert kwargs["region_name"] == llm_module.BEDROCK_REGION
+            # Second call returns the cached singleton without rebuilding.
+            assert llm_module.get_llm() is instance
+            assert mock_chat.call_count == 1
+    finally:
+        llm_module._llm = original
 
 
 # ── Mocked tests (run in every CI) ────────────────────────────
@@ -105,22 +128,24 @@ async def test_llm_detects_emergency_mocked(mock_get_llm):
     assert any(k in full_text for k in keywords)
 
 
-# ── Integration test: runs in CI when GCP auth and project match ──
+# ── Integration test: runs in CI when AWS/Bedrock credentials are present ──
+
 
 def _can_run_integration():
     cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
-    return bool(cred_path) and os.path.isfile(cred_path) and (
-        os.environ.get("GOOGLE_CLOUD_PROJECT", "") == _REAL_PROJECT
+    return bool(
+        os.environ.get("AWS_ACCESS_KEY_ID")
+        or os.environ.get("AWS_PROFILE")
+        or (cred_path and os.path.isfile(cred_path))
     )
 
 
 @pytest.mark.skipif(
     not _can_run_integration(),
-    reason="Integration test: requires GOOGLE_APPLICATION_CREDENTIALS and "
-    f"GOOGLE_CLOUD_PROJECT={_REAL_PROJECT}",
+    reason="Integration test: requires AWS Bedrock credentials "
+    "(AWS_ACCESS_KEY_ID / AWS_PROFILE / ambient role).",
 )
-async def test_llm_real_vertex_call():
-    os.environ["GOOGLE_CLOUD_PROJECT"] = _REAL_PROJECT
+async def test_llm_real_bedrock_call():
     from preconsult.services.agent_service import get_interview_chain
 
     chain = get_interview_chain()

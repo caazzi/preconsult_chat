@@ -2,7 +2,7 @@ import logging
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from google.api_core.exceptions import GoogleAPIError
+from botocore.exceptions import ClientError
 
 
 class RedisUnavailableError(Exception):
@@ -103,8 +103,24 @@ async def validation_handler(request: Request, exc: ValidationError):
     )
 
 
-async def google_api_handler(request: Request, exc: GoogleAPIError):
-    logging.error(f"Erro na API Google: {exc}")
+async def bedrock_api_handler(request: Request, exc: Exception):
+    """Map a Bedrock/Anthropic upstream failure to a stable 502/503 code.
+
+    Throttling is a retriable upstream condition (503 ``llm_unavailable``);
+    every other Bedrock client/protocol error is an upstream failure (502
+    ``ai_upstream_error``). The response stays generic and never leaks the
+    exception message, which can embed request details.
+    """
+    throttled = _is_bedrock_throttling(exc)
+    logging.error("Bedrock upstream error (throttled=%s): %s", throttled, exc)
+    if throttled:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Servico de IA temporariamente indisponivel. Tente novamente.",
+                "code": "llm_unavailable",
+            },
+        )
     return JSONResponse(
         status_code=502,
         content={
@@ -112,6 +128,20 @@ async def google_api_handler(request: Request, exc: GoogleAPIError):
             "code": "ai_upstream_error",
         },
     )
+
+
+def _is_bedrock_throttling(exc: Exception) -> bool:
+    """Whether a Bedrock error is a retriable throttling/quota condition."""
+    if isinstance(exc, ClientError):
+        code = exc.response.get("Error", {}).get("Code", "")
+        return code in (
+            "ThrottlingException",
+            "Throttling",
+            "TooManyRequestsException",
+            "ServiceQuotaExceededException",
+        )
+    message = str(exc).lower()
+    return "throttl" in message or "too many requests" in message
 
 
 async def generic_handler(request: Request, exc: Exception):

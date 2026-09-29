@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 from fastapi import HTTPException  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
-from google.api_core.exceptions import GoogleAPIError  # noqa: E402
+from botocore.exceptions import BotoCoreError, ClientError  # noqa: E402
 from preconsult.core.config import SENTRY_DSN  # noqa: E402
 from preconsult.core.errors import (  # noqa: E402
     RedisUnavailableError,
@@ -20,7 +20,7 @@ from preconsult.core.errors import (  # noqa: E402
     redis_quota_exceeded_handler,
     llm_unavailable_handler,
     validation_handler,
-    google_api_handler,
+    bedrock_api_handler,
     generic_handler,
 )
 
@@ -53,5 +53,6 @@ app.add_exception_handler(RedisQuotaExceededError, redis_quota_exceeded_handler)
 app.add_exception_handler(LLMUnavailableError, llm_unavailable_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(ValidationError, validation_handler)
-app.add_exception_handler(GoogleAPIError, google_api_handler)
+app.add_exception_handler(BotoCoreError, bedrock_api_handler)
+app.add_exception_handler(ClientError, bedrock_api_handler)
 app.add_exception_handler(Exception, generic_handler)

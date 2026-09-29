@@ -4,15 +4,15 @@ import httpx
 import asyncio
 import json
 from httpx import ASGITransport
+from botocore.exceptions import ClientError, BotoCoreError
 from reflex_app.preconsult.preconsult import api as app
-from google.api_core.exceptions import GoogleAPIError
 from preconsult.core.errors import (
     RedisUnavailableError,
     LLMUnavailableError,
     redis_unavailable_handler,
     llm_unavailable_handler,
     validation_handler,
-    google_api_handler,
+    bedrock_api_handler,
     generic_handler,
 )
 
@@ -69,7 +69,7 @@ async def test_redis_unavailable_returns_503(mock_create, mock_rate, mock_quota)
 
 
 @pytest.mark.asyncio
-async def test_google_api_error_during_startup_returns_502():
+async def test_bedrock_api_error_during_startup_returns_502():
     import preconsult.services.agent_service as agent_service
     import preconsult.core.llm as llm_module
     agent_service._interview_chain = None
@@ -78,9 +78,11 @@ async def test_google_api_error_during_startup_returns_502():
 
     original_llm = llm_module._llm
     llm_module._llm = None
-    with patch("preconsult.core.llm.ChatVertexAI") as mock_chat:
-        mock_chat.side_effect = GoogleAPIError("Vertex AI quota exceeded")
-        with pytest.raises(GoogleAPIError):
+    with patch("preconsult.core.llm.ChatBedrockConverse") as mock_chat:
+        mock_chat.side_effect = ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "denied"}}, "InvokeModel"
+        )
+        with pytest.raises(ClientError):
             get_llm()
     llm_module._llm = original_llm
 
@@ -116,9 +118,11 @@ async def test_validation_error_long_answer_returns_422():
 async def test_get_llm_raises_on_init_failure():
     import preconsult.core.llm as llm_module
     llm_module._llm = None
-    with patch("preconsult.core.llm.ChatVertexAI") as mock_chat:
-        mock_chat.side_effect = GoogleAPIError("Vertex AI quota exceeded")
-        with pytest.raises(GoogleAPIError):
+    with patch("preconsult.core.llm.ChatBedrockConverse") as mock_chat:
+        mock_chat.side_effect = ClientError(
+            {"Error": {"Code": "ValidationException", "Message": "bad model"}}, "InvokeModel"
+        )
+        with pytest.raises(ClientError):
             llm_module.get_llm()
 
 
@@ -139,12 +143,12 @@ def _run_handler(handler, exc):
 
 
 def test_llm_unavailable_handler_returns_503_sanitized():
-    resp = _run_handler(llm_unavailable_handler, LLMUnavailableError("boom: vertex key invalid"))
+    resp = _run_handler(llm_unavailable_handler, LLMUnavailableError("boom: bedrock key invalid"))
     assert resp.status_code == 503
     body = resp.body.decode()
     assert "llm_unavailable" in body  # machine-readable code present
     # no exception message / module path leaked
-    assert "vertex key invalid" not in body
+    assert "bedrock key invalid" not in body
     assert "preconsult" not in body
 
 
@@ -172,11 +176,32 @@ def test_validation_handler_maps_422_and_keeps_errors():
     assert body["errors"][0]["loc"][0] == "age"
 
 
-def test_google_api_handler_returns_502_sanitized():
-    resp = _run_handler(google_api_handler, GoogleAPIError("PERMISSION_DENIED: secret bucket"))
+def test_bedrock_api_handler_returns_502_sanitized():
+    exc = ClientError(
+        {"Error": {"Code": "AccessDeniedException", "Message": "PERMISSION_DENIED: secret bucket"}},
+        "InvokeModel",
+    )
+    resp = _run_handler(bedrock_api_handler, exc)
     assert resp.status_code == 502
-    detail = resp.body.decode()
-    assert "secret bucket" not in detail
+    body = resp.body.decode()
+    assert "ai_upstream_error" in body
+    assert "secret bucket" not in body
+    assert "PERMISSION_DENIED" not in body
+
+
+def test_bedrock_api_handler_maps_throttling_to_503():
+    exc = ClientError(
+        {"Error": {"Code": "ThrottlingException", "Message": "slow down"}}, "InvokeModel"
+    )
+    resp = _run_handler(bedrock_api_handler, exc)
+    assert resp.status_code == 503
+    assert "llm_unavailable" in resp.body.decode()
+
+
+def test_bedrock_api_handler_maps_botocore_error_to_502():
+    resp = _run_handler(bedrock_api_handler, BotoCoreError())
+    assert resp.status_code == 502
+    assert "ai_upstream_error" in resp.body.decode()
 
 
 def test_generic_handler_returns_500_sanitized():

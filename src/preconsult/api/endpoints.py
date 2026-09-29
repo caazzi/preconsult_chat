@@ -9,6 +9,7 @@ import asyncio
 import html
 import json
 import logging
+import secrets
 from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
@@ -37,7 +38,15 @@ from preconsult.services.session_service import (
 API_KEY_HEADER = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
 async def get_api_key(api_key_header: str = Security(API_KEY_HEADER)):
-    if api_key_header == PRECONSULT_API_KEY:
+    # Constant-time comparison so a caller cannot infer the key byte-by-byte
+    # from response timing. Guard against an unset/unconfigured key (config
+    # permits None under BUILD_MODE) or a missing header.
+    expected = PRECONSULT_API_KEY
+    if (
+        expected
+        and api_key_header
+        and secrets.compare_digest(api_key_header, expected)
+    ):
         return api_key_header
     raise HTTPException(status_code=403, detail="Could not validate credentials")
 

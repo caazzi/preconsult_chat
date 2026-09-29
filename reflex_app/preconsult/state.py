@@ -1,9 +1,10 @@
 import reflex as rx
 import httpx
 import json
-import re
-from typing import List, Dict, Any
 import os
+import re
+import secrets
+from typing import List, Dict, Any
 from datetime import datetime
 from .i18n import translations
 from .analytics import log_analytics_event, fetch_analytics_data
@@ -641,7 +642,11 @@ class AdminState(rx.State):
         token_val = query_params.get("token", "")
         
         expected_token = os.environ.get("ADMIN_DASHBOARD_TOKEN")
-        if expected_token and token_val == expected_token:
+        if (
+            expected_token
+            and token_val
+            and secrets.compare_digest(token_val, expected_token)
+        ):
             self.authorized = True
             await self.fetch_analytics_data()
         else:

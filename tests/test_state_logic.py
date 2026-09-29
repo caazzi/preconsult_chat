@@ -678,6 +678,27 @@ async def test_admin_access_granted_with_token(monkeypatch):
     api_mock.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_admin_access_denied_when_token_env_unset(monkeypatch):
+    """No configured admin token must never authorize, even with a query token."""
+    monkeypatch.delenv("ADMIN_DASHBOARD_TOKEN", raising=False)
+    state = AdminState()
+    object.__setattr__(state, "router", _FakeRouter(query={"token": "anything"}))
+    await state.load_analytics()
+    assert state.authorized is False
+    assert state.analytics_data == []
+
+
+@pytest.mark.asyncio
+async def test_admin_access_denied_with_wrong_token(monkeypatch):
+    monkeypatch.setenv("ADMIN_DASHBOARD_TOKEN", "secret")
+    state = AdminState()
+    object.__setattr__(state, "router", _FakeRouter(query={"token": "wrong"}))
+    await state.load_analytics()
+    assert state.authorized is False
+    assert state.analytics_data == []
+
+
 # ---------------------------------------------------------------------------
 # _get_router_params helper
 # ---------------------------------------------------------------------------

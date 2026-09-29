@@ -12,6 +12,8 @@ import { getTranslations } from "../contracts/i18n";
 import { ApiError } from "../api/client";
 import { initSession } from "../api/session";
 import { logEvent } from "../api/analytics";
+import { streamInterviewQuestions } from "../api/sse";
+import { splitQuestions } from "../contracts/parsing";
 import { buildSessionInitPayload } from "./payload";
 
 export const STEP_LANDING = 0;
@@ -75,6 +77,7 @@ type WizardContextValue = {
   step: number;
   data: WizardData;
   sessionId: string;
+  questions: string[];
   answers: string[];
   isEmergency: boolean;
   emergencyText: string;
@@ -93,6 +96,8 @@ type WizardContextValue = {
   goToHistory: () => void;
   goToLifestyle: () => void;
   startSession: () => Promise<void>;
+  reloadQuestions: () => Promise<void>;
+  submitAnswers: () => void;
   reset: () => void;
 };
 
@@ -108,6 +113,7 @@ export function WizardProvider({
   const [step, setStep] = useState(STEP_LANDING);
   const [data, setData] = useState<WizardData>(EMPTY_DATA);
   const [sessionId, setSessionId] = useState("");
+  const [questions, setQuestions] = useState<string[]>([]);
   const [answers, setAnswers] = useState<string[]>([]);
   const [isEmergency, setIsEmergency] = useState(false);
   const [emergencyText, setEmergencyText] = useState("");
@@ -200,6 +206,22 @@ export function WizardProvider({
     setStep(STEP_LIFESTYLE);
   }, []);
 
+  const consumeStream = useCallback(
+    async (id: string) => {
+      await streamInterviewQuestions(id, {
+        onText: (buffer) => setQuestions(splitQuestions(buffer)),
+        onEmergency: (buffer) => {
+          setIsEmergency(true);
+          setEmergencyText(buffer);
+          setQuestions([]);
+        },
+        onDone: (finalQuestions) => setQuestions(finalQuestions),
+        onError: () => setError(t.err_stream),
+      });
+    },
+    [t],
+  );
+
   const startSession = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -208,15 +230,45 @@ export function WizardProvider({
       const id = await initSession(payload);
       setSessionId(id);
       setAnswers([]);
+      setQuestions([]);
+      setIsEmergency(false);
+      setEmergencyText("");
       setStep(STEP_QA);
       logEvent("lifestyle_submitted", id);
+      await consumeStream(id);
     } catch (e) {
       const code = e instanceof ApiError ? e.code : "internal_error";
       setError(messageForCode(code, t));
     } finally {
       setLoading(false);
     }
-  }, [data, lang, t]);
+  }, [data, lang, t, consumeStream]);
+
+  const reloadQuestions = useCallback(async () => {
+    if (!sessionId) return;
+    setLoading(true);
+    setError("");
+    setQuestions([]);
+    setAnswers([]);
+    setIsEmergency(false);
+    setEmergencyText("");
+    try {
+      await consumeStream(sessionId);
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, consumeStream]);
+
+  const submitAnswers = useCallback(() => {
+    const visible = answers.slice(0, questions.length);
+    if (visible.length < questions.length || visible.some((a) => !a.trim())) {
+      setError(t.err_followup_ans);
+      return;
+    }
+    setError("");
+    setStep(STEP_SUMMARY);
+    logEvent("summary_generated", sessionId);
+  }, [answers, questions, sessionId, t]);
 
   const reset = useCallback(() => {
     setStep(STEP_LANDING);
@@ -235,6 +287,7 @@ export function WizardProvider({
       step,
       data,
       sessionId,
+      questions,
       answers,
       isEmergency,
       emergencyText,
@@ -253,6 +306,8 @@ export function WizardProvider({
       goToHistory,
       goToLifestyle,
       startSession,
+      reloadQuestions,
+      submitAnswers,
       reset,
     }),
     [
@@ -260,6 +315,7 @@ export function WizardProvider({
       step,
       data,
       sessionId,
+      questions,
       answers,
       isEmergency,
       emergencyText,
@@ -277,6 +333,8 @@ export function WizardProvider({
       goToHistory,
       goToLifestyle,
       startSession,
+      reloadQuestions,
+      submitAnswers,
       reset,
     ],
   );

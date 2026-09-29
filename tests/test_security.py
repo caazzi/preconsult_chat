@@ -138,6 +138,27 @@ class TestP8_BuildMode:
                 os.environ.pop("BUILD_MODE", None)
 
 
+class TestP9_NoPHIDraftPersistence:
+    def test_state_has_no_localstorage_draft(self):
+        """The intake draft (PHI) must not be written to localStorage.
+
+        The privacy policy promises session data is destroyed when the tab is
+        closed; localStorage outlives tab close, so persisting the draft there
+        would contradict that claim. Guard against reintroduction.
+        """
+        state_path = os.path.join(
+            os.path.dirname(__file__), "..", "reflex_app", "preconsult", "state.py"
+        )
+        with open(state_path) as f:
+            source = f.read()
+        assert "localStorage.setItem" not in source, (
+            "PHI draft persistence via localStorage reintroduced in state.py"
+        )
+        assert "preconsult_draft" not in source, (
+            "Legacy preconsult_draft localStorage key reintroduced in state.py"
+        )
+
+
 def test_bot_gate_blocks_scanner_before_redis():
     """Obvious scanner/cli user-agents on Redis-backed paths must be blocked with
     403 BEFORE any session/analytics Redis work, so a scan burst can't exhaust the

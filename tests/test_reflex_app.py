@@ -496,16 +496,14 @@ def test_stale_session_keyerror_returns_400_not_500():
         asyncio.run(run2())
 
 
-def test_state_scroll_and_draft_scripts():
+def test_state_scroll_script_only_no_draft_persistence():
     state = State()
     scroll_script = state._scroll_top_script()
     assert "scrollTo" in repr(scroll_script) or "scrollTo" in str(scroll_script.args)
 
-    draft_script = state._save_draft_script()
-    assert "localStorage.setItem" in repr(draft_script) or "localStorage.setItem" in str(draft_script.args)
-
-    clear_script = state._clear_draft_script()
-    assert "localStorage.removeItem" in repr(clear_script) or "localStorage.removeItem" in str(clear_script.args)
+    # PHI draft persistence was removed to honor the zero-retention promise.
+    assert not hasattr(state, "_save_draft_script")
+    assert not hasattr(state, "_clear_draft_script")
 
 
 def test_state_reset_intake():
@@ -518,7 +516,7 @@ def test_state_reset_intake():
     assert state.step == 0
     assert state.chief_complaint == ""
     assert state.session_id == ""
-    assert len(events) == 3
+    assert len(events) == 2
 
 
 def test_mobile_ui_layout_responsiveness():

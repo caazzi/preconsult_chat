@@ -374,7 +374,7 @@ def test_go_to_step_2_success():
     events = list(s.go_to_step_2())
     assert s.step == 2
     assert s.error_message == ""
-    assert len(events) == 2  # scroll + save-draft
+    assert len(events) == 1  # scroll only (no draft persistence)
 
 
 def test_go_to_step_3_requires_specialist_and_complaint():
@@ -468,7 +468,7 @@ def test_reset_intake_clears_all_and_redirects():
     assert s.questions == []
     assert s.current_answers == []
     assert s.is_emergency is False
-    assert len(events) == 3  # clear-draft + scroll-top + redirect
+    assert len(events) == 2  # scroll-top + redirect (no draft persistence)
 
 
 # ---------------------------------------------------------------------------
@@ -611,7 +611,7 @@ async def test_download_report_success():
 
     assert s.error_message == ""
     assert events is not None
-    assert len(events) == 3  # gtag call + clear-draft + download
+    assert len(events) == 2  # gtag call + download (no draft persistence)
 
 
 @pytest.mark.asyncio

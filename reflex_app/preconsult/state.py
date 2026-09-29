@@ -386,32 +386,6 @@ class State(rx.State):
     def _scroll_top_script(self):
         return rx.call_script("window.scrollTo({top: 0, behavior: 'smooth'})")
 
-    def _save_draft_script(self):
-        draft_data = {
-            "gender": self.gender,
-            "age_bracket": self.age_bracket,
-            "specialist": self.specialist,
-            "chief_complaint": self.chief_complaint,
-            "duration": self.duration,
-            "complaint_detail": self.complaint_detail,
-            "conditions": self.conditions,
-            "medications": self.medications,
-            "allergies_flag": self.allergies_flag,
-            "allergies_text": self.allergies_text,
-            "family_history": self.family_history,
-            "smoking": self.smoking,
-            "alcohol": self.alcohol,
-            "step": self.step,
-        }
-        try:
-            payload_str = json.dumps(draft_data).replace("'", "\\'")
-            return rx.call_script(f"try {{ localStorage.setItem('preconsult_draft', '{payload_str}'); }} catch(e) {{}}")
-        except Exception:
-            return rx.call_script("")
-
-    def _clear_draft_script(self):
-        return rx.call_script("try { localStorage.removeItem('preconsult_draft'); } catch(e) {}")
-
     def reset_intake(self):
         self.step = 0
         self.gender = ""
@@ -436,7 +410,6 @@ class State(rx.State):
         self.session_id = ""
         self.error_message = ""
         self.loading = False
-        yield self._clear_draft_script()
         yield self._scroll_top_script()
         yield rx.redirect("/")
 
@@ -460,7 +433,6 @@ class State(rx.State):
         self.step = 2
         self.log_analytics_event("demographics_submitted")
         yield self._scroll_top_script()
-        yield self._save_draft_script()
 
     def go_to_step_3(self):
         if not self.specialist.strip() or not self.chief_complaint.strip():
@@ -470,19 +442,16 @@ class State(rx.State):
         self.step = 3
         self.log_analytics_event("complaint_submitted")
         yield self._scroll_top_script()
-        yield self._save_draft_script()
 
     def go_to_step_4(self):
         self.error_message = ""
         self.step = 4
         self.log_analytics_event("history_submitted")
         yield self._scroll_top_script()
-        yield self._save_draft_script()
 
     def go_to_step_5(self):
         self.step = 5
         yield self._scroll_top_script()
-        yield self._save_draft_script()
 
     @rx.event(background=True)
     async def init_session(self):
@@ -646,7 +615,6 @@ class State(rx.State):
                         self.log_analytics_event("pdf_downloaded")
                     return [
                         rx.call_script("if(window.gtag_report_conversion)gtag_report_conversion()"),
-                        self._clear_draft_script(),
                         rx.download(
                             data=pdf_bytes,
                             filename=filename

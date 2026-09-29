@@ -495,3 +495,111 @@ async def test_analytics_event_still_ok_when_redis_down():
         assert resp.json() == {"status": "ok"}
     finally:
         svc._redis_available = original
+
+
+# ---------------------------------------------------------------------------
+# Input-side emergency gate (deterministic red flag on the chief complaint)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@patch("preconsult.api.endpoints.stream_interview_questions")
+@patch("preconsult.api.endpoints.get_session", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.check_rate_limit", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.get_interview_chain", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.update_session", new_callable=AsyncMock)
+async def test_initial_stream_emergency_input_short_circuits_llm(
+    mock_update, mock_chain, mock_rate, mock_get, mock_stream
+):
+    """A red flag in the patient's own description must warn immediately,
+    WITHOUT calling the LLM (so safety never depends on the model)."""
+    mock_get.return_value = {"lang": "en", "chief_complaint": "pain"}
+    mock_rate.return_value = True
+
+    async def fake_stream(*args, **kwargs):
+        raise AssertionError("LLM stream must not be called on input red flag")
+        yield  # pragma: no cover
+
+    mock_stream.side_effect = fake_stream
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with client.stream(
+            "POST",
+            "/api/initial-questions-stream",
+            json={"session_id": "x", "chief_complaint": "severe chest pain, call 911"},
+            headers=HEADERS,
+        ) as response:
+            assert response.status_code == 200
+            assert response.headers["content-type"].startswith("text/event-stream")
+            body = "".join([line async for line in response.aiter_text()])
+
+    assert "data: " in body
+    assert "EMERGENCY" in body.upper()
+    assert not mock_stream.called
+
+
+@pytest.mark.asyncio
+@patch("preconsult.api.endpoints.stream_interview_questions")
+@patch("preconsult.api.endpoints.get_session", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.check_rate_limit", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.get_interview_chain", new_callable=AsyncMock)
+async def test_interview_stream_emergency_input_short_circuits_llm(
+    mock_chain, mock_rate, mock_get, mock_stream
+):
+    """Same deterministic gate on the full-context interview stream."""
+    mock_get.return_value = {"lang": "pt", "chief_complaint": "dor no peito, urgência"}
+    mock_rate.return_value = True
+
+    async def fake_stream(*args, **kwargs):
+        raise AssertionError("LLM stream must not be called on input red flag")
+        yield  # pragma: no cover
+
+    mock_stream.side_effect = fake_stream
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with client.stream(
+            "POST", "/api/interview-questions-stream", json={"session_id": "x"}, headers=HEADERS
+        ) as response:
+            assert response.status_code == 200
+            body = "".join([line async for line in response.aiter_text()])
+
+    # SSE payload is JSON-encoded; decode exactly like the real client consumer.
+    payload_line = next(ln for ln in body.split("\n") if ln.startswith("data: "))
+    decoded = json.loads(payload_line[len("data: "):])
+    assert "ALERTA DE EMERGÊNCIA" in decoded
+    assert not mock_stream.called
+
+
+@pytest.mark.asyncio
+@patch("preconsult.api.endpoints.stream_interview_questions")
+@patch("preconsult.api.endpoints.get_session", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.check_rate_limit", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.get_interview_chain", new_callable=AsyncMock)
+async def test_interview_stream_non_emergency_still_calls_llm(
+    mock_chain, mock_rate, mock_get, mock_stream
+):
+    """A benign complaint must NOT be short-circuited by the input gate."""
+    mock_get.return_value = {"lang": "en", "chief_complaint": "stomach pain"}
+    mock_rate.return_value = True
+
+    async def fake_stream(*args, **kwargs):
+        yield "1. Where is the pain?"
+
+    mock_stream.side_effect = fake_stream
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with client.stream(
+            "POST", "/api/interview-questions-stream", json={"session_id": "x"}, headers=HEADERS
+        ) as response:
+            body = "".join([line async for line in response.aiter_text()])
+
+    assert "Where is the pain?" in body
+    assert mock_stream.called
+
+
+def test_emergency_message_defaults_to_english_for_unknown_lang():
+    from preconsult.api.endpoints import _emergency_message
+
+    assert "EMERGENCY" in _emergency_message("xx")
+    assert "EMERGENCY" in _emergency_message("en")
+    assert "EMERGÊNCIA" in _emergency_message("pt")

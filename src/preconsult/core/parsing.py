@@ -41,3 +41,15 @@ def is_emergency_trigger(text: str) -> bool:
     """
     lower = text.lower()
     return any(token in lower for token in _EMERGENCY_TRIGGERS)
+
+
+def has_emergency_red_flag(*texts: str) -> bool:
+    """Whether any of the supplied *inputs* signals an emergency red flag.
+
+    This is the input-side counterpart to :func:`is_emergency_trigger`, which
+    screens the model's *output*. The safety-critical red-flag decision must not
+    depend solely on the component being constrained (the LLM), so the stream
+    endpoints gate on the patient-supplied chief complaint / detail before any
+    LLM call. Reuses the same token list so there is a single source of truth.
+    """
+    return is_emergency_trigger(" ".join(t for t in texts if t))

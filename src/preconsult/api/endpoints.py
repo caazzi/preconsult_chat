@@ -18,6 +18,7 @@ from langchain_core.runnables import Runnable
 
 from preconsult.core.config import PRECONSULT_API_KEY, TRUST_PROXY_HEADERS
 from preconsult.core.observability import new_request_id, log_event, timed
+from preconsult.core.parsing import has_emergency_red_flag
 from preconsult.services.agent_service import (
     stream_interview_questions,
     get_interview_chain,
@@ -45,6 +46,48 @@ def _sanitize_input(text: str) -> str:
     if not isinstance(text, str):
         return ""
     return html.escape(text.strip())
+
+
+_EMERGENCY_MESSAGES = {
+    "en": (
+        "[EMERGENCY ALERT] Your symptoms may require immediate medical attention. "
+        "Please call your local emergency number (e.g. 911) or go to the nearest "
+        "emergency room now. This tool cannot help with an emergency."
+    ),
+    "pt": (
+        "[ALERTA DE EMERGÊNCIA] Seus sintomas podem exigir atenção médica imediata. "
+        "Ligue para o serviço de emergência local (por exemplo, 192) ou vá ao pronto-socorro "
+        "mais próximo agora. Esta ferramenta não pode ajudar em uma emergência."
+    ),
+}
+
+
+def _emergency_message(lang: str) -> str:
+    return _EMERGENCY_MESSAGES.get(lang, _EMERGENCY_MESSAGES["en"])
+
+
+def _emergency_stream_response(lang: str, event: str, request_id: str) -> StreamingResponse:
+    """Short-circuit an SSE stream with a deterministic emergency warning.
+
+    The red-flag decision is made on the *input* (chief complaint) rather than
+    the model's output, so a patient describing a critical symptom is warned
+    immediately even if the LLM never utters a trigger token. Emits the same
+    ``data: <json>`` wire contract as a normal stream (HTTP 200) so the existing
+    client ``is_emergency_trigger`` path surfaces the dialog.
+    """
+    log_event(
+        logging.WARNING,
+        event,
+        request_id=request_id,
+        lang=lang,
+        trigger_side="input",
+    )
+    message = _emergency_message(lang)
+
+    async def event_generator():
+        yield f"data: {json.dumps(message)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 def get_client_ip(request: Request) -> str:
     """Extract the effective client IP for rate limiting / quotas.
@@ -227,6 +270,12 @@ async def get_initial_questions_streamed(
         else "⚠️ ERRO: Serviço temporariamente indisponível. Tente novamente."
     )
 
+    # Deterministic input-side red-flag gate: never rely solely on the model to
+    # signal an emergency. If the patient's own description trips a red flag,
+    # warn immediately without calling the LLM.
+    if has_emergency_red_flag(sanitized_complaint, session_data.get("complaint_detail", "")):
+        return _emergency_stream_response(lang, "stream.initial.emergency_input", request_id)
+
     log_event(
         logging.INFO,
         "stream.initial.start",
@@ -293,6 +342,10 @@ async def get_interview_questions_streamed(
         if lang == "en"
         else "⚠️ ERRO: Serviço temporariamente indisponível. Tente novamente."
     )
+
+    # Deterministic input-side red-flag gate (see initial-questions-stream).
+    if has_emergency_red_flag(session_data.get("chief_complaint", ""), session_data.get("complaint_detail", "")):
+        return _emergency_stream_response(lang, "stream.interview.emergency_input", request_id)
 
     log_event(
         logging.INFO,

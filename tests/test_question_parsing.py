@@ -1,4 +1,4 @@
-from preconsult.core.parsing import split_questions, is_emergency_trigger
+from preconsult.core.parsing import split_questions, is_emergency_trigger, has_emergency_red_flag
 
 
 def test_parse_questions_numbered():
@@ -136,3 +136,22 @@ def test_is_emergency_trigger_only_matches_whole_tokens():
     assert is_emergency_trigger("please ring my doctor today") is False
     assert is_emergency_trigger("session id 1234") is False
     assert is_emergency_trigger("the patient is fine") is False
+
+
+# --- Input-side red-flag gate (has_emergency_red_flag) ---
+
+
+def test_has_emergency_red_flag_across_multiple_inputs():
+    assert has_emergency_red_flag("severe chest pain", "call 911") is True
+    assert has_emergency_red_flag("dor no peito", "urgência") is True
+
+
+def test_has_emergency_red_flag_ignores_none_and_empty():
+    assert has_emergency_red_flag(None, "") is False
+    assert has_emergency_red_flag() is False
+    assert has_emergency_red_flag("", "") is False
+
+
+def test_has_emergency_red_flag_non_emergency_input():
+    assert has_emergency_red_flag("stomach pain", "worse at night") is False
+    assert has_emergency_red_flag("session id 1234") is False

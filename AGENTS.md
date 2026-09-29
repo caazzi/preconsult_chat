@@ -85,6 +85,15 @@ These are reflex-specific rules that WILL bite if ignored:
   complaint detail values. Only non-content counters (e.g. `len(...)`) are allowed.
 - Every structured event is tagged with `revision` (`GIT_SHA`/`K_REVISION`) so logs are attributable
   to a deployed build. Keep that tag; do not drop it.
+- Emergency detection must NOT rest solely on the LLM's output. `has_emergency_red_flag`
+  (`core/parsing.py`, reusing the `is_emergency_trigger` token list) gates the stream endpoints on
+  the patient-supplied chief complaint / detail BEFORE any model call; a hit short-circuits to a
+  localized emergency SSE event (`stream.initial.emergency_input` / `stream.interview.emergency_input`,
+  metadata-only, `trigger_side=input`) and the LLM is never invoked. Keep the input gate in front of
+  the output-side `is_emergency_trigger` client check.
+- The intake draft is NOT persisted to `localStorage` (or any client store): it would outlive tab
+  close and contradict the zero-retention promise. Do not reintroduce client-side PHI persistence;
+  `tests/test_security.py::TestP9_NoPHIDraftPersistence` guards this.
 - `_RequestIDMiddleware` (in `preconsult.py`) tracks per-request outcome counters and the
   failure-tell-tale events `socket.handshake_rejected` (`/_event` 400) and `static.asset_404`
   (`/assets` 404) — the signature of a stale-`index.html` shell. They are exposed read-only via

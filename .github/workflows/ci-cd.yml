@@ -77,6 +77,38 @@ jobs:
           exit 1
         fi
 
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: "npm"
+        cache-dependency-path: web/package-lock.json
+
+    - name: Install web dependencies
+      working-directory: web
+      run: npm ci
+
+    - name: Verify web contract copies are current
+      working-directory: web
+      run: |
+        node scripts/sync-contracts.mjs
+        if ! git diff --exit-code -- web/src/contracts/generated/; then
+          echo "::error::web/src/contracts/generated is stale. Run 'npm run sync:contracts' in web/ and commit the result."
+          exit 1
+        fi
+
+    - name: Lint web
+      working-directory: web
+      run: npm run lint
+
+    - name: Test web (Vitest — contract vectors + unit)
+      working-directory: web
+      run: npm run test
+
+    - name: Build web
+      working-directory: web
+      run: npm run build
+
     - name: Run tests with coverage gate
       env:
         PRECONSULT_API_KEY: ci_test_key_123

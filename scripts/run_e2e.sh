@@ -6,7 +6,7 @@ set -euo pipefail
 # Builds the Reflex frontend pointed at a local backend, then runs the browser
 # specs in tests/e2e against a real single-worker gunicorn instance. The LLM/
 # Redis API endpoints are mocked at the browser (route) layer by the specs, so
-# this needs NO live Vertex AI or serverless Redis.
+# this needs NO live Bedrock or serverless Redis.
 #
 # Usage:
 #   scripts/run_e2e.sh                 # default (--workers 1, the fixed config)

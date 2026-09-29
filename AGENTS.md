@@ -208,6 +208,17 @@ outages), so Redis must be reserved for actual patient sessions:
 - `.env` is secret and must not be read or edited for value changes without care; secrets live in
   Google Secret Manager (`SECUREMED_API_KEY`, `REDIS_URL`) and are wired as secret references, not
   plaintext env vars, in every deploy.
+- **LLM provider is AWS Bedrock (Anthropic Claude Haiku), not Vertex/Gemini.** `core/llm.py`
+  constructs a `ChatBedrockConverse` client from `LLM_MODEL` + `BEDROCK_REGION` (both env-overridable).
+  Do NOT re-introduce `langchain-google-vertexai` or `google-cloud-aiplatform`. Bedrock is a regional
+  service and Claude is not available in every region; the single fixed region is deliberate — do not
+  route by UI language (language ≠ data residency). Upstream Bedrock failures map to the existing
+  stable codes via `bedrock_api_handler` (`botocore.ClientError` throttling → `503 llm_unavailable`,
+  everything else → `502 ai_upstream_error`); keep those codes unchanged.
+  **INTERIM (Phase 1):** the container still runs on GCP, so Bedrock credentials
+  (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`) are GCP Secret Manager references until the Phase 3
+  compute migration to AWS replaces them with a task role. Scope the IAM policy to
+  `bedrock:InvokeModelWithResponseStream` on the single Haiku model.
 - Deploy-affecting changes include anything the container runs: error-response shape (codes),
   health routes, config flags (e.g. `TRUST_PROXY_HEADERS`), Sentry init. Such a change is only
   "done" after the CI/CD-built revision serves `200` — local commits alone are NOT deployment.

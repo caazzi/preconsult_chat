@@ -90,7 +90,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --session-affinity \
     $PROFILE_FLAGS \
     --timeout 300s \
-    --set-env-vars="API_BASE_URL=https://pre-consult.org,VERTEX_AI_REGION=us-central1,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},LLM_MODEL=gemini-2.5-flash" \
+    --set-env-vars="API_BASE_URL=https://pre-consult.org,BEDROCK_REGION=us-east-1,LLM_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0" \
     --update-secrets="PRECONSULT_API_KEY=${API_KEY_SECRET}:${SECRET_VERSION},REDIS_URL=${REDIS_URL_SECRET}:${SECRET_VERSION}"
 
 echo "✅ Backend Deployment Finished!"

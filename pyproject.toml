@@ -53,8 +53,10 @@ norecursedirs = [
     ".venv",
     ".direnv",
     "node_modules",
+    "web",
     ".web",
     "tests/e2e",
+    "tests/e2e_spa",
 ]
 
 [tool.coverage.run]

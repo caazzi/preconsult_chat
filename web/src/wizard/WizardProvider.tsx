@@ -13,6 +13,7 @@ import { ApiError } from "../api/client";
 import { initSession } from "../api/session";
 import { logEvent } from "../api/analytics";
 import { streamInterviewQuestions } from "../api/sse";
+import { downloadPdf } from "../api/pdf";
 import { splitQuestions } from "../contracts/parsing";
 import { buildSessionInitPayload } from "./payload";
 
@@ -81,6 +82,7 @@ type WizardContextValue = {
   answers: string[];
   isEmergency: boolean;
   emergencyText: string;
+  summaryText: string;
   loading: boolean;
   error: string;
   setStep: (step: number) => void;
@@ -98,6 +100,7 @@ type WizardContextValue = {
   startSession: () => Promise<void>;
   reloadQuestions: () => Promise<void>;
   submitAnswers: () => void;
+  downloadReport: () => Promise<void>;
   reset: () => void;
 };
 
@@ -121,6 +124,18 @@ export function WizardProvider({
   const [error, setError] = useState("");
 
   const t = useMemo(() => getTranslations(lang), [lang]);
+
+  const summaryText = useMemo(() => {
+    const qsAns = questions
+      .map((q, i) => `Q${i + 1}: ${q}\nA: ${answers[i] ?? ""}`)
+      .join("\n\n");
+    return (
+      `--- Patient Intake ---\n` +
+      `Specialist: ${data.specialist}\n` +
+      `Chief Complaint: ${data.chiefComplaint}\n\n` +
+      `--- Questions & Answers ---\n${qsAns}`
+    );
+  }, [questions, answers, data.specialist, data.chiefComplaint]);
 
   const update = useCallback(
     <K extends keyof WizardData>(key: K, value: WizardData[K]) => {
@@ -270,6 +285,24 @@ export function WizardProvider({
     logEvent("summary_generated", sessionId);
   }, [answers, questions, sessionId, t]);
 
+  const downloadReport = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const qaPairs = questions.map((q, i) => ({
+        question: q,
+        answer: answers[i] ?? "",
+      }));
+      await downloadPdf(sessionId, qaPairs);
+      logEvent("pdf_downloaded", sessionId);
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : "internal_error";
+      setError(messageForCode(code, t));
+    } finally {
+      setLoading(false);
+    }
+  }, [questions, answers, sessionId, t]);
+
   const reset = useCallback(() => {
     setStep(STEP_LANDING);
     setData(EMPTY_DATA);
@@ -291,6 +324,7 @@ export function WizardProvider({
       answers,
       isEmergency,
       emergencyText,
+      summaryText,
       loading,
       error,
       setStep,
@@ -308,6 +342,7 @@ export function WizardProvider({
       startSession,
       reloadQuestions,
       submitAnswers,
+      downloadReport,
       reset,
     }),
     [
@@ -319,6 +354,7 @@ export function WizardProvider({
       answers,
       isEmergency,
       emergencyText,
+      summaryText,
       loading,
       error,
       update,
@@ -335,6 +371,7 @@ export function WizardProvider({
       startSession,
       reloadQuestions,
       submitAnswers,
+      downloadReport,
       reset,
     ],
   );

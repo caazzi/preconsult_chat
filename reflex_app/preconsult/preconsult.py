@@ -1640,6 +1640,45 @@ def _backend_redirect(request):
 
 app._api.add_route("/_event", _backend_redirect, methods=["GET", "POST"])
 
+
+# --- Shadow SPA at /next ----------------------------------------------------
+# The React rewrite (web/) is served from the same image under /next while
+# Reflex still owns /. It must be mounted BEFORE the root static catch-all so
+# /next/* resolves to the SPA, but it only ever matches the /next prefix, so it
+# cannot shadow /api, /_event, or /health. The SPA is a client-side router, so
+# any non-file path under /next must fall through to index.html; hashed assets
+# are immutable and the document is no-store (mirrors the Reflex shell rules).
+class SPAStaticFiles(StaticFiles):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    async def get_response(self, path: str, scope) -> Response:
+        try:
+            response = await super().get_response(path, scope)
+        except Exception as exc:
+            # StaticFiles raises HTTPException(404) for a missing path (an
+            # unknown client-side route). Serve the app shell so the SPA router
+            # can resolve it. Any other error is re-raised.
+            if getattr(exc, "status_code", None) != 404:
+                raise
+            response = await super().get_response("index.html", scope)
+        if path.startswith("assets/") or "/assets/" in path:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        response.headers["Vary"] = "Accept-Encoding"
+        return response
+
+
+_NEXT_DIST = os.environ.get(
+    "WEB_DIST_DIR",
+    os.path.abspath(os.path.join(os.getcwd(), "..", "web", "dist")),
+)
+if os.path.exists(_NEXT_DIST):
+    app._api.mount("/next", SPAStaticFiles(directory=_NEXT_DIST, html=True), name="spa")
+
 _STATIC_DIR = os.path.join(os.getcwd(), ".web", "build", "client")
 if os.path.exists(_STATIC_DIR):
     app._api.mount("/", CustomStaticFiles(directory=_STATIC_DIR, html=True), name="static")

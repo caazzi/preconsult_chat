@@ -14,11 +14,13 @@ export function WizardStep() {
     answers,
     isEmergency,
     emergencyText,
+    summaryText,
     error,
     loading,
     setAnswer,
     reloadQuestions,
     submitAnswers,
+    downloadReport,
     reset,
   } = useWizard();
 
@@ -45,17 +47,41 @@ export function WizardStep() {
   if (step === STEP_SUMMARY) {
     return (
       <div className="space-y-4">
+        <ErrorCallout message={error} />
         <h2 className="text-center text-2xl font-bold text-slate-100">
           {t.complete_title}
         </h2>
         <p className="text-center text-slate-400">{t.complete_desc}</p>
-        <button
-          type="button"
-          onClick={reset}
-          className="min-h-[48px] w-full rounded-lg border border-white/20 px-4 py-2 text-slate-200 hover:bg-white/5"
-        >
-          {t.start_new}
-        </button>
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => void downloadReport()}
+            disabled={loading}
+            className="min-h-[48px] w-full rounded-lg bg-green-600 px-4 py-3 font-semibold text-white hover:bg-green-500 disabled:opacity-60"
+          >
+            {loading ? "…" : t.download_btn}
+          </button>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => void navigator.clipboard.writeText(summaryText)}
+              className="min-h-[48px] w-full rounded-lg border border-cyan-400/40 px-4 py-2 text-cyan-200 hover:bg-cyan-400/5"
+            >
+              {t.copy_btn}
+            </button>
+            <button
+              type="button"
+              onClick={reset}
+              className="min-h-[48px] w-full rounded-lg px-4 py-2 text-slate-300 hover:bg-white/5"
+            >
+              {t.start_new}
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center justify-center gap-2 rounded-lg border border-green-500/20 bg-green-500/5 p-2 text-sm text-green-400">
+          <span aria-hidden>🛡</span>
+          {t.privacy_badge}
+        </div>
       </div>
     );
   }

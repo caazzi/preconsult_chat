@@ -2,8 +2,12 @@ import os
 
 # Global test environment configuration
 os.environ["PRECONSULT_API_KEY"] = "ci_test_key_123"
+os.environ["SESSION_SECRET"] = "ci_test_session_secret"
 os.environ["BEDROCK_REGION"] = "us-east-1"
 os.environ["REDIS_URL"] = "redis://localhost:6379/0"
+# Tests run over http via httpx ASGITransport; Secure cookies are not sent on
+# http, so disable the Secure flag for the test suite.
+os.environ["SESSION_COOKIE_SECURE"] = "false"
 
 
 

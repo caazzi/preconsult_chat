@@ -244,6 +244,9 @@ jobs:
           secrets: |
             REDIS_URL=REDIS_URL:latest
             PRECONSULT_API_KEY=SECUREMED_API_KEY:latest
+            # Per-session cookie signing key. Generate with `openssl rand -hex 32`
+            # and store in Secret Manager before enabling cookie auth in prod.
+            SESSION_SECRET=SESSION_SECRET:latest
             # INTERIM (Phase 1): the serving container runs on GCP but calls AWS
             # Bedrock, so Bedrock credentials live in GCP Secret Manager until the
             # Phase 3 compute migration to AWS (where a task role removes them).

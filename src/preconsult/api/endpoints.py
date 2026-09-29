@@ -13,13 +13,19 @@ import secrets
 from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, JSONResponse
 from pydantic import BaseModel, Field
 from langchain_core.runnables import Runnable
 
-from preconsult.core.config import PRECONSULT_API_KEY, TRUST_PROXY_HEADERS
+from preconsult.core.config import (
+    PRECONSULT_API_KEY,
+    TRUST_PROXY_HEADERS,
+    SESSION_COOKIE_NAME,
+    SESSION_COOKIE_SECURE,
+)
 from preconsult.core.observability import new_request_id, log_event, timed
 from preconsult.core.parsing import has_emergency_red_flag
+from preconsult.core.session_auth import sign_session_id, verify_session_cookie
 from preconsult.services.agent_service import (
     stream_interview_questions,
     get_interview_chain,
@@ -37,18 +43,85 @@ from preconsult.services.session_service import (
 # --- Security & Helper Functions ---
 API_KEY_HEADER = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
-async def get_api_key(api_key_header: str = Security(API_KEY_HEADER)):
+
+class AuthContext:
+    """How a request authenticated: a browser session cookie or the API key.
+
+    ``session_id`` is set for cookie auth (and used for ownership checks);
+    ``via`` is ``"cookie"`` or ``"header"`` (metadata only, never logged with a
+    value).
+    """
+
+    def __init__(self, via: str, session_id: str | None = None):
+        self.via = via
+        self.session_id = session_id
+
+
+def _has_valid_api_key(api_key_header: str | None) -> bool:
     # Constant-time comparison so a caller cannot infer the key byte-by-byte
-    # from response timing. Guard against an unset/unconfigured key (config
-    # permits None under BUILD_MODE) or a missing header.
+    # from response timing. Guard against an unset key (config permits None under
+    # BUILD_MODE) or a missing header.
     expected = PRECONSULT_API_KEY
-    if (
+    return bool(
         expected
         and api_key_header
         and secrets.compare_digest(api_key_header, expected)
-    ):
-        return api_key_header
+    )
+
+
+async def authenticate(
+    request: Request,
+    api_key_header: str = Security(API_KEY_HEADER),
+) -> AuthContext:
+    """Accept EITHER a valid session cookie OR the API key.
+
+    The cookie path is the browser's; the header path is kept for Reflex (which
+    still sends ``X-API-KEY``) and programmatic clients. Neither present/valid
+    → 403 ``auth_failed``.
+    """
+    cookie_session = verify_session_cookie(request.cookies.get(SESSION_COOKIE_NAME))
+    if cookie_session:
+        return AuthContext(via="cookie", session_id=cookie_session)
+    if _has_valid_api_key(api_key_header):
+        return AuthContext(via="header")
     raise HTTPException(status_code=403, detail="Could not validate credentials")
+
+
+# Back-compat alias: existing imports/tests may reference get_api_key.
+get_api_key = authenticate
+
+
+def _require_session_ownership(request: Request, session_id: str) -> None:
+    """Reject a cookie-authenticated request for someone else's session.
+
+    Header-auth (programmatic/Reflex) is trusted for now; cookie auth must match
+    the requested session, closing the horizontal-access gap.
+    """
+    cookie_session = verify_session_cookie(request.cookies.get(SESSION_COOKIE_NAME))
+    if cookie_session and cookie_session != session_id:
+        log_event(
+            logging.WARNING,
+            "auth.session_ownership_denied",
+            request_id=new_request_id(),
+        )
+        raise HTTPException(status_code=403, detail="Could not validate credentials")
+
+
+def _set_session_cookie(response: Response, session_id: str) -> None:
+    """Attach the signed, HttpOnly, session cookie to a response.
+
+    No ``max_age``/``expires`` ⇒ a session cookie the browser drops on close.
+    Server-side TTL (30 min) is the real bound.
+    """
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=sign_session_id(session_id),
+        httponly=True,
+        secure=SESSION_COOKIE_SECURE,
+        samesite="strict",
+        path="/",
+    )
+
 
 def _sanitize_input(text: str) -> str:
     """Sanitizes user text: strips whitespace and escapes HTML entities."""
@@ -179,7 +252,7 @@ _STRATEGIC_ERRORS = {
 }
 
 # --- API Router ---
-router = APIRouter(dependencies=[Depends(get_api_key)])
+router = APIRouter(dependencies=[Depends(authenticate)])
 
 @router.post(
     "/session/init",
@@ -193,7 +266,12 @@ router = APIRouter(dependencies=[Depends(get_api_key)])
     responses=_STRATEGIC_ERRORS,
 )
 async def init_session(request: SessionInitRequest, fastapi_req: Request):
-    """Initializes a new ephemeral Redis session with full form data."""
+    """Initializes a new ephemeral Redis session with full form data.
+
+    Also issues the signed session cookie that authenticates the browser for
+    all subsequent calls (the API key remains accepted for Reflex/programmatic
+    clients).
+    """
     request_id = new_request_id()
     ip = get_client_ip(fastapi_req)
 
@@ -240,7 +318,9 @@ async def init_session(request: SessionInitRequest, fastapi_req: Request):
             lang=request.lang,
         )
 
-    return {"session_id": session_id}
+    response = JSONResponse({"session_id": session_id})
+    _set_session_cookie(response, session_id)
+    return response
 
 @router.post(
     "/initial-questions-stream",
@@ -267,7 +347,8 @@ async def get_initial_questions_streamed(
     session_data = await get_session(request.session_id)
     if not session_data:
         raise HTTPException(status_code=404, detail="Session expired or invalid")
-        
+    _require_session_ownership(fastapi_req, request.session_id)
+
     sanitized_complaint = _sanitize_input(request.chief_complaint)
     await update_session(request.session_id, {"chief_complaint": sanitized_complaint})
     session_data["chief_complaint"] = sanitized_complaint
@@ -351,6 +432,7 @@ async def get_interview_questions_streamed(
     session_data = await get_session(request.session_id)
     if not session_data:
         raise HTTPException(status_code=404, detail="Session expired or invalid")
+    _require_session_ownership(fastapi_req, request.session_id)
 
     lang = session_data.get("lang", "en")
     err_msg = (
@@ -414,12 +496,13 @@ async def get_interview_questions_streamed(
     ),
     responses=_STRATEGIC_ERRORS,
 )
-async def generate_pdf_endpoint(request: GeneratePdfRequest):
+async def generate_pdf_endpoint(request: GeneratePdfRequest, fastapi_req: Request):
     """Generates PDF deterministically from session form data + Q&A pairs. No LLM call."""
     request_id = new_request_id()
     session_data = await get_session(request.session_id)
     if not session_data:
         raise HTTPException(status_code=404, detail="Session expired or invalid")
+    _require_session_ownership(fastapi_req, request.session_id)
 
     qa_pairs = [{"question": pair.question, "answer": pair.answer} for pair in request.qa_pairs]
     loop = asyncio.get_running_loop()

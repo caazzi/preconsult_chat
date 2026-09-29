@@ -138,6 +138,51 @@ class TestP8_BuildMode:
                 os.environ.pop("BUILD_MODE", None)
 
 
+class TestP10_SessionSecret:
+    def test_config_raises_without_session_secret(self):
+        """Importing config with no SESSION_SECRET (non-build) must raise."""
+        import dotenv
+        import importlib
+        original = dotenv.load_dotenv
+        dotenv.load_dotenv = lambda *args, **kwargs: None
+        saved_secret = os.environ.pop("SESSION_SECRET", None)
+        saved_build = os.environ.pop("BUILD_MODE", None)
+        try:
+            import preconsult.core.config as cfg
+            try:
+                importlib.reload(cfg)
+                assert False, "Expected ValueError was not raised"
+            except ValueError as exc:
+                assert "SESSION_SECRET" in str(exc)
+        finally:
+            dotenv.load_dotenv = original
+            if saved_secret is not None:
+                os.environ["SESSION_SECRET"] = saved_secret
+            if saved_build is not None:
+                os.environ["BUILD_MODE"] = saved_build
+
+    def test_build_mode_allows_startup_without_session_secret(self):
+        import dotenv
+        import importlib
+        original = dotenv.load_dotenv
+        dotenv.load_dotenv = lambda *args, **kwargs: None
+        saved_secret = os.environ.pop("SESSION_SECRET", None)
+        saved_build = os.environ.get("BUILD_MODE")
+        os.environ["BUILD_MODE"] = "true"
+        try:
+            import preconsult.core.config as cfg
+            importlib.reload(cfg)
+            assert cfg.SESSION_SECRET  # non-empty insecure fallback
+        finally:
+            dotenv.load_dotenv = original
+            if saved_secret is not None:
+                os.environ["SESSION_SECRET"] = saved_secret
+            if saved_build is not None:
+                os.environ["BUILD_MODE"] = saved_build
+            else:
+                os.environ.pop("BUILD_MODE", None)
+
+
 class TestP9_NoPHIDraftPersistence:
     def test_state_has_no_localstorage_draft(self):
         """The intake draft (PHI) must not be written to localStorage.

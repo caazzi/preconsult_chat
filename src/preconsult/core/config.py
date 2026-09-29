@@ -42,6 +42,26 @@ BEDROCK_REGION = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_DEFAULT_RE
 # not just in Sentry. Mirrors the Sentry `release` in main.py.
 REPOSITORY_REVISION = os.environ.get("GIT_SHA") or os.environ.get("K_REVISION") or "dev"
 
+# --- Session cookie (per-session auth) -------------------------------------
+# A signed, HttpOnly session cookie authenticates a browser's ephemeral session.
+# The cookie stores only an opaque, signed *session id* — never health data — so
+# it does not alter the zero-persistence posture. It is a session cookie (no
+# Max-Age), so the browser discards it on close; the server-side 30-minute TTL is
+# the real lifetime bound.
+SESSION_SECRET = os.environ.get("SESSION_SECRET")
+if not SESSION_SECRET:
+    if BUILD_MODE:
+        logging.warning("BUILD_MODE=true: SESSION_SECRET nao verificada. NAO use em producao.")
+        SESSION_SECRET = "build-mode-insecure-session-secret"
+    else:
+        raise ValueError("FATAL: SESSION_SECRET nao definida. Abortando startup.")
+
+SESSION_COOKIE_NAME = "preconsult_session"
+# Secure must be enabled in production (HTTPS). Default to True; local dev over
+# plain HTTP can opt out with SESSION_COOKIE_SECURE=false.
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "true").lower() != "false"
+
+
 # AWS credentials for Bedrock are resolved by boto3's default provider chain
 # (env vars, shared config, or the instance/task role). No path validation is
 # required here; log only whether an explicit key pair is present (PHI-free).

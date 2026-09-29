@@ -69,6 +69,14 @@ jobs:
       run: |
         uv run ruff check . || echo "Ruff failed, but continuing for now."
 
+    - name: Verify contract artifacts are current
+      run: |
+        uv run python scripts/export_contracts.py
+        if ! git diff --exit-code -- contracts/; then
+          echo "::error::contracts/ is stale. Run scripts/export_contracts.py and commit the result."
+          exit 1
+        fi
+
     - name: Run tests with coverage gate
       env:
         PRECONSULT_API_KEY: ci_test_key_123

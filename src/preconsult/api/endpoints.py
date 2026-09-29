@@ -296,16 +296,23 @@ async def get_initial_questions_streamed(
 
     async def event_generator():
         streamed = 0
+        structured = False
         try:
-            async for chunk in stream_interview_questions(session_data, lang, chain):
-                streamed += 1
-                yield f"data: {json.dumps(chunk)}\n\n"
+            async for event in stream_interview_questions(session_data, lang, chain):
+                if event.kind == "questions":
+                    structured = True
+                    payload = {"type": "questions", "questions": event.value}
+                    yield f"data: {json.dumps(payload)}\n\n"
+                else:
+                    streamed += 1
+                    yield f"data: {json.dumps(event.value)}\n\n"
             log_event(
                 logging.INFO,
                 "stream.initial.ok",
                 request_id=request_id,
                 session_id_short=request.session_id[:8],
                 chunks=streamed,
+                structured=structured,
             )
         except Exception as e:
             logging.error(f"Error during streaming initial questions: {e}", exc_info=True)
@@ -366,16 +373,23 @@ async def get_interview_questions_streamed(
 
     async def event_generator():
         streamed = 0
+        structured = False
         try:
-            async for chunk in stream_interview_questions(session_data, lang, chain):
-                streamed += 1
-                yield f"data: {json.dumps(chunk)}\n\n"
+            async for event in stream_interview_questions(session_data, lang, chain):
+                if event.kind == "questions":
+                    structured = True
+                    payload = {"type": "questions", "questions": event.value}
+                    yield f"data: {json.dumps(payload)}\n\n"
+                else:
+                    streamed += 1
+                    yield f"data: {json.dumps(event.value)}\n\n"
             log_event(
                 logging.INFO,
                 "stream.interview.ok",
                 request_id=request_id,
                 session_id_short=request.session_id[:8],
                 chunks=streamed,
+                structured=structured,
             )
         except Exception as e:
             logging.error(f"Error during streaming interview questions: {e}", exc_info=True)

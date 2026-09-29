@@ -6,6 +6,7 @@ os.environ["BEDROCK_REGION"] = "us-east-1"
 os.environ["REDIS_URL"] = "redis://localhost:6379/0"
 
 
+
 def _reset_session_service_state():
     """Reset the session-service module singleton state between tests.
 

@@ -20,6 +20,7 @@ from httpx import ASGITransport
 from unittest.mock import patch, AsyncMock
 
 from reflex_app.preconsult.preconsult import api as app
+from preconsult.services.agent_service import StreamEvent
 
 HEADERS = {"X-API-KEY": "ci_test_key_123"}
 
@@ -58,7 +59,7 @@ async def test_stream_emits_json_encoded_string_chunks(mock_update, mock_chain, 
     mock_rate.return_value = True
 
     async def gen():
-        yield "Hello\nworld"  # must be JSON-encoded as a single string value
+        yield StreamEvent(kind="text", value="Hello\nworld")  # JSON-encoded string value
 
     mock_stream.side_effect = lambda *a, **k: gen()
 
@@ -95,7 +96,7 @@ async def test_streamed_body_round_trips_through_client_consumer(mock_update, mo
 
     async def agen():
         for c in chunks:
-            yield c
+            yield StreamEvent(kind="text", value=c)
 
     mock_stream.side_effect = lambda *a, **k: agen()
 
@@ -122,7 +123,7 @@ async def test_stream_error_token_is_emitted_and_client_visible(mock_update, moc
     mock_rate.return_value = True
 
     async def gen():
-        yield "partial chunk"
+        yield StreamEvent(kind="text", value="partial chunk")
         raise RuntimeError("bedrock AI down")
 
     mock_stream.side_effect = lambda *a, **k: gen()
@@ -140,3 +141,39 @@ async def test_stream_error_token_is_emitted_and_client_visible(mock_update, moc
     decoded_lines = [_json_payload(ln) for ln in _lines(body)]
     assert any("Service temporarily unavailable" in d for d in decoded_lines)
     assert "bedrock AI down" not in body  # server internals never leak
+
+
+@pytest.mark.asyncio
+@patch("preconsult.api.endpoints.stream_interview_questions")
+@patch("preconsult.api.endpoints.get_session", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.check_rate_limit", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.get_interview_chain", new_callable=AsyncMock)
+@patch("preconsult.api.endpoints.update_session", new_callable=AsyncMock)
+async def test_structured_questions_event_follows_text(mock_update, mock_chain, mock_rate, mock_get, mock_stream):
+    """The terminal tool-use event is emitted as {"type":"questions",...}.
+
+    Text deltas precede it for live rendering; clients that only parse text
+    simply ignore the structured event (back-compat).
+    """
+    mock_get.return_value = {"lang": "en", "chief_complaint": "pain"}
+    mock_rate.return_value = True
+
+    async def gen():
+        yield StreamEvent(kind="text", value="1. A?")
+        yield StreamEvent(kind="questions", value=["A?", "B?", "C?"])
+
+    mock_stream.side_effect = lambda *a, **k: gen()
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with client.stream(
+            "POST", "/api/initial-questions-stream",
+            json={"session_id": "x", "chief_complaint": "pain"}, headers=HEADERS,
+        ) as response:
+            assert response.status_code == 200
+            body = "".join([line async for line in response.aiter_text()])
+
+    payloads = [_json_payload(ln) for ln in _lines(body)]
+    assert "1. A?" in payloads
+    structured = [p for p in payloads if isinstance(p, dict) and p.get("type") == "questions"]
+    assert len(structured) == 1
+    assert structured[0]["questions"] == ["A?", "B?", "C?"]

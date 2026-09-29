@@ -4,6 +4,7 @@ from unittest.mock import patch, AsyncMock
 import httpx
 from httpx import ASGITransport
 from reflex_app.preconsult.preconsult import api as app
+from preconsult.services.agent_service import StreamEvent
 
 HEADERS = {"X-API-KEY": "ci_test_key_123"}
 
@@ -91,7 +92,7 @@ async def test_interview_questions_stream(mock_chain, mock_rate, mock_stream, mo
     mock_get.return_value = FULL_SESSION_DATA
     mock_rate.return_value = True
     async def fake_stream(*args, **kwargs):
-        yield "1. Question?"
+        yield StreamEvent(kind="text", value="1. Question?")
     mock_stream.side_effect = fake_stream
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -115,7 +116,7 @@ async def test_initial_questions_stream(mock_update, mock_chain, mock_rate, mock
     mock_get.return_value = {"lang": "en", "chief_complaint": "pain"}
     mock_rate.return_value = True
     async def fake_stream(*args, **kwargs):
-        yield "1. Question?"
+        yield StreamEvent(kind="text", value="1. Question?")
     mock_stream.side_effect = fake_stream
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -149,7 +150,7 @@ async def test_initial_questions_stream_sanitizes_input(mock_update, mock_chain,
     mock_get.return_value = {"lang": "en", "chief_complaint": "pain"}
     mock_rate.return_value = True
     async def fake_stream(*args, **kwargs):
-        yield "1. Question?"
+        yield StreamEvent(kind="text", value="1. Question?")
     mock_stream.side_effect = fake_stream
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -232,7 +233,7 @@ async def test_full_session_happy_path(mock_inc, mock_quota, mock_rate, mock_cre
     mock_rate.return_value = True
     mock_get.return_value = FULL_SESSION_DATA
     async def fake_stream(*args, **kwargs):
-        yield "1. Happy Question?"
+        yield StreamEvent(kind="text", value="1. Happy Question?")
     mock_stream.side_effect = fake_stream
     mock_pdf.return_value = (b"%PDF-happy-pdf", "Report.pdf")
 
@@ -583,7 +584,7 @@ async def test_interview_stream_non_emergency_still_calls_llm(
     mock_rate.return_value = True
 
     async def fake_stream(*args, **kwargs):
-        yield "1. Where is the pain?"
+        yield StreamEvent(kind="text", value="1. Where is the pain?")
 
     mock_stream.side_effect = fake_stream
 

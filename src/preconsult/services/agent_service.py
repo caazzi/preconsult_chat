@@ -4,14 +4,58 @@ Clinical Agent Service (Replacing RAG).
 This module replaces the old vector-search retrieval system with pure,
 highly-optimized Clinical Prompt Engineering using established medical
 frameworks (OPQRST and SAMPLE).
+
+Output contract: the model is given a ``report_questions`` tool so it returns a
+typed ``string[]`` rather than numbered prose the client has to regex-split.
+``stream_interview_questions`` yields a typed event stream (``StreamEvent``):
+live ``text`` deltas (kept for back-compat / progressive rendering) followed by
+a terminal ``questions`` event with the structured list. Consumers that only
+understand text can ignore the terminal event.
 """
 import logging
-from typing import AsyncGenerator
+from dataclasses import dataclass
+from typing import AsyncGenerator, Literal, Union
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
-from langchain_core.output_parsers import StrOutputParser
 
 from preconsult.core.llm import get_llm
+
+
+# Structured-output tool the model must call to return the final questions.
+REPORT_QUESTIONS_TOOL = {
+    "name": "report_questions",
+    "description": (
+        "Report the final set of 3 to 5 clinical follow-up questions. "
+        "Each question must be a single, clear, open-ended question. "
+        "Call this exactly once as your final action; do not also emit prose."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "questions": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 3,
+                "maxItems": 5,
+                "description": "Ordered list of 3-5 single-point questions.",
+            }
+        },
+        "required": ["questions"],
+    },
+}
+
+
+@dataclass
+class StreamEvent:
+    """One typed unit of the question stream.
+
+    ``kind="text"`` carries a raw model delta for live rendering.
+    ``kind="questions"`` carries the final structured list (terminal event).
+    """
+
+    kind: Literal["text", "questions"]
+    value: Union[str, list[str]]
+
 
 def get_language_instructions(lang: str) -> dict:
     if lang == 'pt':
@@ -87,15 +131,48 @@ def get_interview_chain() -> Runnable:
                 "Alcohol: {alcohol}"
             )),
         ])
-        _interview_chain = prompt | get_llm() | StrOutputParser()
+        _interview_chain = prompt | get_llm().bind_tools([REPORT_QUESTIONS_TOOL])
     return _interview_chain
+
+
+def _to_dict(msg) -> dict:
+    """Normalize a message into a plain dict for the streaming consumer.
+
+    Kept dependency-free so tests can feed either a real BaseMessage or a fake
+    exposing ``content`` / ``tool_calls``.
+    """
+    if isinstance(msg, dict):
+        return msg
+    content = getattr(msg, "content", "")
+    tool_calls = getattr(msg, "tool_calls", None) or []
+    return {"content": content, "tool_calls": tool_calls}
+
+
+def _extract_questions(tool_call) -> list[str] | None:
+    """Pull a ``questions`` list out of a ``report_questions`` tool call."""
+    if not isinstance(tool_call, dict):
+        return None
+    if tool_call.get("name") != REPORT_QUESTIONS_TOOL["name"]:
+        return None
+    args = tool_call.get("args") or {}
+    questions = args.get("questions")
+    if isinstance(questions, list):
+        cleaned = [q.strip() for q in questions if isinstance(q, str) and q.strip()]
+        return cleaned or None
+    return None
+
 
 async def stream_interview_questions(
     session_data: dict,
     lang: str,
     chain: Runnable
-) -> AsyncGenerator[str, None]:
-    """Streams questions from the interview chain."""
+) -> AsyncGenerator[StreamEvent, None]:
+    """Streams typed events: text deltas, then a terminal structured list.
+
+    Yields ``StreamEvent(kind="text")`` for each model content delta (for live
+    rendering / back-compat) and, when the model calls ``report_questions``, a
+    final ``StreamEvent(kind="questions")`` carrying the structured list.
+    """
     logging.info(f"Streaming interview questions (lang={lang}).")
     lang_instructions = get_language_instructions(lang)
 
@@ -117,6 +194,19 @@ async def stream_interview_questions(
         "alcohol": session_data.get("alcohol", ""),
         "language_instruction": lang_instructions["initial_q_instruction"],
     }
-    async for chunk in chain.astream(input_dict):
-        yield chunk
+
+    final_questions: list[str] | None = None
+    async for msg in chain.astream(input_dict):
+        data = _to_dict(msg)
+        content = data.get("content")
+        if isinstance(content, str) and content:
+            yield StreamEvent(kind="text", value=content)
+        for tool_call in data.get("tool_calls", []) or []:
+            questions = _extract_questions(tool_call)
+            if questions:
+                final_questions = questions
+
+    if final_questions is not None:
+        yield StreamEvent(kind="questions", value=final_questions)
+
 

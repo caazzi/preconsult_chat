@@ -1,12 +1,13 @@
 import pytest
 from unittest.mock import patch
-from langchain_core.language_models import FakeListChatModel
 from preconsult.services.agent_service import (
     get_language_instructions,
     get_interview_chain,
-    stream_interview_questions
+    stream_interview_questions,
+    StreamEvent,
 )
 import preconsult.services.agent_service as agent_service
+from tests.fakes import ToolCallingFakeLLM
 
 @pytest.fixture(autouse=True)
 def reset_singletons():
@@ -25,7 +26,10 @@ def test_language_instructions_pt():
 @pytest.mark.asyncio
 @patch("preconsult.services.agent_service.get_llm")
 async def test_interview_chain_streams_questions(mock_get_llm):
-    fake_llm = FakeListChatModel(responses=["1. Question A?\n2. Question B?"])
+    fake_llm = ToolCallingFakeLLM(
+        text="1. Question A?\n2. Question B?",
+        questions=["Question A?", "Question B?"],
+    )
     mock_get_llm.return_value = fake_llm
     
     chain = get_interview_chain()
@@ -44,18 +48,20 @@ async def test_interview_chain_streams_questions(mock_get_llm):
         "alcohol": "Rarely"
     }
     
-    questions = []
-    async for chunk in stream_interview_questions(session_data, "en", chain):
-        questions.append(chunk)
+    events = []
+    async for event in stream_interview_questions(session_data, "en", chain):
+        events.append(event)
     
-    full_text = "".join(questions)
+    full_text = "".join(e.value for e in events if e.kind == "text")
+    structured = [e.value for e in events if e.kind == "questions"]
     assert "Question A" in full_text
+    assert structured == [["Question A?", "Question B?"]]
     assert mock_get_llm.called
 
 @pytest.mark.asyncio
 @patch("preconsult.services.agent_service.get_llm")
 async def test_interview_chain_pt(mock_get_llm):
-    fake_llm = FakeListChatModel(responses=["1. Pergunta A?"])
+    fake_llm = ToolCallingFakeLLM(text="1. Pergunta A?", questions=["Pergunta A?"])
     mock_get_llm.return_value = fake_llm
     
     chain = get_interview_chain()
@@ -65,11 +71,11 @@ async def test_interview_chain_pt(mock_get_llm):
         "specialist": "Cardiology",
     }
     
-    questions = []
-    async for chunk in stream_interview_questions(session_data, "pt", chain):
-        questions.append(chunk)
+    events = []
+    async for event in stream_interview_questions(session_data, "pt", chain):
+        events.append(event)
     
-    full_text = "".join(questions)
+    full_text = "".join(e.value for e in events if e.kind == "text")
     assert "Pergunta A" in full_text
     assert mock_get_llm.called
 
@@ -83,6 +89,34 @@ def test_interview_chain_prompt_contains_all_form_fields():
     ]
     for var in expected_vars:
         assert var in prompt.input_variables
+
+def test_interview_chain_binds_report_questions_tool():
+    """The chain must bind the structured report_questions tool."""
+    get_interview_chain()
+    assert agent_service.REPORT_QUESTIONS_TOOL["name"] == "report_questions"
+
+
+def test_extract_questions_from_tool_call():
+    from preconsult.services.agent_service import _extract_questions
+
+    assert _extract_questions(
+        {"name": "report_questions", "args": {"questions": ["A?", " B? ", ""]}}
+    ) == ["A?", "B?"]
+    # wrong tool / non-dict / malformed args -> None
+    assert _extract_questions({"name": "other", "args": {"questions": ["A?"]}}) is None
+    assert _extract_questions("not-a-call") is None
+    assert _extract_questions({"name": "report_questions", "args": {}}) is None
+    assert _extract_questions({"name": "report_questions", "args": {"questions": []}}) is None
+
+
+def test_to_dict_normalizes_message_and_dict():
+    from langchain_core.messages import AIMessageChunk
+    from preconsult.services.agent_service import _to_dict
+
+    assert _to_dict({"content": "x"}) == {"content": "x"}
+    out = _to_dict(AIMessageChunk(content="hello"))
+    assert out["content"] == "hello"
+    assert out["tool_calls"] == []
 
 def test_interview_prompt_contains_emergency_rule():
     chain = get_interview_chain()
@@ -103,8 +137,10 @@ def test_interview_prompt_contains_xml_and_frameworks():
 
 @pytest.mark.asyncio
 @patch("preconsult.services.agent_service.get_llm")
-async def test_emergency_detection_in_output(mock_get_llm):
-    fake_llm = FakeListChatModel(responses=["⚠️ EMERGENCY: Please call 911 immediately."])
+async def test_emergency_text_is_still_streamed_as_text(mock_get_llm):
+    """An emergency phrasing arrives as text (no tool call) and must surface
+    verbatim so the client's output-side is_emergency_trigger backstop fires."""
+    fake_llm = ToolCallingFakeLLM(text="⚠️ EMERGENCY: Please call 911 immediately.")
     mock_get_llm.return_value = fake_llm
     
     chain = get_interview_chain()
@@ -113,8 +149,10 @@ async def test_emergency_detection_in_output(mock_get_llm):
     }
     
     output = []
-    async for chunk in stream_interview_questions(session_data, "en", chain):
-        output.append(chunk)
+    async for event in stream_interview_questions(session_data, "en", chain):
+        assert isinstance(event, StreamEvent)
+        if event.kind == "text":
+            output.append(event.value)
         
     full_text = "".join(output)
     

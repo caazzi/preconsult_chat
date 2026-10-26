@@ -10,13 +10,15 @@ import html
 import json
 import logging
 from datetime import date, timedelta
+from typing import Annotated
 from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
 from fastapi.responses import StreamingResponse, Response, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 from langchain_core.runnables import Runnable
 
 from preconsult.core.config import (
+    ALLOW_PUBLIC_INIT,
     PRECONSULT_API_KEY,
     TRUST_PROXY_HEADERS,
     SESSION_COOKIE_NAME,
@@ -91,6 +93,23 @@ async def authenticate(
     if _has_valid_api_key(api_key_header):
         return AuthContext(via="header")
     raise HTTPException(status_code=403, detail="Could not validate credentials")
+
+
+async def init_access(
+    request: Request,
+    api_key_header: str = Security(API_KEY_HEADER),
+) -> None:
+    """Access rule for the session bootstrap.
+
+    The bootstrap mints the cookie that authenticates every other route, so
+    it cannot require that cookie. With ALLOW_PUBLIC_INIT=true it is open to
+    anonymous browsers and relies on the per-IP rate limit, the bot gate and
+    the bounded payload instead. With the default false it behaves exactly
+    like every other route (cookie or key).
+    """
+    if ALLOW_PUBLIC_INIT:
+        return
+    await authenticate(request, api_key_header)
 
 
 # Back-compat alias: existing imports/tests may reference get_api_key.
@@ -193,24 +212,30 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "127.0.0.1"
 
 # --- Data Models (Ephemeral State Design) ---
+# One list entry (condition, medication, family-history item). Every bound
+# here is a cost/abuse guard: the bootstrap is (or will be) public, and this
+# payload goes into Redis, the Bedrock prompt and the PDF renderer.
+_ListEntry = Annotated[str, StringConstraints(max_length=100)]
+
+
 class SessionInitRequest(BaseModel):
     # Step 1 — Demographics
-    age_bracket: str = ""
-    sex: str = ""
-    lang: str = "en"
+    age_bracket: str = Field(default="", max_length=10)
+    sex: str = Field(default="", max_length=40)
+    lang: str = Field(default="en", max_length=8)
     # Step 2 — Chief Complaint
-    specialist: str = ""
-    chief_complaint: str = ""
-    duration: str = ""
-    complaint_detail: str = ""
+    specialist: str = Field(default="", max_length=80)
+    chief_complaint: str = Field(default="", max_length=2000)
+    duration: str = Field(default="", max_length=80)
+    complaint_detail: str = Field(default="", max_length=2000)
     # Step 3 — Medical History
-    conditions: list[str] = Field(default_factory=list)
-    medications: list[str] = Field(default_factory=list)
-    allergies: str = ""
+    conditions: list[_ListEntry] = Field(default_factory=list, max_length=20)
+    medications: list[_ListEntry] = Field(default_factory=list, max_length=20)
+    allergies: str = Field(default="", max_length=500)
     # Step 4 — Lifestyle & Family
-    family_history: list[str] = Field(default_factory=list)
-    smoking: str = ""
-    alcohol: str = ""
+    family_history: list[_ListEntry] = Field(default_factory=list, max_length=20)
+    smoking: str = Field(default="", max_length=40)
+    alcohol: str = Field(default="", max_length=40)
 
 class InitialRequest(BaseModel):
     session_id: str
@@ -258,10 +283,15 @@ _STRATEGIC_ERRORS = {
 }
 
 # --- API Router ---
+# Authenticated surface: every route except the session bootstrap.
 router = APIRouter(dependencies=[Depends(authenticate)])
+# Bootstrap surface: POST /session/init, which issues the cookie used by the
+# routes above. Access is decided by init_access (ALLOW_PUBLIC_INIT).
+public_router = APIRouter()
 
-@router.post(
+@public_router.post(
     "/session/init",
+    dependencies=[Depends(init_access)],
     tags=[TAG_SESSION],
     summary="Create an ephemeral patient session",
     description=(

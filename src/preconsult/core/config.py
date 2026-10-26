@@ -61,6 +61,18 @@ SESSION_COOKIE_NAME = "preconsult_session"
 # plain HTTP can opt out with SESSION_COOKIE_SECURE=false.
 SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "true").lower() != "false"
 
+# Public session bootstrap. When true, POST /api/session/init may be called
+# without a credential and mints the session cookie that authenticates every
+# other route. Default false: the bootstrap stays behind auth until per-IP
+# bucketing is verified in production -- if every request resolved to one IP,
+# the 20/day session quota would become a single global cap.
+ALLOW_PUBLIC_INIT = os.environ.get("ALLOW_PUBLIC_INIT", "false").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+
 
 # AWS credentials for Bedrock are resolved by boto3's default provider chain
 # (env vars, shared config, or the instance/task role). No path validation is

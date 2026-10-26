@@ -4,7 +4,9 @@ Authz-matrix enforcement tests.
 Each `/api/*` route must require authentication. A request with no credential
 must be rejected with the stable `auth_failed` code BEFORE any handler work.
 This pins the matrix in docs/authz-matrix.md so a new route cannot ship
-unauthenticated.
+unauthenticated. `POST /api/session/init` is the session bootstrap: it is
+asserted here under the default `ALLOW_PUBLIC_INIT=false`, and its open mode
+is covered by tests/test_public_init.py.
 """
 
 import httpx

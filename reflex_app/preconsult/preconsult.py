@@ -8,9 +8,13 @@ from starlette.middleware.gzip import GZipMiddleware
 from .state import State, AdminState
 from preconsult.core.observability import log_event, new_request_id, _inc, snapshot_counters
 try:
-    from preconsult.api.endpoints import router as api_router
+    from preconsult.api.endpoints import (
+        public_router as api_public_router,
+        router as api_router,
+    )
 except ImportError:
     api_router = None
+    api_public_router = None
 
 
 def error_callout() -> rx.Component:
@@ -897,6 +901,7 @@ if api_router:
     custom_api.add_exception_handler(ClientError, bedrock_api_handler)
     custom_api.add_exception_handler(Exception, generic_handler)
     custom_api.include_router(api_router)
+    custom_api.include_router(api_public_router)
     app._api.mount("/api", custom_api)
 
     async def health_live(request):

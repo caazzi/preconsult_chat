@@ -246,36 +246,36 @@ jobs:
           service: ${{ env.SERVICE_NAME }}
           region: ${{ env.REGION }}
           image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          # `env_vars` and `secrets` are forwarded line by line and comments are
+          # NOT stripped: a `#` line in `env_vars` becomes an empty-valued
+          # variable named after the comment, and in `secrets` it becomes an
+          # invalid secret reference. That is what failed the main deploy on
+          # 2026-10-26: "No secret version specified for # Per-session cookie
+          # signing key...:latest". Keep explanations OUTSIDE these blocks.
+          #
+          # REFLEX_SOCKET_TIMEOUT: engine.io socket idle timeout (seconds), raised
+          # from the 120s default so an idle user's session is less likely to be
+          # closed server-side while the page is open; a late click then
+          # re-handshakes cleanly instead of hitting a stale-session failure.
+          # REFLEX_SOCKET_INTERVAL: shorten the engine.io server->client ping
+          # interval so the long-poll is refreshed often enough to outrun any
+          # proxy/idle keepalive between polls (default 25s).
           env_vars: |
             API_BASE_URL=https://pre-consult.org
             BEDROCK_REGION=us-east-1
             LLM_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
-            # Reflex/engine.io socket idle timeout (seconds). Raised from the
-            # 120s default so an idle user's session is less likely to be closed
-            # server-side while the page is open; a late click then re-handshakes
-            # cleanly instead of hitting a stale-session failure. (The 400
-            # translation in _RequestIDMiddleware is the real fix; this lowers the
-            # frequency of the racy case.)
             REFLEX_SOCKET_TIMEOUT=600
-            # Shorten the engine.io server->client ping interval so the long-poll
-            # is refreshed frequently enough to outrun any proxy/idle keepalive
-            # between polls. Default is 25s; the Google Frontend/HTTP1 poll reset we
-            # observed (endless fresh handshake, no state delta) is consistent with a
-            # between-poll teardown longer than ~25s — a more frequent ping keeps the
-            # connection's sid alive server-side so state deltas get delivered.
             REFLEX_SOCKET_INTERVAL=10
+          # SESSION_SECRET: per-session cookie signing key (openssl rand -hex 32).
+          # AWS_*: INTERIM (Phase 1) - the serving container runs on GCP but calls
+          # AWS Bedrock, so credentials live in GCP Secret Manager until the
+          # Phase 3 compute migration to AWS (where a task role removes them).
+          # Scope the IAM policy to bedrock:InvokeModelWithResponseStream on the
+          # single Haiku model.
           secrets: |
             REDIS_URL=REDIS_URL:latest
             PRECONSULT_API_KEY=SECUREMED_API_KEY:latest
-            # Per-session cookie signing key. Generate with `openssl rand -hex 32`
-            # and store in Secret Manager before enabling cookie auth in prod.
             SESSION_SECRET=SESSION_SECRET:latest
-            # INTERIM (Phase 1): the serving container runs on GCP but calls AWS
-            # Bedrock, so Bedrock credentials live in GCP Secret Manager until the
-            # Phase 3 compute migration to AWS (where a task role removes them).
-            # Scope the IAM policy to bedrock:InvokeModelWithResponseStream on the
-            # single Haiku model. Create AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
-            # secrets in Secret Manager before enabling in production.
             AWS_ACCESS_KEY_ID=AWS_ACCESS_KEY_ID:latest
             AWS_SECRET_ACCESS_KEY=AWS_SECRET_ACCESS_KEY:latest
           flags: ${{ steps.profile.outputs.flags }}

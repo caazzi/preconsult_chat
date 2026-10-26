@@ -148,6 +148,50 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  e2e-spa:
+    # Hermetic Playwright E2E for the shadow SPA (web/) served at /next. Builds
+    # the Vite app and drives it against a real single-worker backend with the
+    # SPA's /api calls mocked at the browser layer (no live Bedrock/Redis).
+    name: Playwright E2E (shadow SPA /next)
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install deps (with e2e extra)
+        run: uv sync --extra e2e
+
+      - name: Install Playwright browser + system deps
+        run: uv run python -m playwright install --with-deps chromium
+
+      - name: Run SPA E2E
+        run: scripts/run_e2e_spa.sh
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-spa-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   deploy:
     name: Deploy to Cloud Run
     needs: test
@@ -300,6 +344,12 @@ jobs:
           # future revision - the AWS secrets do not exist, so each deploy would
           # keep failing on them even after they leave this file. Add the AWS_*
           # refs back here when Bedrock is switched on.
+          # ALLOW_PUBLIC_INIT=true is set below because the SPA at /next holds no
+          # API key (cookie-only), so the session bootstrap has to be reachable
+          # anonymously for it to start at all. Guards: the bot gate, 2/min plus
+          # 20/day per client IP (bucketing verified in production 2026-10-26)
+          # and the bounds on SessionInitRequest. Keep comments OUT of the
+          # blocks below - they are forwarded to gcloud verbatim.
           env_vars_update_strategy: overwrite
           secrets_update_strategy: overwrite
           env_vars: |
@@ -308,6 +358,7 @@ jobs:
             VERTEX_AI_REGION=us-central1
             LLM_PROVIDER=vertex
             LLM_MODEL=gemini-2.5-flash
+            ALLOW_PUBLIC_INIT=true
             REFLEX_SOCKET_TIMEOUT=600
             REFLEX_SOCKET_INTERVAL=10
             TRUST_PROXY_HEADERS=true
@@ -704,5 +755,46 @@ jobs:
             done
             echo "/${page}: en + pt served"
           done
+
+          # 10. Shadow SPA (/next) availability + document/asset contract
+          #
+          # The React rewrite is served from the same image at /next during the
+          # shadow period. This is a liveness/document-contract check only (no
+          # session/stream, per the deployed-smoke scope): the /next shell must
+          # answer 200, be no-store, and every /next/assets/* chunk it
+          # references must resolve 200 — the same stale-shell guard as Stage 7,
+          # so a broken or cached SPA cannot deploy green.
+          echo "==== Stage 10: Shadow SPA (/next) document + asset graph ===="
+          NEXT_STATUS=$(curl -s -o /tmp/next.html -w "%{http_code}" "${BASE_URL}/next/" \
+            --connect-timeout 15 --max-time 30 || echo "000")
+          echo "/next/ HTTP Status: ${NEXT_STATUS}"
+          if [ "$NEXT_STATUS" != "200" ]; then
+            echo "::error::/next/ did not return 200 (got ${NEXT_STATUS}). The shadow SPA is not being served."
+            exit 1
+          fi
+
+          curl -s -D /tmp/next_headers.txt -o /dev/null "${BASE_URL}/next/" \
+            --connect-timeout 15 --max-time 30
+          NEXT_CTRL=$(tr -d '\r' < /tmp/next_headers.txt | grep -i -m1 '^cache-control:' | sed -e 's/^[Cc]ache-[Cc]ontrol:[[:space:]]*//')
+          echo "/next/ cache-control: '${NEXT_CTRL}'"
+          if [ -z "$NEXT_CTRL" ] || ! echo "$NEXT_CTRL" | grep -qi "no-store"; then
+            echo "::error::/next/ document is cacheable (cache-control: '${NEXT_CTRL}'). A stale shell can 404 its chunks."
+            exit 1
+          fi
+
+          NEXT_FAILED=0
+          for asset in $(grep -oE '(src|href)="/next/[^"]+"' /tmp/next.html | sed -E 's/(src|href)="([^"]+)"/\2/' | grep -E '\.(js|css)$'); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}${asset}" --connect-timeout 15 --max-time 30 || echo "000")
+            echo "  $CODE  $asset"
+            if [ "$CODE" != "200" ]; then
+              echo "::error::/next shell references missing asset: $asset (HTTP $CODE)"
+              NEXT_FAILED=1
+            fi
+          done
+          if [ "$NEXT_FAILED" = "1" ]; then
+            echo "::error::/next asset graph is incomplete."
+            exit 1
+          fi
+          echo "Shadow SPA /next OK (200, no-store document, asset graph resolves)"
 
           echo "==== Smoke Test Passed Successfully! ===="

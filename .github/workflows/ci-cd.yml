@@ -266,6 +266,7 @@ jobs:
             LLM_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
             REFLEX_SOCKET_TIMEOUT=600
             REFLEX_SOCKET_INTERVAL=10
+            TRUST_PROXY_HEADERS=true
           # SESSION_SECRET: per-session cookie signing key (openssl rand -hex 32).
           # AWS_*: INTERIM (Phase 1) - the serving container runs on GCP but calls
           # AWS Bedrock, so credentials live in GCP Secret Manager until the

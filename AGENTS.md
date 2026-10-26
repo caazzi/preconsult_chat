@@ -179,13 +179,27 @@ outages), so Redis must be reserved for actual patient sessions:
   those guards when touching the fallback — they protect the zero-persistence privacy claim.
 - Session CRUD has a best-effort per-worker in-memory fallback for transient Redis
   errors. It is a resilience shim, not a store of truth.
+- The rate-limit / session-quota fallback (`MemoryRateLimitStore`) is capped at
+  `_MEMORY_LIMITER_MAX_KEYS`, evicting expired counters first, then those closest to expiry. Its keys
+  are per client IP and now genuinely vary per visitor, so the cap is what stops a long outage from
+  growing a worker's dict for the life of the process (expired counters used to be dropped only when
+  the same key returned). Tests: `tests/test_memory_limiter.py`.
 
 ## Client-IP & proxy trust
 
-- `get_client_ip()` only honors `cf-connecting-ip` / `x-forwarded-for` when `TRUST_PROXY_HEADERS=true`
-  (`src/preconsult/core/config.py`). Leave it `false` unless the app genuinely sits behind a trusted
-  fronting proxy — otherwise spoofed headers bypass per-IP rate limits / quotas. Tests in
+- **Measured on Cloud Run (2026-10-26, header-echo probe, service deleted after):** the container's
+  transport peer is `169.254.169.126` — the local proxy, identical for every visitor. Cloud Run
+  **appends** the real client to `X-Forwarded-For` and does **not** strip what the caller sent
+  (`X-Forwarded-For: 1.2.3.4` arrives as `1.2.3.4,187.15.85.23`). `cf-connecting-ip` passes through
+  untouched. Consequence: `TRUST_PROXY_HEADERS` must be `true` in the deployed container, and
+  `get_client_ip()` takes the **last** X-Forwarded-For hop, validated with `ipaddress`, falling back
+  to the transport address. Trusting the leftmost hop or `cf-connecting-ip` would let a client rotate
+  IPs and bypass the per-IP rate limits / 20-a-day session quota; trusting the transport peer alone
+  makes those limits **global** (one shared bucket for all users). Caveat: `TRUST_CF_CONNECTING_IP`
+  stays `false` unless `pre-consult.org` is moved behind Cloudflare's proxy. Tests in
   `tests/test_client_ip.py` lock this policy.
+- Setting `TRUST_PROXY_HEADERS` without the right hop was a live bug, not a hardening nicety: with it
+  off, every production user shared `169.254.169.126` in the quota key.
 
 ## Serving & the CDN/edge cache reality
 

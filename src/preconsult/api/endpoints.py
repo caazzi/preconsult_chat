@@ -10,6 +10,7 @@ import html
 import json
 import logging
 from datetime import date, timedelta
+from ipaddress import ip_address
 from typing import Annotated
 from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
@@ -20,6 +21,7 @@ from langchain_core.runnables import Runnable
 from preconsult.core.config import (
     ALLOW_PUBLIC_INIT,
     PRECONSULT_API_KEY,
+    TRUST_CF_CONNECTING_IP,
     TRUST_PROXY_HEADERS,
     SESSION_COOKIE_NAME,
     SESSION_COOKIE_SECURE,
@@ -196,20 +198,56 @@ def _emergency_stream_response(lang: str, event: str, request_id: str) -> Stream
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+# Longest header value we will parse. X-Forwarded-For is attacker-influenced
+# and its value ends up in rate-limit keys, so cap it instead of trusting it.
+_MAX_IP_HEADER_CHARS = 128
+
+
+def _parse_ip(value: str) -> str | None:
+    """Return a normalized IP, or None when the value is not a single address."""
+    value = value.strip()
+    if not value or len(value) > _MAX_IP_HEADER_CHARS:
+        return None
+    try:
+        return str(ip_address(value))
+    except ValueError:
+        return None
+
+
 def get_client_ip(request: Request) -> str:
     """Extract the effective client IP for rate limiting / quotas.
 
-    When ``TRUST_PROXY_HEADERS`` is enabled (the app sits behind a trusted
-    fronting proxy such as Cloudflare/Cloud Run) the proxy-forwarded headers
-    are honored. Otherwise the transport-level address is used so a spoofed
-    ``cf-connecting-ip`` / ``x-forwarded-for`` cannot bypass per-IP limits.
+    Measured on Cloud Run (2026-10-26, header-echo probe):
+      * ``request.client.host`` is ``169.254.169.126`` - the local proxy, the
+        same value for every visitor. Using it would put *all* users in one
+        rate-limit / session-quota bucket.
+      * Cloud Run **appends** the client address to ``X-Forwarded-For`` and does
+        not strip what the client sent, so ``"1.2.3.4,187.15.85.23"`` arrives
+        when a caller forges the header. Only the **last** entry is ours.
+      * ``cf-connecting-ip`` passes through untouched (no Cloudflare proxy), so
+        it is ignored unless ``TRUST_CF_CONNECTING_IP`` is explicitly enabled.
+
+    Anything that does not parse as a single IP falls back to the transport
+    address, so a malformed header can neither forge a bucket nor blow up a key.
     """
-    if TRUST_PROXY_HEADERS:
-        if "cf-connecting-ip" in request.headers:
-            return request.headers["cf-connecting-ip"]
-        if "x-forwarded-for" in request.headers:
-            return request.headers["x-forwarded-for"].split(",")[0].strip()
-    return request.client.host if request.client else "127.0.0.1"
+    transport_ip = request.client.host if request.client else "127.0.0.1"
+    if not TRUST_PROXY_HEADERS:
+        return transport_ip
+
+    if TRUST_CF_CONNECTING_IP:
+        forwarded = _parse_ip(request.headers.get("cf-connecting-ip", ""))
+        if forwarded:
+            return forwarded
+
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        # The rightmost entry is the one our proxy appended; every earlier entry
+        # may have been supplied by the caller.
+        forwarded = _parse_ip(xff.rsplit(",", 1)[-1])
+        if forwarded:
+            return forwarded
+
+    return transport_ip
 
 # --- Data Models (Ephemeral State Design) ---
 # One list entry (condition, medication, family-history item). Every bound

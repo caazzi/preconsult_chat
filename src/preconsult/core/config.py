@@ -22,11 +22,18 @@ if not PRECONSULT_API_KEY:
 
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 
-# When True, honor proxy-forwarded client-IP headers (cf-connecting-ip,
-# x-forwarded-for). Only enable when requests actually reach Cloud Run through
-# a trusted fronting proxy (e.g. Cloudflare). When False, client IP is taken
-# from the transport layer, so spoofed headers can't bypass rate limits/quotas.
+# When True, honor the hop our own proxy appended to X-Forwarded-For. Required
+# on Cloud Run: the container's transport peer is the local proxy
+# (169.254.169.126, identical for every client), so with this False every
+# visitor shares one rate-limit and session-quota bucket.
 TRUST_PROXY_HEADERS = os.environ.get("TRUST_PROXY_HEADERS") == "true"
+
+# cf-connecting-ip is NOT trustworthy on this deployment: pre-consult.org is
+# DNS-only (no Cloudflare proxy), so the header passes through untouched from
+# the client. Cloud Run appends the real client address to X-Forwarded-For as
+# the last entry instead. Only enable this if the domain is moved behind
+# Cloudflare's proxy, where Cloudflare becomes the trusted hop that sets it.
+TRUST_CF_CONNECTING_IP = os.environ.get("TRUST_CF_CONNECTING_IP") == "true"
 
 LLM_MODEL = os.environ.get("LLM_MODEL", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
 

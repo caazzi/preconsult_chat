@@ -43,8 +43,8 @@ allergies, family history, lifestyle answers, and the Q&A pairs.
 
 ## Sources of truth
 
-- Policy copy: `reflex_app/preconsult/preconsult.py` (`/privacy`, `/terms`),
-  `reflex_app/preconsult/i18n.py`.
+- Policy copy: `web/legal/*.html` (served by `src/preconsult/site/legal.py`),
+  `src/preconsult/core/i18n.py`.
 - Enforcement: `core/observability.py`, `core/errors.py`, `core/session_auth.py`,
   `services/session_service.py`.
 - Product spec: `docs/PRD.md` §3 (principles) and §3.4 (single LLM call).

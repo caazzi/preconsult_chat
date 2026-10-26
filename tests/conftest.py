@@ -32,14 +32,13 @@ def _reset_health_probe_cache():
 
     The health endpoints cache their redis/event-channel statuses behind a TTL,
     so a mocked status from one test would otherwise be masked by a warm cache
-    in the next.
+    in the next. Imported from its real home (``preconsult.site.health``) on
+    purpose: an import wrapped in try/except would silently stop resetting if
+    the symbol ever moved again, leaving order-dependent failures.
     """
-    try:
-        import reflex_app.preconsult.preconsult as pcm
+    from preconsult.site.health import _reset_health_probe_cache_unlocked
 
-        pcm._reset_health_probe_cache_unlocked()
-    except Exception:
-        pass
+    _reset_health_probe_cache_unlocked()
 
 
 def pytest_runtest_setup(item):

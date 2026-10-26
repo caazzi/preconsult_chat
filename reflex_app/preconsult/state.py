@@ -5,7 +5,7 @@ import os
 import re
 from typing import List, Dict, Any
 from datetime import datetime
-from .i18n import translations
+from preconsult.core.i18n import translations
 from .analytics import log_analytics_event
 from preconsult.core.parsing import split_questions, is_emergency_trigger
 

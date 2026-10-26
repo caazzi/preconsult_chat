@@ -1,4 +1,4 @@
-from reflex_app.preconsult.i18n import translations
+from preconsult.core.i18n import translations
 
 
 def test_i18n_fallback_to_en_when_lang_unknown():

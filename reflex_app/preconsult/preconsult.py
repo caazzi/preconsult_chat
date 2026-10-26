@@ -1,22 +1,20 @@
 import os
 import asyncio
-import json
 import logging
 import time
 import reflex as rx
 from starlette.middleware.gzip import GZipMiddleware
 from .state import State
-from preconsult.core.observability import log_event, new_request_id, _inc, snapshot_counters
-from preconsult.site.legal import legal_page_endpoint
-from preconsult.site.seo import LLMS_TXT, ROBOTS_TXT, sitemap_xml as render_sitemap_xml
-try:
-    from preconsult.api.endpoints import (
-        public_router as api_public_router,
-        router as api_router,
-    )
-except ImportError:
-    api_router = None
-    api_public_router = None
+from preconsult.core.observability import log_event, new_request_id, _inc
+from preconsult.api.app import build_api_app
+from preconsult.site import health as site_health
+from preconsult.site.health import (  # noqa: F401  (re-exported for tests)
+    _reset_health_probe_cache_unlocked,
+    register_health_routes,
+)
+from preconsult.site.middleware import BotGateMiddleware
+from preconsult.site.routes import register_site_routes
+from preconsult.site.static import SPAStaticFiles
 
 
 def error_callout() -> rx.Component:
@@ -850,174 +848,14 @@ app = rx.App(
     )
 )
 
-if api_router:
-    from fastapi import FastAPI, HTTPException
-    from fastapi.exceptions import RequestValidationError
-    from pydantic import ValidationError
-    from botocore.exceptions import BotoCoreError, ClientError
-    from google.api_core.exceptions import GoogleAPIError
-    from starlette.responses import Response
-    from preconsult.core.errors import (
-        RedisUnavailableError,
-        RedisQuotaExceededError,
-        LLMUnavailableError,
-        http_exception_handler,
-        redis_unavailable_handler,
-        redis_quota_exceeded_handler,
-        llm_unavailable_handler,
-        validation_handler,
-        request_validation_handler,
-        google_api_handler,
-        bedrock_api_handler,
-        generic_handler,
-    )
-    custom_api = FastAPI(
-        title="PreConsult API",
-        version="1.0.0",
-        description=(
-            "Privacy-first medical intake assistant. Ephemeral sessions (30-min TTL), "
-            "no persistence of health data. Interactive schema auto-generated from the "
-            "FastAPI routes; behavioral contracts (SSE framing, session TTL, rate limits) "
-            "are documented in docs/api-contract.md."
-        ),
-        contact={"name": "PreConsult", "url": "https://pre-consult.org"},
-        openapi_tags=[
-            {"name": "Session Lifecycle", "description": "Create and manage ephemeral patient sessions."},
-            {"name": "Clinical Question Streams", "description": "SSE streams of LLM-generated clinical questions."},
-            {"name": "PDF Report", "description": "Deterministic in-memory PDF generation."},
-            {"name": "Analytics", "description": "Anonymous funnel analytics."},
-        ],
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
-    )
-    custom_api.add_exception_handler(RedisUnavailableError, redis_unavailable_handler)
-    custom_api.add_exception_handler(RedisQuotaExceededError, redis_quota_exceeded_handler)
-    custom_api.add_exception_handler(LLMUnavailableError, llm_unavailable_handler)
-    custom_api.add_exception_handler(HTTPException, http_exception_handler)
-    custom_api.add_exception_handler(ValidationError, validation_handler)
-    # FastAPI raises RequestValidationError (not pydantic ValidationError) for
-    # request-body failures; without this the stable `validation_failed` code
-    # never reached 422 responses. Handler strips submitted values (PHI).
-    custom_api.add_exception_handler(RequestValidationError, request_validation_handler)
-    custom_api.add_exception_handler(GoogleAPIError, google_api_handler)
-    custom_api.add_exception_handler(BotoCoreError, bedrock_api_handler)
-    custom_api.add_exception_handler(ClientError, bedrock_api_handler)
-    custom_api.add_exception_handler(Exception, generic_handler)
-    custom_api.include_router(api_router)
-    custom_api.include_router(api_public_router)
-    app._api.mount("/api", custom_api)
-
-    async def health_live(request):
-        # Liveness: process is up. No external dependency probed so Cloud Run
-        # never restarts a healthy-but-slow-to-warm container unnecessarily.
-        from starlette.responses import JSONResponse
-        return JSONResponse({"status": "healthy", "checks": {"live": "ok"}})
-
-    async def health_ready(request):
-        # Readiness: only serve traffic when Redis is reachable (sessions and
-        # rate limiting depend on it). 503 means "don't send me requests yet".
-        # Throttled so readiness polling does not burn the serverless Redis quota.
-        from starlette.responses import JSONResponse
-        redis_status = await check_redis_health_throttled()
-        if redis_status != "ok":
-            # A distinct code for quota exhaustion so alerts/ops can distinguish
-            # "daily quota spent" from a general outage.
-            code = "redis_quota_exceeded" if redis_status == "quota_exceeded" else "service_unavailable"
-            return JSONResponse(
-                status_code=503,
-                content={"status": "not_ready", "redis": redis_status, "code": code},
-            )
-        return JSONResponse({"status": "ready", "redis": "ok"})
-
-    async def health(request):
-        # Aggregate endpoint retained for backward compatibility with the
-        # existing CI smoke test which asserts `redis` is "ok"/"unavailable".
-        # It also surfaces the Reflex event channel status so ops can confirm
-        # the interactive (socket) path works, not just REST/health. Both probes
-        # are throttled so frequently-hit health endpoints don't consume the
-        # serverless Redis quota.
-        from starlette.responses import JSONResponse
-        request_id = new_request_id()
-        redis_status = await check_redis_health_throttled()
-        event_channel = await _throttled_probe("event_channel", probe_event_channel)
-        log_event(
-            logging.INFO,
-            "health.probe",
-            request_id=request_id,
-            redis=redis_status,
-            event_channel=event_channel,
-        )
-        payload = {
-            "status": "healthy",
-            "redis": redis_status,
-            "event_channel": event_channel,
-        }
-        # Provide a stable machine-readable code when storage is unhealthy so
-        # alerts/CI can key on quota exhaustion as distinct from a general outage.
-        if redis_status == "quota_exceeded":
-            payload["code"] = "redis_quota_exceeded"
-        elif redis_status == "unavailable":
-            payload["code"] = "redis_unavailable"
-        return JSONResponse(payload)
-
-    async def health_metrics(request):
-        # Read-only, in-memory aggregation of high-signal outcome counters
-        # (socket.handshake_rejected, static.asset_404, http.status.*). These are
-        # PHI-free (path/status/event-name keys only) and per-worker (in-memory),
-        # intended for monitoring/alerting on the stale-shell/socket failure
-        # classes, not as a store of truth. Not throttled: it resolves from RAM
-        # and never touches Redis.
-        from starlette.responses import JSONResponse
-        from preconsult.core.config import REPOSITORY_REVISION
-        return JSONResponse(
-            {
-                "revision": REPOSITORY_REVISION,
-                "counters": snapshot_counters(),
-            }
-        )
-
-    async def robots_txt(request):
-        return Response(
-            content=ROBOTS_TXT,
-            media_type="text/plain",
-            headers={"Cache-Control": "public, max-age=86400"},
-        )
-
-    async def sitemap_xml(request):
-        return Response(
-            content=render_sitemap_xml(),
-            media_type="application/xml",
-            headers={"Cache-Control": "public, max-age=86400"},
-        )
-
-    async def llms_txt(request):
-        return Response(
-            content=LLMS_TXT,
-            media_type="text/markdown",
-            headers={"Cache-Control": "public, max-age=3600"},
-        )
-
-    app._api.add_route("/health", health, include_in_schema=False, methods=["GET"])
-    app._api.add_route("/health/live", health_live, include_in_schema=False, methods=["GET"])
-    app._api.add_route("/health/ready", health_ready, include_in_schema=False, methods=["GET"])
-    app._api.add_route("/health/metrics", health_metrics, include_in_schema=False, methods=["GET"])
-    app._api.add_route("/robots.txt", robots_txt, include_in_schema=False, methods=["GET"])
-    app._api.add_route("/sitemap.xml", sitemap_xml, include_in_schema=False, methods=["GET"])
-    app._api.add_route("/llms.txt", llms_txt, include_in_schema=False, methods=["GET"])
-
-    app._api.add_route(
-        "/privacy",
-        legal_page_endpoint("privacy"),
-        include_in_schema=False,
-        methods=["GET"],
-    )
-    app._api.add_route(
-        "/terms",
-        legal_page_endpoint("terms"),
-        include_in_schema=False,
-        methods=["GET"],
-    )
+# --- API + public surface ---------------------------------------------------
+# Construction lives in Reflex-free modules so the cutover does not have to
+# rewrite them; the host only wires them onto its Starlette app, in the same
+# order as before (/api first, then health, then the crawler/legal documents).
+custom_api = build_api_app()
+app._api.mount("/api", custom_api)
+register_health_routes(app._api)
+register_site_routes(app._api)
 
 # Page-level <head> metadata, declared through Reflex's own page machinery
 # (add_page(meta=...)) so the server and client render the same <head> and React
@@ -1156,50 +994,11 @@ async def probe_event_channel() -> str:
     return "unavailable"
 
 
-# Throttle health probes so frequently-hit health endpoints (CI, scanners, and
-# Cloud Run readiness polling) do not consume the serverless Redis quota. Value
-# is a TTL window in seconds; statuses are recomputed at most once per window and
-# otherwise served from the cache. Requires a worker-global lock to avoid thundering
-# herd on cold start.
-_health_probe_cache: dict[str, tuple[float, str]] = {}
-_health_probe_lock = asyncio.Lock()
-_HEALTH_PROBE_TTL_S = 60.0
-
-
-def _reset_health_probe_cache_unlocked() -> None:
-    """Clear the health-probe throttle cache (mainly for deterministic tests)."""
-    _health_probe_cache.clear()
-
-
-async def _throttled_probe(key: str, probe) -> str:
-    """Return a cached probe status, refreshing at most once per TTL window.
-
-    ``probe`` is an async callable returning a status string (e.g. ``"ok"``).
-    """
-    cache_key = f"health:{key}"
-    async with _health_probe_lock:
-        now = time.monotonic()
-        cached = _health_probe_cache.get(cache_key)
-        if cached is not None and now - cached[0] < _HEALTH_PROBE_TTL_S:
-            return cached[1]
-    # Fresh probe outside the lock (still coalesced by the TTL).
-    status = await probe()
-    async with _health_probe_lock:
-        _health_probe_cache[cache_key] = (time.monotonic(), status)
-    return status
-
-
-async def check_redis_health_throttled() -> str:
-    """Redis reachability as a throttled status string.
-
-    Returns ``ok`` | ``quota_exceeded`` | ``unavailable`` so an exhausted
-    serverless Redis quota is surfaced explicitly rather than as a generic
-    outage. Probed at most ~once per minute (see _throttled_probe).
-    """
-    from preconsult.services.session_service import check_redis_status
-
-    return await _throttled_probe("redis", check_redis_status)
-
+# The health module is Reflex-free and therefore cannot import Reflex. While
+# Reflex still owns the Engine.IO socket, the host injects the only
+# Reflex-shaped probe it needs; after the cutover nothing sets it and /health
+# reports "not_configured" instead of probing a route that no longer exists.
+site_health.event_channel_probe = probe_event_channel
 
 # Reflex mounts the event socket (EngineIO) as a trailing-slash route ``/_event/``
 # for the state connection (see reflex's ``_add_socket``), but the browser's
@@ -1235,51 +1034,6 @@ app._api.add_route("/_event", _backend_redirect, methods=["GET", "POST"])
 # cannot shadow /api, /_event, or /health. The SPA is a client-side router, so
 # any non-file path under /next must fall through to index.html; hashed assets
 # are immutable and the document is no-store (mirrors the Reflex shell rules).
-class SPAStaticFiles(StaticFiles):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    _IMMUTABLE = "public, max-age=31536000, immutable"
-    _NO_STORE = "no-store, no-cache, must-revalidate"
-
-    async def get_response(self, path: str, scope) -> Response:
-        # Starlette normalizes the mount root to ".", so a bare "." check on
-        # the last segment would misclassify the document as a file and pin it
-        # immutable for a year (the stale-shell hazard). Only real files are
-        # immutable; the shell is always no-store.
-        is_document = path in (".", "index.html")
-        is_file = not is_document and (
-            path.startswith("assets/")
-            or "/assets/" in path
-            or "." in path.rsplit("/", 1)[-1]
-        )
-        try:
-            response = await super().get_response(path, scope)
-        except Exception as exc:
-            # StaticFiles raises HTTPException(404) for a missing path. Only an
-            # unknown *navigation* route may fall back to the app shell; a
-            # missing file must stay a 404. Serving HTML for a missing hashed
-            # asset -- and caching it immutable -- is how a broken deploy turns
-            # into "Unexpected token '<'" and a poisoned browser/CDN cache.
-            if getattr(exc, "status_code", None) != 404 or is_file:
-                raise
-            response = await super().get_response("index.html", scope)
-            self._apply_cache_headers(response, immutable=False)
-            return response
-        self._apply_cache_headers(response, immutable=is_file)
-        return response
-
-    @staticmethod
-    def _apply_cache_headers(response: Response, *, immutable: bool) -> None:
-        if immutable:
-            response.headers["Cache-Control"] = SPAStaticFiles._IMMUTABLE
-        else:
-            response.headers["Cache-Control"] = SPAStaticFiles._NO_STORE
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
-        response.headers["Vary"] = "Accept-Encoding"
-
-
 _NEXT_DIST = os.environ.get(
     "WEB_DIST_DIR",
     os.path.abspath(os.path.join(os.getcwd(), "..", "web", "dist")),
@@ -1536,99 +1290,6 @@ class _RequestIDMiddleware:
                 )
 
 
-class _BotGateMiddleware:
-    """Block obvious scanners/bots BEFORE they reach Redis-touching endpoints.
-
-    With serverless Redis on a free tier, a scanner burst against /_event,
-    /api/session/init or /api/analytics/event can exhaust the request quota that
-    real users need. This is a lightweight, conservative gate: it only matches a
-    small set of unambiguous CLI/bot user-agents on the Redis-backed paths and
-    returns a fast 403 without touching storage. Browser traffic passes through
-    untouched (permissive by design); Cloudflare WAF/Bot Shield can be stricter.
-    """
-
-    # Only these paths may trigger Redis (sessions, rate-limit, analytics).
-    _REDIS_PATHS = (
-        "/api/session/init",
-        "/api/interview-questions-stream",
-        "/api/initial-questions-stream",
-        "/api/generate-pdf",
-        "/api/analytics/event",
-    )
-    # Case-insensitive substrings that identify unambiguous non-browser clients.
-    _BOT_UA_FRAGMENTS = (
-        "curl",
-        "wget",
-        "python-requests",
-        "python-urllib",
-        "go-http-client",
-        "node-fetch",
-        "php/",
-        "java/",
-        "axios",
-        "okhttp",
-        "libwww-perl",
-        "scrapy",
-        "headlesschrome",
-        "phantomjs",
-        "screaming frog",
-        "ahrefsbot",
-        "semrushbot",
-        "mj12bot",
-        "dotbot",
-        "bytespider",
-        "petalbot",
-        "awario",
-        "pycurl",
-    )
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
-        path = scope.get("path", "")
-        if not any(path.startswith(p) for p in self._REDIS_PATHS):
-            await self.app(scope, receive, send)
-            return
-
-        user_agent = ""
-        for name, value in scope.get("headers", []):
-            if name == b"user-agent":
-                user_agent = value.decode("latin-1", "replace")
-                break
-
-        if user_agent and any(frag in user_agent.lower() for frag in self._BOT_UA_FRAGMENTS):
-            # PHI-safe: log a hash of the UA, never the raw value.
-            import hashlib
-            ua_hash = hashlib.sha256(user_agent.encode("utf-8", "replace")).hexdigest()[:16]
-            log_event(
-                logging.INFO,
-                "gate.blocked",
-                request_id=new_request_id(),
-                path=path[:200],
-                ua_hash=ua_hash,
-            )
-            body = json.dumps(
-                {"detail": "Forbidden", "code": "bot_blocked"}
-            ).encode("utf-8")
-            await send({
-                "type": "http.response.start",
-                "status": 403,
-                "headers": [
-                    (b"content-type", b"application/json"),
-                    (b"content-length", str(len(body)).encode("ascii")),
-                ],
-            })
-            await send({"type": "http.response.body", "body": body})
-            return
-
-        await self.app(scope, receive, send)
-
-
 app._api.router.lifespan_context = app._run_lifespan_tasks
 
 # Recover stale Engine.IO sessions as clean 400s instead of 500s. Must be a
@@ -1638,5 +1299,5 @@ app._api.router.lifespan_context = app._run_lifespan_tasks
 # server: xhr post error" that froze the wizard on "Start Preparing").
 app._api.add_middleware(_StaleSocketSessionMiddleware)
 
-api = _BotGateMiddleware(_RequestIDMiddleware(app._context_middleware(app._api)))
+api = BotGateMiddleware(_RequestIDMiddleware(app._context_middleware(app._api)))
 

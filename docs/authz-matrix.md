@@ -57,7 +57,7 @@ topology.
 
 - `authenticate` — router dependency (`endpoints.py`).
 - `_require_session_ownership` — session-scoped endpoints (`endpoints.py`).
-- `_BotGateMiddleware` — pre-auth scanner block on Redis-backed paths
-  (`preconsult.py`).
+- `BotGateMiddleware` — pre-auth scanner block on Redis-backed paths
+  (`src/preconsult/site/middleware.py`).
 - Tests: `tests/test_session_auth.py`, `tests/test_authz_matrix.py`,
   `tests/test_api_integration.py`, `tests/test_security.py`.

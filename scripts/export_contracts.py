@@ -7,7 +7,7 @@ deterministic, diff-friendly JSON artifacts so a non-Python frontend (the
 React SPA) can conform to the *same* behavior instead of hand-copying it and
 drifting. Three artifacts are produced under ``contracts/``:
 
-  contracts/i18n/{en,pt}.json   translations (from reflex_app/preconsult/i18n.py)
+  contracts/i18n/{en,pt}.json   translations (from src/preconsult/core/i18n.py)
   contracts/emergency_tokens.json  red-flag token list (core/parsing.py)
   contracts/parsing_vectors.json   split_questions/is_emergency_trigger vectors
 
@@ -29,15 +29,15 @@ import os
 import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REFLEX_APP_DIR = os.path.join(PROJECT_ROOT, "reflex_app", "preconsult")
 SRC_DIR = os.path.join(PROJECT_ROOT, "src")
 
 
 def load_translations() -> dict:
-    """Import the i18n module without the project being installed."""
-    if REFLEX_APP_DIR not in sys.path:
-        sys.path.insert(0, REFLEX_APP_DIR)
-    from i18n import translations
+    """Import the translations from the canonical source module."""
+    if SRC_DIR not in sys.path:
+        sys.path.insert(0, SRC_DIR)
+
+    from preconsult.core.i18n import translations
 
     return translations
 
@@ -45,9 +45,8 @@ def load_translations() -> dict:
 def _load_parsing():
     """Import core/parsing.py by file path.
 
-    Loaded directly (not via ``sys.path``) to avoid a name collision: the
-    reflex frontend dir also exposes a ``preconsult`` package that would shadow
-    ``src/preconsult`` once both are on the path.
+    Loaded directly rather than by module name so the exporter keeps working
+    when run from an arbitrary working directory.
     """
     import importlib.util
 

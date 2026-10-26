@@ -66,7 +66,7 @@ def test_export_is_deterministic():
 
 
 def test_export_en_and_pt_have_identical_keys():
-    from reflex_app.preconsult.i18n import translations
+    from preconsult.core.i18n import translations
 
     assert set(translations["en"].keys()) == set(translations["pt"].keys())
 

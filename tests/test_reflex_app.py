@@ -1,7 +1,7 @@
 import pytest
 import reflex as rx
 pytest.importorskip("reflex_components_radix.plugin")
-from reflex_app.preconsult.preconsult import header, stepper_component, step_0_landing, step_1_demographics, step_2_chief_complaint, step_3_history, step_4_lifestyle, step_5_interview_qs, step_6_summary, error_callout, admin_dashboard
+from reflex_app.preconsult.preconsult import header, stepper_component, step_0_landing, step_1_demographics, step_2_chief_complaint, step_3_history, step_4_lifestyle, step_5_interview_qs, step_6_summary, error_callout
 from reflex_app.preconsult.state import State
 
 def test_header_rendering():
@@ -36,11 +36,6 @@ def test_step_2_chief_complaint_rendering():
 
 def test_step_3_history_rendering():
     comp = step_3_history()
-    assert isinstance(comp, rx.Component)
-    assert comp is not None
-
-def test_admin_dashboard_rendering():
-    comp = admin_dashboard()
     assert isinstance(comp, rx.Component)
     assert comp is not None
 

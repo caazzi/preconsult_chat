@@ -37,7 +37,6 @@ the 20/day quota would become a single global cap.
 | GET | `/health`, `/health/live`, `/health/ready`, `/health/metrics` | none | PHI-free status/counters only |
 | GET | `/privacy`, `/terms`, `/robots.txt`, `/sitemap.xml`, `/llms.txt` | none | static content |
 | — | `/` (SPA shell), `/assets/*` | none | hashed assets immutable; document `no-store` |
-| GET | `/admin/dashboard` | admin token | dropped as a frontend in a later step |
 
 ## Decisions (Option A)
 

@@ -62,7 +62,7 @@ These are reflex-specific rules that WILL bite if ignored:
   into the pure `build_session_init_payload()` function. To test a background handler, call its raw
   body via `State.<handler>.fn(state)` (the `.fn` attribute holds the unwrapped coroutine), and to
   test a handler that chains into another background handler, patch the nested handler to a no-op.
-- Setting `state.router` for `detect_lang` / `AdminState` tests fails because `router` is a reflex
+- Setting `state.router` for `detect_lang` tests fails because `router` is a reflex
   inherited var; use `object.__setattr__(state, "router", fake)` instead.
 - `state._api_url()` prefixes `/api`; if `API_BASE_URL` already ends in `/api` the request path
   becomes `/api/api/...`. In tests, mock the HTTP layer by matching on `request.url.path.endswith(...)`

@@ -32,7 +32,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
-      id-token: 'write'
 
     services:
       redis:
@@ -49,13 +48,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v7
     
-    - name: Authenticate to Google Cloud
-      id: auth
-      uses: google-github-actions/auth@v3
-      with:
-        workload_identity_provider: ${{ env.WIF_PROVIDER }}
-        service_account: ${{ env.SERVICE_ACCOUNT }}
-
     - name: Set up uv
       uses: astral-sh/setup-uv@v7
       with:
@@ -66,8 +58,7 @@ jobs:
       run: uv sync --all-extras --dev
 
     - name: Run linting
-      run: |
-        uv run ruff check . || echo "Ruff failed, but continuing for now."
+      run: uv run ruff check .
 
     - name: Verify contract artifacts are current
       run: |

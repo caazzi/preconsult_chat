@@ -676,4 +676,22 @@ jobs:
           fi
           echo "Served revision matches deployed revision"
 
+          # 9. Legal documents load from the packaged files
+          #
+          # /privacy and /terms are read from web/legal/*.html at runtime
+          # (preconsult.site.legal). If those files are missing from the image -
+          # excluded by .dockerignore, removed in a build stage, or resolved
+          # against the wrong working directory - the request 500s instead of
+          # serving the policy. That is a compliance surface, not cosmetics, so
+          # assert every page and both languages against the deployed revision.
+          echo "==== Stage 9: Legal documents served from packaged files ===="
+          for page in privacy terms; do
+            for lang in en pt; do
+              BODY=$(curl -sS "${BASE_URL}/${page}?lang=${lang}" --connect-timeout 15 --max-time 30)
+              echo "${BODY}" | grep -q "<html lang=\"${lang}\">" \
+                || { echo "::error::/${page}?lang=${lang} did not return the ${lang} document"; exit 1; }
+            done
+            echo "/${page}: en + pt served"
+          done
+
           echo "==== Smoke Test Passed Successfully! ===="

@@ -1,0 +1,125 @@
+name: Deploy Drift Check
+
+# Production served the 2026-09-08 build (`preconsult-00064-zzr`) for seven
+# weeks while every deploy from 2026-10-26 failed on a missing secret. Nothing
+# noticed, because the deploy job can only report on runs that happen and only
+# to whoever is looking at the Actions tab.
+#
+# This job asks the platform what is actually serving and compares it with what
+# `main` says should be serving. A red scheduled run plus a single tracking
+# issue (opened once, commented on afterwards) makes the gap impossible to miss.
+
+on:
+  schedule:
+    # Daily, off the hour to avoid the top-of-hour Actions spike.
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+
+env:
+  PROJECT_ID: securemed-chat-494521
+  REGION: us-central1
+  SERVICE_NAME: preconsult
+  WIF_PROVIDER: projects/811607528687/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  SERVICE_ACCOUNT: github-deploy-sa@securemed-chat-494521.iam.gserviceaccount.com
+
+jobs:
+  drift:
+    name: Compare deployed commit with main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Read the serving revision
+        id: served
+        run: |
+          SERVICE_JSON="$(gcloud run services describe "$SERVICE_NAME" \
+            --region "$REGION" --project "$PROJECT_ID" --format=json)"
+          DEPLOYED_COMMIT="$(echo "$SERVICE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("metadata", {}).get("labels", {}).get("commit-sha", ""))')"
+          SERVING_REVISION="$(echo "$SERVICE_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); t=d.get("status", {}).get("traffic") or []; print((t[0] if t else {}).get("revisionName", ""))')"
+          CREATED="$(gcloud run revisions describe "$SERVING_REVISION" \
+            --region "$REGION" --project "$PROJECT_ID" \
+            --format='value(metadata.creationTimestamp)' 2>/dev/null || echo unknown)"
+          echo "deployed_commit=${DEPLOYED_COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "serving_revision=${SERVING_REVISION}" >> "$GITHUB_OUTPUT"
+          echo "revision_created=${CREATED}" >> "$GITHUB_OUTPUT"
+          echo "main_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Fail when production is not running main
+        run: |
+          echo "Serving revision : ${{ steps.served.outputs.serving_revision }} (created ${{ steps.served.outputs.revision_created }})"
+          echo "Deployed commit  : ${{ steps.served.outputs.deployed_commit }}"
+          echo "main commit      : ${{ steps.served.outputs.main_commit }}"
+          if [ -z "${{ steps.served.outputs.deployed_commit }}" ]; then
+            echo "::error::The Cloud Run service has no commit-sha label; cannot prove what is deployed."
+            exit 1
+          fi
+          if [ "${{ steps.served.outputs.deployed_commit }}" != "${{ steps.served.outputs.main_commit }}" ]; then
+            echo "::error::Production is serving ${{ steps.served.outputs.deployed_commit }}, main is ${{ steps.served.outputs.main_commit }}."
+            exit 1
+          fi
+          echo "Production is serving main."
+
+      - name: Open or update the drift tracking issue
+        # Only when the drift assertion itself failed: an auth/setup failure is a
+        # different problem and must not be reported as drift.
+        if: failure() && steps.served.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVING_REVISION: ${{ steps.served.outputs.serving_revision }}
+          REVISION_CREATED: ${{ steps.served.outputs.revision_created }}
+          DEPLOYED_COMMIT: ${{ steps.served.outputs.deployed_commit }}
+          MAIN_COMMIT: ${{ steps.served.outputs.main_commit }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Deploy drift - production is not running main"
+          BODY="$(printf '%s\n' \
+            "The scheduled drift check failed." \
+            "" \
+            "| Field | Value |" \
+            "|---|---|" \
+            "| Serving revision | \`${SERVING_REVISION:-unknown}\` |" \
+            "| Revision created | \`${REVISION_CREATED:-unknown}\` |" \
+            "| Deployed commit label | \`${DEPLOYED_COMMIT:-none}\` |" \
+            "| main | \`${MAIN_COMMIT:-unknown}\` |" \
+            "" \
+            "Run: ${RUN_URL}" \
+            "" \
+            "Usually the deploy job failed before promoting a revision. Check the newest" \
+            "\`PreConsult CI/CD Pipeline\` run on \`main\` — a missing Secret Manager version" \
+            "is the most common cause.")"
+
+          # One tracking issue, not one per day. Comment again at most every
+          # three days so a long drift does not turn into daily noise.
+          EXISTING="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "$TITLE in:title" --json number --jq '.[0].number // empty')"
+          if [ -z "$EXISTING" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+            exit 0
+          fi
+
+          UPDATED="$(gh issue view "$EXISTING" --repo "$GITHUB_REPOSITORY" --json updatedAt --jq '.updatedAt')"
+          UPDATED_EPOCH="$(date -u -d "$UPDATED" +%s 2>/dev/null || echo 0)"
+          NOW_EPOCH="$(date -u +%s)"
+          if [ $((NOW_EPOCH - UPDATED_EPOCH)) -lt 259200 ]; then
+            echo "Issue #$EXISTING already reports this drift; not commenting again within 3 days."
+            exit 0
+          fi
+          gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"

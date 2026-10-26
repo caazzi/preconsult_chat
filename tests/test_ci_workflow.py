@@ -13,6 +13,11 @@ That is exactly how the deploy on ``main`` failed on 2026-10-26, leaving
 production on an older revision while the smoke test was skipped. The deploy
 job is the only path that ships code, so this contract is pinned here: every
 line inside those two blocks must be a real ``KEY=...`` entry.
+
+The preflight step is pinned too. It is the thing that turns "the build
+succeeded, then gcloud failed on a secret nobody created" into a five-second
+named failure, and it is only useful if it covers every secret the deploy
+actually references.
 """
 
 import re
@@ -21,17 +26,28 @@ from pathlib import Path
 import pytest
 import yaml
 
-WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci-cd.yml"
+WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+WORKFLOW = WORKFLOWS / "ci-cd.yml"
+DRIFT_WORKFLOW = WORKFLOWS / "deploy-drift.yml"
 
 ENV_LINE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=\S.*$")
 # Cloud Run secret refs are `env=SECRET_NAME:version`.
 SECRET_LINE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+$")
+PREFLIGHT_LOOP = re.compile(r"for name in ([A-Z0-9_ ]+); do")
+
+
+def _workflow(path: Path = WORKFLOW) -> dict:
+    return yaml.safe_load(path.read_text())
+
+
+def _deploy_steps() -> list[dict]:
+    return _workflow()["jobs"]["deploy"]["steps"]
 
 
 def _deploy_inputs() -> dict:
-    workflow = yaml.safe_load(WORKFLOW.read_text())
-    steps = workflow["jobs"]["deploy"]["steps"]
-    step = next(s for s in steps if "deploy-cloudrun" in str(s.get("uses", "")))
+    step = next(
+        s for s in _deploy_steps() if "deploy-cloudrun" in str(s.get("uses", ""))
+    )
     return step["with"]
 
 
@@ -67,3 +83,61 @@ def test_the_required_runtime_inputs_are_wired():
     # SESSION_SECRET is fatal at startup outside BUILD_MODE (core/config.py), so
     # dropping it from the deploy would produce a revision that cannot boot.
     assert {"SESSION_SECRET", "REDIS_URL", "PRECONSULT_API_KEY"} <= secret_names
+
+
+def _preflight_secret_names() -> set[str]:
+    step = next(
+        s for s in _deploy_steps() if s.get("name") == "Verify required secrets exist"
+    )
+    match = PREFLIGHT_LOOP.search(step["run"])
+    assert match, "the preflight no longer loops over a `for name in ...` list"
+    return set(match.group(1).split())
+
+
+def test_preflight_covers_exactly_the_secrets_the_deploy_references():
+    referenced = {
+        line.split("=", 1)[1].split(":", 1)[0]
+        for line in _deploy_inputs()["secrets"].splitlines()
+        if line.strip()
+    }
+
+    assert _preflight_secret_names() == referenced, (
+        "the preflight check and the deploy `secrets:` block have drifted apart; "
+        "a secret missing from the preflight fails late, after the container build"
+    )
+
+
+def test_preflight_runs_before_the_container_build():
+    names = [str(step.get("name", "")) for step in _deploy_steps()]
+
+    assert names.index("Verify required secrets exist") < names.index(
+        "Build and Push Container"
+    )
+
+
+def test_drift_check_watches_the_service_this_pipeline_deploys():
+    """The canary is only useful if it looks at the same Cloud Run service."""
+    pipeline_env = _workflow()["env"]
+    drift_env = _workflow(DRIFT_WORKFLOW)["env"]
+
+    for key in ("PROJECT_ID", "REGION", "SERVICE_NAME"):
+        assert drift_env[key] == pipeline_env[key], (
+            f"{key} differs between ci-cd.yml and deploy-drift.yml"
+        )
+
+
+def test_drift_check_is_scheduled_and_compares_against_main():
+    workflow = _workflow(DRIFT_WORKFLOW)
+    # PyYAML resolves the `on:` key as boolean True (YAML 1.1).
+    triggers = workflow.get("on", workflow.get(True))
+
+    assert triggers["schedule"], (
+        "the drift check must run on a schedule, not only on demand"
+    )
+    scripts = "\n".join(
+        str(step.get("run", "")) for step in workflow["jobs"]["drift"]["steps"]
+    )
+    assert "commit-sha" in scripts, "the check must read the deployed commit label"
+    assert "rev-parse HEAD" in scripts, (
+        "the check must compare against the checked-out main commit"
+    )

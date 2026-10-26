@@ -8,6 +8,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from .state import State, AdminState
 from preconsult.core.observability import log_event, new_request_id, _inc, snapshot_counters
 from preconsult.site.legal import legal_page_endpoint
+from preconsult.site.seo import LLMS_TXT, ROBOTS_TXT, sitemap_xml as render_sitemap_xml
 try:
     from preconsult.api.endpoints import (
         public_router as api_public_router,
@@ -850,7 +851,6 @@ app = rx.App(
 )
 
 if api_router:
-    from datetime import date
     from fastapi import FastAPI, HTTPException
     from fastapi.exceptions import RequestValidationError
     from pydantic import ValidationError
@@ -975,78 +975,26 @@ if api_router:
         )
 
     async def robots_txt(request):
-        content = (
-            "User-agent: *\n"
-            "Disallow: /admin/\n"
-            "Disallow: /api/\n"
-            "Allow: /\n\n"
-            "Sitemap: https://pre-consult.org/sitemap.xml\n"
-        )
         return Response(
-            content=content,
+            content=ROBOTS_TXT,
             media_type="text/plain",
-            headers={"Cache-Control": "public, max-age=86400"}
+            headers={"Cache-Control": "public, max-age=86400"},
         )
 
     async def sitemap_xml(request):
-        today = date.today().isoformat()
-        content = (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"\n'
-            '        xmlns:xhtml="http://www.w3.org/1999/xhtml">\n'
-            '  <url>\n'
-            '    <loc>https://pre-consult.org/</loc>\n'
-            f'    <lastmod>{today}</lastmod>\n'
-            '    <changefreq>weekly</changefreq>\n'
-            '    <priority>1.0</priority>\n'
-            '    <xhtml:link rel="alternate" hreflang="en" href="https://pre-consult.org/?lang=en"/>\n'
-            '    <xhtml:link rel="alternate" hreflang="pt" href="https://pre-consult.org/?lang=pt"/>\n'
-            '    <xhtml:link rel="alternate" hreflang="x-default" href="https://pre-consult.org/"/>\n'
-            '  </url>\n'
-            '  <url>\n'
-            '    <loc>https://pre-consult.org/?lang=pt</loc>\n'
-            f'    <lastmod>{today}</lastmod>\n'
-            '    <changefreq>weekly</changefreq>\n'
-            '    <priority>0.9</priority>\n'
-            '    <xhtml:link rel="alternate" hreflang="pt" href="https://pre-consult.org/?lang=pt"/>\n'
-            '    <xhtml:link rel="alternate" hreflang="en" href="https://pre-consult.org/?lang=en"/>\n'
-            '    <xhtml:link rel="alternate" hreflang="x-default" href="https://pre-consult.org/"/>\n'
-            '  </url>\n'
-            '</urlset>\n'
-        )
         return Response(
-            content=content,
+            content=render_sitemap_xml(),
             media_type="application/xml",
-            headers={"Cache-Control": "public, max-age=86400"}
+            headers={"Cache-Control": "public, max-age=86400"},
         )
 
     async def llms_txt(request):
-        content = (
-            "# PreConsult — AI Medical Intake Assistant\n\n"
-            "> Privacy-first guided AI interview helper for patient intake. "
-            "Zero data persistence. No account required.\n\n"
-            "PreConsult helps patients organize symptoms and prepare for "
-            "doctor's appointments through a structured multi-step intake form. "
-            "The entire process runs in-browser, uses Anthropic's Claude (Haiku) on "
-            "AWS Bedrock to generate targeted clinical questions, and produces a "
-            "downloadable PDF report. All data is deleted when the browser tab is closed.\n\n"
-            "Key principles:\n"
-            "- Zero data persistence: No data stored on servers after session ends\n"
-            "- No account required: Fully anonymous usage\n"
-            "- AI-powered clinical questions via Anthropic Claude (Haiku) on AWS Bedrock\n"
-            "- Multi-language: English and Portuguese (Brazil)\n"
-            "- PDF report generation with form data and Q&A\n"
-            "- Privacy-first: No tracking, no cookies, no PII collected\n\n"
-            "## Pages\n\n"
-            "- [Homepage](https://pre-consult.org/): Main intake form with 6-step wizard\n"
-            "- [Admin Dashboard](https://pre-consult.org/admin/dashboard): "
-            "Analytics funnel (token-gated)\n"
-        )
         return Response(
-            content=content,
+            content=LLMS_TXT,
             media_type="text/markdown",
-            headers={"Cache-Control": "public, max-age=3600"}
+            headers={"Cache-Control": "public, max-age=3600"},
         )
+
     app._api.add_route("/health", health, include_in_schema=False, methods=["GET"])
     app._api.add_route("/health/live", health_live, include_in_schema=False, methods=["GET"])
     app._api.add_route("/health/ready", health_ready, include_in_schema=False, methods=["GET"])

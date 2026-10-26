@@ -183,18 +183,29 @@ jobs:
       # tests/test_ci_workflow.py asserts the two sets match.
       - name: Verify required secrets exist
         run: |
-          missing=0
+          # Distinguish "no such version" from "not allowed to look": the deploy
+          # service account has secretmanager.secretAccessor (which reads
+          # payloads) but needed secretmanager.viewer to describe versions. On
+          # 2026-10-26 the original check reported all three secrets as missing
+          # when the real cause was a permission denial, which sent the
+          # investigation in the wrong direction.
+          failed=0
           for name in REDIS_URL SECUREMED_API_KEY SESSION_SECRET; do
-            if ! gcloud secrets versions describe latest --secret="$name" --project="$PROJECT_ID" >/dev/null 2>&1; then
-              echo "::error::Secret Manager has no enabled 'latest' version for '$name'"
-              missing=1
+            if err="$(gcloud secrets versions describe latest --secret="$name" --project="$PROJECT_ID" 2>&1 >/dev/null)"; then
+              continue
+            fi
+            failed=1
+            if echo "$err" | grep -qi "permission\|denied\|forbidden\|does not have"; then
+              echo "::error::Cannot read Secret Manager metadata for '$name'. The deploy service account needs roles/secretmanager.viewer. gcloud said: $err"
+            else
+              echo "::error::Secret Manager has no enabled 'latest' version for '$name'. gcloud said: $err"
             fi
           done
-          if [ "$missing" -ne 0 ]; then
-            echo "Refusing to build: create the missing secrets (see AGENTS.md) before deploying."
+          if [ "$failed" -ne 0 ]; then
+            echo "Refusing to build: fix the secret(s) above before deploying."
             exit 1
           fi
-          echo "All referenced secrets resolve."
+          echo "All referenced secrets resolve and are readable by the deploy identity."
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet

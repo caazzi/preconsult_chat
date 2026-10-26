@@ -179,6 +179,11 @@ outages), so Redis must be reserved for actual patient sessions:
   those guards when touching the fallback — they protect the zero-persistence privacy claim.
 - Session CRUD has a best-effort per-worker in-memory fallback for transient Redis
   errors. It is a resilience shim, not a store of truth.
+- The rate-limit / session-quota fallback (`MemoryRateLimitStore`) is capped at
+  `_MEMORY_LIMITER_MAX_KEYS`, evicting expired counters first, then those closest to expiry. Its keys
+  are per client IP and now genuinely vary per visitor, so the cap is what stops a long outage from
+  growing a worker's dict for the life of the process (expired counters used to be dropped only when
+  the same key returned). Tests: `tests/test_memory_limiter.py`.
 
 ## Client-IP & proxy trust
 

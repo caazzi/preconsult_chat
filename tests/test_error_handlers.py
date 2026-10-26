@@ -12,6 +12,7 @@ from preconsult.core.errors import (
     redis_unavailable_handler,
     llm_unavailable_handler,
     validation_handler,
+    google_api_handler,
     bedrock_api_handler,
     generic_handler,
 )
@@ -78,7 +79,9 @@ async def test_bedrock_api_error_during_startup_returns_502():
 
     original_llm = llm_module._llm
     llm_module._llm = None
-    with patch("preconsult.core.llm.ChatBedrockConverse") as mock_chat:
+    with patch("langchain_aws.ChatBedrockConverse") as mock_chat, patch.object(
+        llm_module, "LLM_PROVIDER", "bedrock"
+    ):
         mock_chat.side_effect = ClientError(
             {"Error": {"Code": "AccessDeniedException", "Message": "denied"}}, "InvokeModel"
         )
@@ -118,7 +121,9 @@ async def test_validation_error_long_answer_returns_422():
 async def test_get_llm_raises_on_init_failure():
     import preconsult.core.llm as llm_module
     llm_module._llm = None
-    with patch("preconsult.core.llm.ChatBedrockConverse") as mock_chat:
+    with patch("langchain_aws.ChatBedrockConverse") as mock_chat, patch.object(
+        llm_module, "LLM_PROVIDER", "bedrock"
+    ):
         mock_chat.side_effect = ClientError(
             {"Error": {"Code": "ValidationException", "Message": "bad model"}}, "InvokeModel"
         )
@@ -202,6 +207,48 @@ def test_bedrock_api_handler_maps_botocore_error_to_502():
     resp = _run_handler(bedrock_api_handler, BotoCoreError())
     assert resp.status_code == 502
     assert "ai_upstream_error" in resp.body.decode()
+
+
+def test_google_api_handler_returns_502_sanitized():
+    from google.api_core.exceptions import PermissionDenied
+
+    resp = _run_handler(google_api_handler, PermissionDenied("PERMISSION_DENIED: secret bucket"))
+    assert resp.status_code == 502
+    body = resp.body.decode()
+    assert "ai_upstream_error" in body
+    assert "secret bucket" not in body
+    assert "PERMISSION_DENIED" not in body
+
+
+def test_google_api_handler_maps_throttling_to_503():
+    from google.api_core.exceptions import ResourceExhausted
+
+    resp = _run_handler(google_api_handler, ResourceExhausted("429 quota exceeded"))
+    assert resp.status_code == 503
+    assert "llm_unavailable" in resp.body.decode()
+
+
+def test_google_api_handler_maps_generic_error_to_502():
+    from google.api_core.exceptions import InternalServerError
+
+    resp = _run_handler(google_api_handler, InternalServerError("upstream boom"))
+    assert resp.status_code == 502
+    assert "ai_upstream_error" in resp.body.decode()
+    assert "upstream boom" not in resp.body.decode()
+
+
+def test_both_provider_error_handlers_are_registered():
+    """A provider swap must not leave one family of upstream errors unmapped."""
+    from botocore.exceptions import ClientError as BotocoreClientError
+    from google.api_core.exceptions import GoogleAPIError
+
+    import reflex_app.preconsult.preconsult as host
+
+    mount = next(r for r in host.app._api.routes if getattr(r, "path", None) == "/api")
+    handlers = mount.app.exception_handlers
+
+    assert GoogleAPIError in handlers
+    assert BotocoreClientError in handlers
 
 
 def test_generic_handler_returns_500_sanitized():

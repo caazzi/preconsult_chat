@@ -222,17 +222,23 @@ outages), so Redis must be reserved for actual patient sessions:
 - `.env` is secret and must not be read or edited for value changes without care; secrets live in
   Google Secret Manager (`SECUREMED_API_KEY`, `REDIS_URL`) and are wired as secret references, not
   plaintext env vars, in every deploy.
-- **LLM provider is AWS Bedrock (Anthropic Claude Haiku), not Vertex/Gemini.** `core/llm.py`
-  constructs a `ChatBedrockConverse` client from `LLM_MODEL` + `BEDROCK_REGION` (both env-overridable).
-  Do NOT re-introduce `langchain-google-vertexai` or `google-cloud-aiplatform`. Bedrock is a regional
-  service and Claude is not available in every region; the single fixed region is deliberate — do not
-  route by UI language (language ≠ data residency). Upstream Bedrock failures map to the existing
-  stable codes via `bedrock_api_handler` (`botocore.ClientError` throttling → `503 llm_unavailable`,
-  everything else → `502 ai_upstream_error`); keep those codes unchanged.
-  **INTERIM (Phase 1):** the container still runs on GCP, so Bedrock credentials
-  (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`) are GCP Secret Manager references until the Phase 3
-  compute migration to AWS replaces them with a task role. Scope the IAM policy to
-  `bedrock:InvokeModelWithResponseStream` on the single Haiku model.
+- **The active LLM provider is selected by `LLM_PROVIDER`, and the default is `vertex`
+  (Google Vertex AI / Gemini), not Bedrock.** `core/llm.py` builds a `ChatVertexAI` client from
+  `LLM_MODEL` + `VERTEX_REGION` + `PROJECT_ID`, or a `ChatBedrockConverse` client from
+  `LLM_MODEL` + `BEDROCK_REGION` when `LLM_PROVIDER=bedrock`. The default is the provider the deployed
+  service actually has credentials for: production ran a Vertex build until 2026-09-08 and Bedrock
+  credentials do not exist in Secret Manager, so a Bedrock-only `main` could not be deployed without
+  breaking every question request. Bedrock is the planned next step, kept working behind the switch —
+  do not delete either path.
+  **Switching providers is a PHI decision, not a config tweak.** It changes which third party receives
+  clinical text, so the privacy copy in `reflex_app/preconsult/preconsult.py` (and `web/legal/*.html`
+  once the SPA serves those) must change in the same commit, along with the deploy's `secrets:` block
+  (add `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`), the `LLM_MODEL` default, and the IAM policy scope
+  (`bedrock:InvokeModelWithResponseStream` on the single Haiku model).
+  Upstream failures map to the existing stable codes via `google_api_handler` /
+  `bedrock_api_handler` (throttling → `503 llm_unavailable`, everything else → `502
+  ai_upstream_error`); keep those codes unchanged. Regions are fixed and must not be routed by UI
+  language (language ≠ data residency).
 - Deploy-affecting changes include anything the container runs: error-response shape (codes),
   health routes, config flags (e.g. `TRUST_PROXY_HEADERS`), Sentry init. Such a change is only
   "done" after the CI/CD-built revision serves `200` — local commits alone are NOT deployment.

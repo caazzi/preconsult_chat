@@ -4,6 +4,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from botocore.exceptions import ClientError
+from google.api_core.exceptions import GoogleAPIError
 
 
 class RedisUnavailableError(Exception):
@@ -211,6 +212,47 @@ def _is_bedrock_throttling(exc: Exception) -> bool:
         )
     message = str(exc).lower()
     return "throttl" in message or "too many requests" in message
+
+
+async def google_api_handler(request: Request, exc: GoogleAPIError):
+    """Map a Vertex/Gemini upstream failure to the stable 502/503 code.
+
+    Vertex throttling is retriable (503 ``llm_unavailable``); everything else is
+    an upstream failure (502 ``ai_upstream_error``). The response stays generic
+    and never echoes the exception, which can embed request details.
+    """
+    throttled = _is_google_throttling(exc)
+    logging.error("Vertex upstream error (throttled=%s): %s", throttled, exc)
+    if throttled:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Servico de IA temporariamente indisponivel. Tente novamente.",
+                "code": "llm_unavailable",
+            },
+        )
+    return JSONResponse(
+        status_code=502,
+        content={
+            "detail": "Erro ao processar a solicitacao com a IA.",
+            "code": "ai_upstream_error",
+        },
+    )
+
+
+def _is_google_throttling(exc: Exception) -> bool:
+    """Whether a Vertex/Gemini error is a retriable throttling/quota condition."""
+    try:
+        from google.api_core import exceptions as google_exceptions
+    except ImportError:  # pragma: no cover - google deps are a hard dependency
+        google_exceptions = None
+
+    if google_exceptions is not None and isinstance(
+        exc, (google_exceptions.ResourceExhausted, google_exceptions.TooManyRequests)
+    ):
+        return True
+    message = str(exc).lower()
+    return "429" in message or "resource exhausted" in message or "quota" in message
 
 
 async def generic_handler(request: Request, exc: Exception):

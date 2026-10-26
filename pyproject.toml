@@ -16,7 +16,7 @@ dependencies = [
     "uvicorn[standard]==0.54.0",
     "python-dotenv==1.2.4",
     "redis==6.4.0",
-    "reflex==0.9.8.post1",
+    "reflex==0.9.13",
     "sentry-sdk==2.73.0",
 ]
 

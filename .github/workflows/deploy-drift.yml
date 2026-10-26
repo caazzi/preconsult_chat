@@ -47,28 +47,51 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v3
 
+      # Read the commit from the revision that actually receives traffic, NOT
+      # from the service labels. A failed deploy still updates the service
+      # template and its labels (it creates a Ready=False revision and leaves
+      # traffic on the old one), so the service label can name the newest commit
+      # while production serves a months-old build - the exact false negative
+      # this job exists to catch (observed 2026-10-26: label 11c4c9c, serving
+      # revision built from bba3157).
       - name: Read the serving revision
         id: served
         run: |
           SERVICE_JSON="$(gcloud run services describe "$SERVICE_NAME" \
             --region "$REGION" --project "$PROJECT_ID" --format=json)"
-          DEPLOYED_COMMIT="$(echo "$SERVICE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("metadata", {}).get("labels", {}).get("commit-sha", ""))')"
-          SERVING_REVISION="$(echo "$SERVICE_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); t=d.get("status", {}).get("traffic") or []; print((t[0] if t else {}).get("revisionName", ""))')"
-          CREATED="$(gcloud run revisions describe "$SERVING_REVISION" \
-            --region "$REGION" --project "$PROJECT_ID" \
-            --format='value(metadata.creationTimestamp)' 2>/dev/null || echo unknown)"
+          SERVING_REVISION="$(echo "$SERVICE_JSON" | python3 -c 'import json,sys; d=json.loads(sys.stdin.read(), strict=False); t=d.get("status", {}).get("traffic") or []; t.sort(key=lambda e: e.get("percent", 0), reverse=True); print((t[0] if t else {}).get("revisionName", ""))')"
+          TEMPLATE_COMMIT="$(echo "$SERVICE_JSON" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read(), strict=False).get("metadata", {}).get("labels", {}).get("commit-sha", ""))')"
+
+          DEPLOYED_COMMIT=""
+          CREATED="unknown"
+          READY="unknown"
+          if [ -n "$SERVING_REVISION" ]; then
+            REVISION_JSON="$(gcloud run revisions describe "$SERVING_REVISION" \
+              --region "$REGION" --project "$PROJECT_ID" --format=json)"
+            DEPLOYED_COMMIT="$(echo "$REVISION_JSON" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read(), strict=False).get("metadata", {}).get("labels", {}).get("commit-sha", ""))')"
+            CREATED="$(echo "$REVISION_JSON" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read(), strict=False).get("metadata", {}).get("creationTimestamp", "unknown"))')"
+            READY="$(echo "$REVISION_JSON" | python3 -c 'import json,sys; c=json.loads(sys.stdin.read(), strict=False).get("status",{}).get("conditions") or []; print(next((x.get("status","unknown") for x in c if x.get("type")=="Ready"), "unknown"))')"
+          fi
+
           echo "deployed_commit=${DEPLOYED_COMMIT}" >> "$GITHUB_OUTPUT"
           echo "serving_revision=${SERVING_REVISION}" >> "$GITHUB_OUTPUT"
           echo "revision_created=${CREATED}" >> "$GITHUB_OUTPUT"
+          echo "revision_ready=${READY}" >> "$GITHUB_OUTPUT"
+          echo "template_commit=${TEMPLATE_COMMIT}" >> "$GITHUB_OUTPUT"
           echo "main_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Fail when production is not running main
         run: |
-          echo "Serving revision : ${{ steps.served.outputs.serving_revision }} (created ${{ steps.served.outputs.revision_created }})"
+          echo "Serving revision : ${{ steps.served.outputs.serving_revision }} (created ${{ steps.served.outputs.revision_created }}, ready=${{ steps.served.outputs.revision_ready }})"
           echo "Deployed commit  : ${{ steps.served.outputs.deployed_commit }}"
           echo "main commit      : ${{ steps.served.outputs.main_commit }}"
+          echo "Service template : ${{ steps.served.outputs.template_commit }} (ignored - a failed deploy updates this)"
+          if [ "${{ steps.served.outputs.revision_ready }}" != "True" ]; then
+            echo "::error::The revision taking traffic is not Ready; nothing healthy is serving."
+            exit 1
+          fi
           if [ -z "${{ steps.served.outputs.deployed_commit }}" ]; then
-            echo "::error::The Cloud Run service has no commit-sha label; cannot prove what is deployed."
+            echo "::error::The serving revision has no commit-sha label; cannot prove what is deployed."
             exit 1
           fi
           if [ "${{ steps.served.outputs.deployed_commit }}" != "${{ steps.served.outputs.main_commit }}" ]; then
@@ -97,7 +120,7 @@ jobs:
             "|---|---|" \
             "| Serving revision | \`${SERVING_REVISION:-unknown}\` |" \
             "| Revision created | \`${REVISION_CREATED:-unknown}\` |" \
-            "| Deployed commit label | \`${DEPLOYED_COMMIT:-none}\` |" \
+            "| Serving revision commit | \`${DEPLOYED_COMMIT:-none}\` |" \
             "| main | \`${MAIN_COMMIT:-unknown}\` |" \
             "" \
             "Run: ${RUN_URL}" \

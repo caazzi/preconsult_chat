@@ -141,3 +141,36 @@ def test_drift_check_is_scheduled_and_compares_against_main():
     assert "rev-parse HEAD" in scripts, (
         "the check must compare against the checked-out main commit"
     )
+
+def _drift_step(name: str) -> dict:
+    workflow = _workflow(DRIFT_WORKFLOW)
+    return next(s for s in workflow["jobs"]["drift"]["steps"] if s.get("name") == name)
+
+
+def test_drift_check_reads_the_serving_revision_not_the_service_label():
+    """A failed deploy still updates the service template and its labels.
+
+    On 2026-10-26 the service label said ``11c4c9c`` while 100% of traffic was
+    on a revision built from ``bba3157``. Comparing the *service* label would
+    therefore have reported "production is serving main" while production served
+    a seven-week-old build - the false negative this job exists to prevent.
+    """
+    read_script = _drift_step("Read the serving revision")["run"]
+    fail_script = _drift_step("Fail when production is not running main")["run"]
+
+    assert "run revisions describe" in read_script, "the commit must come from the serving revision"
+    assert "template_commit" in read_script
+    assert "revision_ready" in fail_script, "an unready serving revision must fail the check"
+
+
+def test_drift_parsers_tolerate_control_characters_in_gcloud_json():
+    """gcloud emits raw newlines inside a condition message.
+
+    ``--format=json`` serialises a multi-line ``Ready`` message (e.g. the three
+    missing-secret errors) as a literal newline inside the string, which strict
+    JSON rejects. Parsing those payloads with ``json.load`` failed in practice.
+    """
+    read_script = _drift_step("Read the serving revision")["run"]
+
+    assert "json.load(" not in read_script
+    assert read_script.count("strict=False") >= 4

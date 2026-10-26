@@ -14,7 +14,7 @@ import pytest
 from httpx import ASGITransport
 
 from preconsult.site.seo import LLMS_TXT, ROBOTS_TXT, SITE_URL, sitemap_xml
-from reflex_app.preconsult.preconsult import api as app
+from preconsult.host import app
 
 
 def _client():

@@ -7,7 +7,6 @@ from starlette.middleware.gzip import GZipMiddleware
 from .state import State
 from preconsult.core.observability import log_event, new_request_id, _inc
 from preconsult.api.app import build_api_app
-from preconsult.site import health as site_health
 from preconsult.site.health import (  # noqa: F401  (re-exported for tests)
     _reset_health_probe_cache_unlocked,
     register_health_routes,
@@ -854,7 +853,10 @@ app = rx.App(
 # order as before (/api first, then health, then the crawler/legal documents).
 custom_api = build_api_app()
 app._api.mount("/api", custom_api)
-register_health_routes(app._api)
+# While this host owns the Engine.IO socket, /health keeps advertising it. The
+# probe is passed as a lambda because probe_event_channel is defined further
+# down; the lookup happens per request, not at registration.
+register_health_routes(app._api, event_channel_probe=lambda: probe_event_channel())
 register_site_routes(app._api)
 
 # Page-level <head> metadata, declared through Reflex's own page machinery
@@ -993,12 +995,6 @@ async def probe_event_channel() -> str:
         pass
     return "unavailable"
 
-
-# The health module is Reflex-free and therefore cannot import Reflex. While
-# Reflex still owns the Engine.IO socket, the host injects the only
-# Reflex-shaped probe it needs; after the cutover nothing sets it and /health
-# reports "not_configured" instead of probing a route that no longer exists.
-site_health.event_channel_probe = probe_event_channel
 
 # Reflex mounts the event socket (EngineIO) as a trailing-slash route ``/_event/``
 # for the state connection (see reflex's ``_add_socket``), but the browser's

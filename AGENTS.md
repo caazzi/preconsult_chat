@@ -73,8 +73,15 @@ These are reflex-specific rules that WILL bite if ignored:
 - `/health` probes are TTL-throttled; tests that mock `check_redis_health` /
   `probe_event_channel` must clear the cache with `_reset_health_probe_cache_unlocked()`
   (or rely on the conftest fixture) or a warm cache will mask the mock. The handlers and the cache
-  live in `src/preconsult/site/health.py`; patching the *host's* `probe_event_channel` no longer
-  reaches them — set `preconsult.site.health.event_channel_probe` instead.
+  live in `src/preconsult/site/health.py`, and the interactive probe is a **per-app parameter**
+  (`register_health_routes(app, event_channel_probe=...)`), not a module global — pass it when
+  building the app (`build_asgi_app(event_channel_probe=...)`). Without it `/health` reports
+  `event_channel: "not_configured"`, which is what the Reflex-free app does today.
+- `src/preconsult/host.py` is the Reflex-free ASGI app: `/api`, health, crawler/legal documents and
+  the SPA mounted **last**, wrapped as `BotGate -> RequestID -> Starlette/GZip`. It is the cutover
+  target; `reflex_app/preconsult/preconsult.py` still serves production until the cutover lands.
+  `tests/test_host_app.py` pins the composition (registration order, middleware order, and the
+  root-mount rule that a stale `/_event` probe or a scanner must never receive the SPA shell).
 - The served `api` object is wrapped by `BotGateMiddleware`
   (`src/preconsult/site/middleware.py`). Tests POSTing to
   `/api/*` use httpx's default UA (passes the gate); don't set scanner-like UAs

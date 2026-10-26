@@ -211,7 +211,7 @@ def test_bot_gate_blocks_scanner_before_redis():
     import asyncio
     import httpx
     from httpx import ASGITransport
-    from reflex_app.preconsult.preconsult import api as app
+    from preconsult.host import app
 
     async def run(ua):
         async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

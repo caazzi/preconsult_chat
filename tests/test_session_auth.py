@@ -16,7 +16,7 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from reflex_app.preconsult.preconsult import api as app
+from preconsult.host import app
 from preconsult.core.config import SESSION_COOKIE_NAME
 from preconsult.core.session_auth import sign_session_id, verify_session_cookie
 

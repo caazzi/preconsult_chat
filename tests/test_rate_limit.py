@@ -3,7 +3,7 @@ import pytest
 import httpx
 from httpx import ASGITransport
 from unittest.mock import AsyncMock
-from reflex_app.preconsult.preconsult import api as app
+from preconsult.host import app
 from preconsult.core.config import PRECONSULT_API_KEY
 
 @pytest.mark.asyncio

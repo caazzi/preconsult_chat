@@ -3,7 +3,7 @@ import json
 from unittest.mock import patch, AsyncMock
 import httpx
 from httpx import ASGITransport
-from reflex_app.preconsult.preconsult import api as app
+from preconsult.host import app
 from preconsult.services.agent_service import StreamEvent
 
 HEADERS = {"X-API-KEY": "ci_test_key_123"}
@@ -319,23 +319,30 @@ async def test_health_endpoint():
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "healthy"
-    # /health now also reports the state-socket (event channel) status, so a
-    # single endpoint confirms the interactive path, not just REST.
-    assert body["event_channel"] in ("ok", "unavailable")
+    # /health reports the interactive-channel status. The Reflex-free app has no
+    # socket, so it answers "not_configured" rather than pretending.
+    assert body["event_channel"] in ("ok", "unavailable", "not_configured")
 
 
 @pytest.mark.asyncio
-async def test_health_event_channel_reports_socket():
-    """/health must surface whether the Reflex event socket is reachable."""
-    from preconsult.site import health as site_health
+async def test_health_event_channel_uses_the_injected_probe():
+    """/health must surface the interactive channel when a probe is wired in.
 
-    with patch.object(site_health, "event_channel_probe", new_callable=AsyncMock) as mock_probe:
-        mock_probe.return_value = "ok"
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.get("/health")
+    The probe is bound per app (see register_health_routes), so this builds an
+    app with one instead of patching a module global: a global would make the
+    answer depend on import order.
+    """
+    from preconsult.host import build_asgi_app
+
+    probe = AsyncMock(return_value="ok")
+    probed_app = build_asgi_app(event_channel_probe=probe)
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=probed_app), base_url="http://test") as client:
+        resp = await client.get("/health")
+
     assert resp.status_code == 200
     assert resp.json()["event_channel"] == "ok"
-    mock_probe.assert_awaited_once()
+    probe.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -419,19 +426,20 @@ async def test_health_probe_is_throttled_not_per_request(mock_status):
     letting health/CI/scanner polling burn it. The real throttled wrapper should
     call the underlying Redis check exactly once across three /health requests.
     """
-    from preconsult.site import health as site_health
+    from preconsult.host import build_asgi_app
+
     mock_status.return_value = "ok"
+    probe = AsyncMock(return_value="ok")
+    probed_app = build_asgi_app(event_channel_probe=probe)
 
-    with patch.object(site_health, "event_channel_probe", new_callable=AsyncMock) as mock_ev:
-        mock_ev.return_value = "ok"
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            for _ in range(3):
-                resp = await client.get("/health")
-                assert resp.status_code == 200
+    async with httpx.AsyncClient(transport=ASGITransport(app=probed_app), base_url="http://test") as client:
+        for _ in range(3):
+            resp = await client.get("/health")
+            assert resp.status_code == 200
 
-    # The throttle cache means the real Redis probe fired once, not three times.
+    # The throttle cache means each real probe fired once, not three times.
     assert mock_status.await_count == 1
-    assert mock_ev.await_count == 1
+    assert probe.await_count == 1
 
 
 @pytest.mark.asyncio

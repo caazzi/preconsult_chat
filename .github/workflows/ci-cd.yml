@@ -54,8 +54,14 @@ jobs:
         python-version: "3.11"
         enable-cache: true
         
+    # `--locked` (not just a plain sync): CI must install exactly the lockfile
+    # that ships in the image, and fail loudly if the lock has gone stale.
+    # Without it uv silently re-resolves when the lock is out of date relative to
+    # pyproject.toml -- that is how a PR once tested 132 packages including
+    # reflex 0.9.13 while the image would have shipped the locked
+    # 0.9.8.post1, and the suite failed on an API the deployed build still has.
     - name: Install dependencies
-      run: uv sync --all-extras --dev
+      run: uv sync --locked --all-extras --dev
 
     - name: Run linting
       run: uv run ruff check .
@@ -129,7 +135,7 @@ jobs:
           enable-cache: true
 
       - name: Install deps (with e2e extra)
-        run: uv sync --extra e2e
+        run: uv sync --locked --extra e2e
 
       - name: Install Playwright browser + system deps
         run: uv run python -m playwright install --with-deps chromium
@@ -175,7 +181,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Install deps (with e2e extra)
-        run: uv sync --extra e2e
+        run: uv sync --locked --extra e2e
 
       - name: Install Playwright browser + system deps
         run: uv run python -m playwright install --with-deps chromium

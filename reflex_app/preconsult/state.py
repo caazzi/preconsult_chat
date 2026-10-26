@@ -3,11 +3,10 @@ import httpx
 import json
 import os
 import re
-import secrets
 from typing import List, Dict, Any
 from datetime import datetime
 from .i18n import translations
-from .analytics import log_analytics_event, fetch_analytics_data
+from .analytics import log_analytics_event
 from preconsult.core.parsing import split_questions, is_emergency_trigger
 
 API_KEY = os.environ.get("PRECONSULT_API_KEY", "")
@@ -630,28 +629,3 @@ class State(rx.State):
         finally:
             async with self:
                 self.loading = False
-
-
-class AdminState(rx.State):
-    token: str = ""
-    authorized: bool = False
-    analytics_data: List[Dict[str, Any]] = []
-    
-    async def load_analytics(self):
-        query_params = _get_router_params(self.router)
-        token_val = query_params.get("token", "")
-        
-        expected_token = os.environ.get("ADMIN_DASHBOARD_TOKEN")
-        if (
-            expected_token
-            and token_val
-            and secrets.compare_digest(token_val, expected_token)
-        ):
-            self.authorized = True
-            await self.fetch_analytics_data()
-        else:
-            self.authorized = False
-            self.analytics_data = []
-
-    async def fetch_analytics_data(self):
-        self.analytics_data = await fetch_analytics_data()

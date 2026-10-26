@@ -5,7 +5,7 @@ import logging
 import time
 import reflex as rx
 from starlette.middleware.gzip import GZipMiddleware
-from .state import State, AdminState
+from .state import State
 from preconsult.core.observability import log_event, new_request_id, _inc, snapshot_counters
 from preconsult.site.legal import legal_page_endpoint
 from preconsult.site.seo import LLMS_TXT, ROBOTS_TXT, sitemap_xml as render_sitemap_xml
@@ -1019,84 +1019,6 @@ if api_router:
         methods=["GET"],
     )
 
-def admin_dashboard() -> rx.Component:
-    def analytics_row(row):
-        return rx.table.row(
-            rx.table.cell(row["date"]),
-            rx.table.cell(row["demographics"]),
-            rx.table.cell(row["complaint"]),
-            rx.table.cell(row["history"]),
-            rx.table.cell(row["lifestyle"]),
-            rx.table.cell(row["summary"]),
-            rx.table.cell(row["pdf"]),
-        )
-
-    return rx.center(
-        rx.vstack(
-            rx.cond(
-                AdminState.authorized,
-                rx.vstack(
-                    rx.heading("Admin Analytics Dashboard 📊", size="8", color_scheme="cyan"),
-                    rx.text("Conversion Funnel Metrics (Last 7 Days)", color_scheme="gray"),
-                    rx.divider(),
-                    rx.box(
-                        rx.table.root(
-                            rx.table.header(
-                                rx.table.row(
-                                    rx.table.column_header_cell("Date"),
-                                    rx.table.column_header_cell("Demographics"),
-                                    rx.table.column_header_cell("Complaint"),
-                                    rx.table.column_header_cell("History"),
-                                    rx.table.column_header_cell("Lifestyle"),
-                                    rx.table.column_header_cell("Summary"),
-                                    rx.table.column_header_cell("PDF Download"),
-                                )
-                            ),
-                            rx.table.body(
-                                rx.foreach(AdminState.analytics_data, analytics_row)
-                            ),
-                            width="100%",
-                            variant="ghost"
-                        ),
-                        overflow_x="auto",
-                        width="100%",
-                    ),
-                    rx.button("Back to Home", on_click=rx.redirect("/"), color_scheme="cyan", size="3"),
-                    width="100%",
-                    spacing="6",
-                    padding="2em",
-                    background="rgba(255,255,255,0.05)",
-                    backdrop_filter="blur(15px)",
-                    border="1px solid rgba(255,255,255,0.1)",
-                    border_radius="20px",
-                ),
-                rx.vstack(
-                    rx.icon("lock", size=48, color="red"),
-                    rx.heading("Unauthorized", size="6", color="red"),
-                    rx.text("Please provide a valid token in the URL query parameters (e.g. ?token=...).", color_scheme="gray", text_align="center"),
-                    rx.button("Back to Home", on_click=rx.redirect("/"), color_scheme="gray", size="3"),
-                    spacing="4",
-                    padding="2em",
-                    align_items="center",
-                    border="1px solid rgba(255,255,255,0.1)",
-                    border_radius="20px",
-                )
-            ),
-            max_width="1000px",
-            width="90%",
-            align_items="center",
-            padding_y="5em",
-        ),
-        width="100%",
-        min_height="100vh",
-        background=rx.cond(
-            rx.color_mode == "light",
-            "radial-gradient(circle at top right, #f8fafc, #f1f5f9, #e2e8f0)",
-            "radial-gradient(circle at top right, #0a192f, #001f3f, #001529)"
-        )
-    )
-
-
 # Page-level <head> metadata, declared through Reflex's own page machinery
 # (add_page(meta=...)) so the server and client render the same <head> and React
 # hydration succeeds.
@@ -1124,13 +1046,6 @@ app.add_page(
     description="Guided AI interview helper for patient intake with zero data persistence.",
     image="https://pre-consult.org/og-image.png",
     meta=build_index_meta(),
-)
-app.add_page(
-    admin_dashboard,
-    route="/admin/dashboard",
-    on_load=AdminState.load_analytics,
-    title="PreConsult Admin Dashboard",
-    description="Analytics funnel dashboard for PreConsult administrators."
 )
 
 from fastapi.staticfiles import StaticFiles  # noqa: E402

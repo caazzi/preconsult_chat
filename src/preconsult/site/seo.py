@@ -41,8 +41,6 @@ LLMS_TXT = (
     "- Privacy-first: No tracking, no cookies, no PII collected\n\n"
     "## Pages\n\n"
     f"- [Homepage]({SITE_URL}/): Main intake form with 6-step wizard\n"
-    f"- [Admin Dashboard]({SITE_URL}/admin/dashboard): "
-    "Analytics funnel (token-gated)\n"
 )
 
 

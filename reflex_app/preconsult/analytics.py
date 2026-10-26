@@ -25,18 +25,3 @@ async def log_analytics_event(event_name: str):
                 logging.warning(f"Falha ao registrar analytics: {resp.status_code}")
     except Exception as e:
         logging.error(f"Erro ao registrar analytics: {e}")
-
-
-async def fetch_analytics_data() -> list[dict]:
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                _api_url("/analytics/stats"),
-                headers={"X-API-KEY": API_KEY},
-                timeout=10.0,
-            )
-            if resp.status_code == 200:
-                return resp.json()
-    except Exception as e:
-        logging.error(f"Erro ao buscar analytics: {e}")
-    return []

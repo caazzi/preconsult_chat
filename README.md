@@ -205,7 +205,7 @@ Current categories:
 - **State machine (Reflex)**: step transitions & validation, session-init payload
   construction, SSE question-stream parsing (incl. emergency red-flag,
   timeout and error branches), answer summary building, PDF download flow,
-  `detect_lang`, `AdminState` token gating.
+  `detect_lang` and the language cookie.
 - **Agent Service**: XML prompt structure, OPQRST & SAMPLE frameworks,
   multi-language formatting, emergency condition detection.
 - **API Integration**: session init, SSE streaming, PDF generation, quotas &

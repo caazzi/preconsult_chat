@@ -30,7 +30,7 @@ pytest.importorskip("reflex_components_radix.plugin")
 
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from reflex_app.preconsult.state import State, AdminState, _get_router_params
+from reflex_app.preconsult.state import State, _get_router_params
 from reflex_app.preconsult.state import build_session_init_payload
 
 
@@ -645,58 +645,6 @@ async def test_download_report_exception():
 
     assert events is None
     assert s.error_message == s._t["err_download_gen"]
-
-
-# ---------------------------------------------------------------------------
-# AdminState token gating
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_admin_access_denied_without_token(monkeypatch):
-    monkeypatch.setenv("ADMIN_DASHBOARD_TOKEN", "secret")
-    state = AdminState()
-    object.__setattr__(state, "router", _FakeRouter(query={}))
-    await state.load_analytics()
-    assert state.authorized is False
-    assert state.analytics_data == []
-
-
-@pytest.mark.asyncio
-async def test_admin_access_granted_with_token(monkeypatch):
-    import reflex_app.preconsult.state as st
-
-    monkeypatch.setenv("ADMIN_DASHBOARD_TOKEN", "secret")
-    state = AdminState()
-    object.__setattr__(state, "router", _FakeRouter(query={"token": "secret"}))
-    # Patch the module-level analytics fetcher (the class method routes through
-    # reflex's method-proxy machinery and cannot be patched reliably).
-    api_mock = AsyncMock(return_value=[{"date": "x"}])
-    with patch.object(st, "fetch_analytics_data", api_mock):
-        await state.load_analytics()
-    assert state.authorized is True
-    assert state.analytics_data == [{"date": "x"}]
-    api_mock.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_admin_access_denied_when_token_env_unset(monkeypatch):
-    """No configured admin token must never authorize, even with a query token."""
-    monkeypatch.delenv("ADMIN_DASHBOARD_TOKEN", raising=False)
-    state = AdminState()
-    object.__setattr__(state, "router", _FakeRouter(query={"token": "anything"}))
-    await state.load_analytics()
-    assert state.authorized is False
-    assert state.analytics_data == []
-
-
-@pytest.mark.asyncio
-async def test_admin_access_denied_with_wrong_token(monkeypatch):
-    monkeypatch.setenv("ADMIN_DASHBOARD_TOKEN", "secret")
-    state = AdminState()
-    object.__setattr__(state, "router", _FakeRouter(query={"token": "wrong"}))
-    await state.load_analytics()
-    assert state.authorized is False
-    assert state.analytics_data == []
 
 
 # ---------------------------------------------------------------------------

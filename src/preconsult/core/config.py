@@ -28,13 +28,32 @@ SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 # from the transport layer, so spoofed headers can't bypass rate limits/quotas.
 TRUST_PROXY_HEADERS = os.environ.get("TRUST_PROXY_HEADERS") == "true"
 
-LLM_MODEL = os.environ.get("LLM_MODEL", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
+# Which model provider processes the intake answers. "vertex" (Google Vertex AI
+# / Gemini) is the deployed default because it is the provider the running
+# service has credentials for; "bedrock" (Anthropic Claude on AWS) is the opt-in
+# path kept for the later AWS migration. This is a PHI data-flow decision, not a
+# tuning knob: switching it changes which third party receives clinical text, so
+# the privacy copy in reflex_app/preconsult/preconsult.py (and web/legal/ once
+# the SPA serves those pages) must be updated in the same change.
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "vertex").strip().lower()
+
+VERTEX_REGION = os.environ.get("VERTEX_AI_REGION", "us-central1")
 
 # AWS Bedrock region for the Claude Haiku inference calls. Bedrock is a regional
 # service and Claude is NOT available in every region; a single fixed region is
 # used (env-overridable). Data-residency routing (e.g. LGPD) must key on where
 # the session actually is, not on UI language — a later phase concern.
 BEDROCK_REGION = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+
+# Provider-specific model ids. An explicit LLM_MODEL still wins, so the deployed
+# environment can pin a model without touching code.
+_DEFAULT_LLM_MODEL = {
+    "vertex": "gemini-2.5-flash",
+    "bedrock": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+}
+LLM_MODEL = os.environ.get("LLM_MODEL") or _DEFAULT_LLM_MODEL.get(
+    LLM_PROVIDER, _DEFAULT_LLM_MODEL["vertex"]
+)
 
 # Deploy revision identity. GIT_SHA is injected by CI; K_REVISION is Cloud Run's
 # own revision id at runtime. Kept PHI-free and included in every structured log
@@ -74,10 +93,18 @@ ALLOW_PUBLIC_INIT = os.environ.get("ALLOW_PUBLIC_INIT", "false").strip().lower()
 )
 
 
-# AWS credentials for Bedrock are resolved by boto3's default provider chain
-# (env vars, shared config, or the instance/task role). No path validation is
-# required here; log only whether an explicit key pair is present (PHI-free).
-if os.environ.get("AWS_ACCESS_KEY_ID"):
-    logging.info("AWS credentials present via environment; Bedrock will use them.")
+# Credential sanity logging for the selected provider. PHI-free: never logs a
+# credential, only which resolution path is in play.
+if LLM_PROVIDER == "bedrock":
+    if os.environ.get("AWS_ACCESS_KEY_ID"):
+        logging.info("AWS credentials present via environment; Bedrock will use them.")
+    else:
+        logging.info("No AWS_ACCESS_KEY_ID in env; Bedrock falls back to the default boto3 credential chain.")
 else:
-    logging.info("No AWS_ACCESS_KEY_ID in env; Bedrock falls back to the default boto3 credential chain.")
+    gcp_creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if gcp_creds and not os.path.exists(gcp_creds):
+        logging.warning(f"GOOGLE_APPLICATION_CREDENTIALS is set but file not found at: {gcp_creds}")
+    elif gcp_creds:
+        logging.info(f"Using Google Cloud Credentials from: {gcp_creds}")
+    else:
+        logging.info("GOOGLE_APPLICATION_CREDENTIALS not set; using ambient/WIF credentials for Vertex AI.")

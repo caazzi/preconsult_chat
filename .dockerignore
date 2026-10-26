@@ -12,6 +12,12 @@
 *.json
 !pyproject.toml
 !package.json
+!package-lock.json
+!web/package.json
+!web/package-lock.json
+!web/tsconfig*.json
+!contracts/i18n/*.json
+!contracts/*.json
 *.log
 *.pdf
 
@@ -60,6 +66,10 @@ gradio/
 *.ipynb
 .DS_Store
 Thumbs.db
+
+# The SPA's own build helper must reach the image build (root scripts/ stays
+# ignored above).
+!web/scripts/
 
 # Documentation
 docs/

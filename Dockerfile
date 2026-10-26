@@ -23,6 +23,19 @@ COPY . .
 # `Building preconsult @ file:///app` CPU work that happened on every cold start.
 RUN uv sync --frozen
 
+# --- Stage 1b: Build the shadow SPA (web/) ---------------------------------
+# The React rewrite is served at /next from the SAME image (see preconsult.py).
+# Vite's base is /next/, so emitted asset URLs need no extra config. The web/
+# sources (incl. web/scripts and web/package-lock.json) are kept by
+# .dockerignore negations; node_modules/ is installed fresh here.
+WORKDIR /app/web
+RUN npm ci --no-audit --no-fund
+# Sync the generated contracts from the Python source of truth, then build.
+RUN node scripts/sync-contracts.mjs && npm run build
+# Drop the (large) node_modules + web sources from the build context copy: only
+# web/dist is needed at runtime, and COPY --from=builder copies all of /app.
+RUN rm -rf /app/web/node_modules /app/web/src /app/web/scripts
+
 # Apply the tracked reflex-client socket-replay patch onto the reflex-base web
 # template so `reflex export` compiles it into the frontend bundle. Without
 # this, a fresh .web (re-materialized from the installed reflex package on each

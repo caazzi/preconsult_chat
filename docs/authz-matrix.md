@@ -22,13 +22,16 @@ credential. It is the call that **mints** the cookie every other row requires,
 so requiring that cookie first would be circular (the React SPA at `/next`
 holds no credential and no cookie on first load).
 
-It stays closed by default: `ALLOW_PUBLIC_INIT=false` makes `init` behave like
-every other route. When enabled, the guards are the per-IP rate limit
-(2/min, 20/day), the bot gate, and the bounds on `SessionInitRequest` — all
-three are load-bearing, because an open bootstrap is also an open LLM-spend
-and Redis-fill path. Do not enable it until client-IP bucketing has been
-verified in the deployed environment: if every request resolved to one IP,
-the 20/day quota would become a single global cap.
+The **code default** is `ALLOW_PUBLIC_INIT=false` (fail closed), but the
+**deployed environment sets it to `true`** — the SPA holds no API key, so it has
+no other way to start a session. When enabled, the guards are the per-IP rate
+limit (2/min, 20/day), the bot gate, and the bounds on `SessionInitRequest` — all
+three are load-bearing, because an open bootstrap is also an open LLM-spend and
+Redis-fill path. Client-IP bucketing was verified in the deployed container on
+2026-10-26: each visitor produced its own `session_quota:<client ip>` key rather
+than one shared key, which is what makes those limits per client instead of a
+global cap. Re-verify that before raising the quota or trusting the flag on a new
+topology.
 
 ## Non-`/api/*` routes
 

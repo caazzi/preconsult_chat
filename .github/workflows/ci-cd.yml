@@ -277,6 +277,7 @@ jobs:
             LLM_MODEL=gemini-2.5-flash
             REFLEX_SOCKET_TIMEOUT=600
             REFLEX_SOCKET_INTERVAL=10
+            TRUST_PROXY_HEADERS=true
           # SESSION_SECRET: per-session cookie signing key (openssl rand -hex 32).
           secrets: |
             REDIS_URL=REDIS_URL:latest

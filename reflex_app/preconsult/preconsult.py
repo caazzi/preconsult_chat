@@ -854,6 +854,7 @@ if api_router:
     from fastapi.exceptions import RequestValidationError
     from pydantic import ValidationError
     from botocore.exceptions import BotoCoreError, ClientError
+    from google.api_core.exceptions import GoogleAPIError
     from starlette.responses import Response
     from preconsult.core.errors import (
         RedisUnavailableError,
@@ -865,6 +866,7 @@ if api_router:
         llm_unavailable_handler,
         validation_handler,
         request_validation_handler,
+        google_api_handler,
         bedrock_api_handler,
         generic_handler,
     )
@@ -897,6 +899,7 @@ if api_router:
     # request-body failures; without this the stable `validation_failed` code
     # never reached 422 responses. Handler strips submitted values (PHI).
     custom_api.add_exception_handler(RequestValidationError, request_validation_handler)
+    custom_api.add_exception_handler(GoogleAPIError, google_api_handler)
     custom_api.add_exception_handler(BotoCoreError, bedrock_api_handler)
     custom_api.add_exception_handler(ClientError, bedrock_api_handler)
     custom_api.add_exception_handler(Exception, generic_handler)
@@ -1026,13 +1029,13 @@ if api_router:
             "Zero data persistence. No account required.\n\n"
             "PreConsult helps patients organize symptoms and prepare for "
             "doctor's appointments through a structured multi-step intake form. "
-            "The entire process runs in-browser, uses Anthropic's Claude (Haiku) on "
-            "AWS Bedrock to generate targeted clinical questions, and produces a "
+            "The entire process runs in-browser, uses Google Vertex AI (Gemini) "
+            "to generate targeted clinical questions, and produces a "
             "downloadable PDF report. All data is deleted when the browser tab is closed.\n\n"
             "Key principles:\n"
             "- Zero data persistence: No data stored on servers after session ends\n"
             "- No account required: Fully anonymous usage\n"
-            "- AI-powered clinical questions via Anthropic Claude (Haiku) on AWS Bedrock\n"
+            "- AI-powered clinical questions via Google Vertex AI (Gemini 2.5 Flash Lite)\n"
             "- Multi-language: English and Portuguese (Brazil)\n"
             "- PDF report generation with form data and Q&A\n"
             "- Privacy-first: No tracking, no cookies, no PII collected\n\n"
@@ -1099,11 +1102,11 @@ if api_router:
   </ul>
 
   <h2>2. Geração de Perguntas por IA e Processamento</h2>
-  <p>Para fornecer perguntas clínicas de acompanhamento relevantes, o PreConsult utiliza o Claude (Haiku) da Anthropic hospedado na AWS Bedrock:</p>
+  <p>Para fornecer perguntas clínicas de acompanhamento relevantes, o PreConsult utiliza o Google Vertex AI (Gemini 2.5 Flash Lite):</p>
   <ul>
-    <li>As informações clínicas inseridas são transmitidas via conexão criptografada HTTPS para os endpoints corporativos da AWS Bedrock exclusivamente para gerar perguntas de acompanhamento contextuais.</li>
+    <li>As informações clínicas inseridas são transmitidas via conexão criptografada HTTPS para os endpoints corporativos do Google Vertex AI exclusivamente para gerar perguntas de acompanhamento contextuais.</li>
     <li>Nenhum identificador pessoal (nomes, endereços, documentos) é enviado ao serviço de IA.</li>
-    <li>Os dados processados via AWS Bedrock não são retidos pelo provedor nem utilizados para treinar modelos públicos de aprendizado de máquina.</li>
+    <li>Os dados processados via Google Vertex AI não são retidos pelo Google nem utilizados para treinar modelos públicos de aprendizado de máquina.</li>
   </ul>
 
   <h2>3. Cookies e Métricas Locais</h2>
@@ -1175,11 +1178,11 @@ if api_router:
   </ul>
 
   <h2>2. AI Question Generation & Third-Party Processing</h2>
-  <p>To provide relevant clinical follow-up questions, PreConsult utilizes Anthropic's Claude (Haiku) hosted on AWS Bedrock:</p>
+  <p>To provide relevant clinical follow-up questions, PreConsult utilizes Google Vertex AI (Gemini 2.5 Flash Lite):</p>
   <ul>
-    <li>The clinical information you enter is transmitted via encrypted HTTPS connection to AWS Bedrock enterprise endpoints solely to generate contextual follow-up questions.</li>
+    <li>The clinical information you enter is transmitted via encrypted HTTPS connection to Google Vertex AI enterprise endpoints solely to generate contextual follow-up questions.</li>
     <li>No personal identifiers (names, addresses, documents) are sent to the AI service.</li>
-    <li>Data processed via AWS Bedrock is not retained by the provider or used to train public machine learning models.</li>
+    <li>Data processed via enterprise Google Vertex AI is not retained by Google or used to train public machine learning models.</li>
   </ul>
 
   <h2>3. Cookies & Local Analytics</h2>

@@ -102,8 +102,11 @@ Tests that pin this contract: `tests/test_sse_contract.py`,
 | `POST /api/*-questions-stream` | 5/min per IP |
 
 - Exceeding returns `429 rate_limited` (or `redis_quota_exceeded` for the daily
-  Upstash quota). `get_client_ip()` only honours proxy headers when
-  `TRUST_PROXY_HEADERS=true` (see `src/preconsult/core/config.py`).
+  Upstash quota). `get_client_ip()` reads proxy headers only when
+  `TRUST_PROXY_HEADERS=true`, and then takes the last `x-forwarded-for` hop (the
+  one Cloud Run appended) — see `src/preconsult/core/config.py` and the
+  measurement recorded in `AGENTS.md`. The deployed container sets it to `true`;
+  without it every client shares one bucket (`169.254.169.126`).
 
 ---
 

@@ -179,13 +179,27 @@ outages), so Redis must be reserved for actual patient sessions:
   those guards when touching the fallback — they protect the zero-persistence privacy claim.
 - Session CRUD has a best-effort per-worker in-memory fallback for transient Redis
   errors. It is a resilience shim, not a store of truth.
+- The rate-limit / session-quota fallback (`MemoryRateLimitStore`) is capped at
+  `_MEMORY_LIMITER_MAX_KEYS`, evicting expired counters first, then those closest to expiry. Its keys
+  are per client IP and now genuinely vary per visitor, so the cap is what stops a long outage from
+  growing a worker's dict for the life of the process (expired counters used to be dropped only when
+  the same key returned). Tests: `tests/test_memory_limiter.py`.
 
 ## Client-IP & proxy trust
 
-- `get_client_ip()` only honors `cf-connecting-ip` / `x-forwarded-for` when `TRUST_PROXY_HEADERS=true`
-  (`src/preconsult/core/config.py`). Leave it `false` unless the app genuinely sits behind a trusted
-  fronting proxy — otherwise spoofed headers bypass per-IP rate limits / quotas. Tests in
+- **Measured on Cloud Run (2026-10-26, header-echo probe, service deleted after):** the container's
+  transport peer is `169.254.169.126` — the local proxy, identical for every visitor. Cloud Run
+  **appends** the real client to `X-Forwarded-For` and does **not** strip what the caller sent
+  (`X-Forwarded-For: 1.2.3.4` arrives as `1.2.3.4,187.15.85.23`). `cf-connecting-ip` passes through
+  untouched. Consequence: `TRUST_PROXY_HEADERS` must be `true` in the deployed container, and
+  `get_client_ip()` takes the **last** X-Forwarded-For hop, validated with `ipaddress`, falling back
+  to the transport address. Trusting the leftmost hop or `cf-connecting-ip` would let a client rotate
+  IPs and bypass the per-IP rate limits / 20-a-day session quota; trusting the transport peer alone
+  makes those limits **global** (one shared bucket for all users). Caveat: `TRUST_CF_CONNECTING_IP`
+  stays `false` unless `pre-consult.org` is moved behind Cloudflare's proxy. Tests in
   `tests/test_client_ip.py` lock this policy.
+- Setting `TRUST_PROXY_HEADERS` without the right hop was a live bug, not a hardening nicety: with it
+  off, every production user shared `169.254.169.126` in the quota key.
 
 ## Serving & the CDN/edge cache reality
 
@@ -208,17 +222,23 @@ outages), so Redis must be reserved for actual patient sessions:
 - `.env` is secret and must not be read or edited for value changes without care; secrets live in
   Google Secret Manager (`SECUREMED_API_KEY`, `REDIS_URL`) and are wired as secret references, not
   plaintext env vars, in every deploy.
-- **LLM provider is AWS Bedrock (Anthropic Claude Haiku), not Vertex/Gemini.** `core/llm.py`
-  constructs a `ChatBedrockConverse` client from `LLM_MODEL` + `BEDROCK_REGION` (both env-overridable).
-  Do NOT re-introduce `langchain-google-vertexai` or `google-cloud-aiplatform`. Bedrock is a regional
-  service and Claude is not available in every region; the single fixed region is deliberate — do not
-  route by UI language (language ≠ data residency). Upstream Bedrock failures map to the existing
-  stable codes via `bedrock_api_handler` (`botocore.ClientError` throttling → `503 llm_unavailable`,
-  everything else → `502 ai_upstream_error`); keep those codes unchanged.
-  **INTERIM (Phase 1):** the container still runs on GCP, so Bedrock credentials
-  (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`) are GCP Secret Manager references until the Phase 3
-  compute migration to AWS replaces them with a task role. Scope the IAM policy to
-  `bedrock:InvokeModelWithResponseStream` on the single Haiku model.
+- **The active LLM provider is selected by `LLM_PROVIDER`, and the default is `vertex`
+  (Google Vertex AI / Gemini), not Bedrock.** `core/llm.py` builds a `ChatVertexAI` client from
+  `LLM_MODEL` + `VERTEX_REGION` + `PROJECT_ID`, or a `ChatBedrockConverse` client from
+  `LLM_MODEL` + `BEDROCK_REGION` when `LLM_PROVIDER=bedrock`. The default is the provider the deployed
+  service actually has credentials for: production ran a Vertex build until 2026-09-08 and Bedrock
+  credentials do not exist in Secret Manager, so a Bedrock-only `main` could not be deployed without
+  breaking every question request. Bedrock is the planned next step, kept working behind the switch —
+  do not delete either path.
+  **Switching providers is a PHI decision, not a config tweak.** It changes which third party receives
+  clinical text, so the privacy copy in `reflex_app/preconsult/preconsult.py` (and `web/legal/*.html`
+  once the SPA serves those) must change in the same commit, along with the deploy's `secrets:` block
+  (add `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`), the `LLM_MODEL` default, and the IAM policy scope
+  (`bedrock:InvokeModelWithResponseStream` on the single Haiku model).
+  Upstream failures map to the existing stable codes via `google_api_handler` /
+  `bedrock_api_handler` (throttling → `503 llm_unavailable`, everything else → `502
+  ai_upstream_error`); keep those codes unchanged. Regions are fixed and must not be routed by UI
+  language (language ≠ data residency).
 - Deploy-affecting changes include anything the container runs: error-response shape (codes),
   health routes, config flags (e.g. `TRUST_PROXY_HEADERS`), Sentry init. Such a change is only
   "done" after the CI/CD-built revision serves `200` — local commits alone are NOT deployment.

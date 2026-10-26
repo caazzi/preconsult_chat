@@ -159,15 +159,20 @@ LLM_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
 REDIS_URL=redis://localhost:6379/0
 SENTRY_DSN=  # optional
 GTAG_ID=     # optional
-TRUST_PROXY_HEADERS=false  # enable only when behind a trusted fronting proxy
+TRUST_PROXY_HEADERS=false  # true on Cloud Run: the peer is the local proxy for every client
+TRUST_CF_CONNECTING_IP=false # true only if the domain sits behind Cloudflare's proxy
 ENV=production             # Sentry environment tag
 GIT_SHA=                   # Sentry release tag (injected by CI)
 ```
 
-> **Client-IP trust (security):** `get_client_ip` honors `cf-connecting-ip` /
-> `x-forwarded-for` only when `TRUST_PROXY_HEADERS=true`. Leave it `false`
-> (default) unless requests actually traverse a trusted proxy — otherwise a
-> spoofed header lets a client rotate IPs and bypass per-IP rate limits / quotas.
+> **Client-IP trust (security):** `get_client_ip` only reads proxy headers when
+> `TRUST_PROXY_HEADERS=true`, and then uses the **last** `x-forwarded-for` hop —
+> the one our proxy appended — because Cloud Run appends the real client without
+> stripping forged prefixes. On Cloud Run this flag must be `true`: the transport
+> peer is the local proxy (`169.254.169.126`) for every visitor, so `false` would
+> put all users in a single rate-limit and session-quota bucket.
+> `cf-connecting-ip` is ignored unless `TRUST_CF_CONNECTING_IP=true`, which is
+> only correct behind Cloudflare's proxy (this domain is DNS-only).
 
 ### Running Tests
 

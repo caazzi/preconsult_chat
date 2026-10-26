@@ -182,10 +182,19 @@ outages), so Redis must be reserved for actual patient sessions:
 
 ## Client-IP & proxy trust
 
-- `get_client_ip()` only honors `cf-connecting-ip` / `x-forwarded-for` when `TRUST_PROXY_HEADERS=true`
-  (`src/preconsult/core/config.py`). Leave it `false` unless the app genuinely sits behind a trusted
-  fronting proxy — otherwise spoofed headers bypass per-IP rate limits / quotas. Tests in
+- **Measured on Cloud Run (2026-10-26, header-echo probe, service deleted after):** the container's
+  transport peer is `169.254.169.126` — the local proxy, identical for every visitor. Cloud Run
+  **appends** the real client to `X-Forwarded-For` and does **not** strip what the caller sent
+  (`X-Forwarded-For: 1.2.3.4` arrives as `1.2.3.4,187.15.85.23`). `cf-connecting-ip` passes through
+  untouched. Consequence: `TRUST_PROXY_HEADERS` must be `true` in the deployed container, and
+  `get_client_ip()` takes the **last** X-Forwarded-For hop, validated with `ipaddress`, falling back
+  to the transport address. Trusting the leftmost hop or `cf-connecting-ip` would let a client rotate
+  IPs and bypass the per-IP rate limits / 20-a-day session quota; trusting the transport peer alone
+  makes those limits **global** (one shared bucket for all users). Caveat: `TRUST_CF_CONNECTING_IP`
+  stays `false` unless `pre-consult.org` is moved behind Cloudflare's proxy. Tests in
   `tests/test_client_ip.py` lock this policy.
+- Setting `TRUST_PROXY_HEADERS` without the right hop was a live bug, not a hardening nicety: with it
+  off, every production user shared `169.254.169.126` in the quota key.
 
 ## Serving & the CDN/edge cache reality
 

@@ -5,19 +5,19 @@ description = "PreConsult - Privacy-First Medical Intake Assistant"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "fastapi==0.141.1",
-    "gunicorn==26.1.0",
+    "fastapi==0.161.1",
+    "gunicorn==26.2.0",
     "langchain-aws==0.2.35",
     "langchain-google-vertexai==2.1.2",
     "langchain==0.3.27",
     "google-cloud-aiplatform==1.165.0",
-    "pydantic==2.13.4",
-    "reportlab==5.0.0",
-    "uvicorn[standard]==0.52.4",
-    "python-dotenv==1.2.3",
+    "pydantic==2.14.1",
+    "reportlab==5.1.0",
+    "uvicorn[standard]==0.54.0",
+    "python-dotenv==1.2.4",
     "redis==6.4.0",
-    "reflex==0.9.8.post1",
-    "sentry-sdk==2.68.0",
+    "reflex==0.10.0",
+    "sentry-sdk==2.73.0",
 ]
 
 [project.optional-dependencies]

@@ -75,20 +75,41 @@ def _mark_redis_down(where: str) -> None:
     )
 
 
+# Hard cap on the in-memory rate-limit fallback. Keys are per client IP, so an
+# outage (or a quota-exhausted day) with varied traffic can otherwise grow this
+# dict for as long as the worker lives: expired counters were only dropped when
+# the exact same key came back. Evictions are safe - a lost counter resets a
+# limit, it never blocks a client.
+_MEMORY_LIMITER_MAX_KEYS = 4096
+
+
 class MemoryRateLimitStore:
-    def __init__(self):
+    def __init__(self, max_keys: int = _MEMORY_LIMITER_MAX_KEYS):
         self._store: Dict[str, tuple[int, float]] = OrderedDict()
         self._lock = asyncio.Lock()
+        self._max_keys = max_keys
+
+    def _make_room(self, now: float) -> None:
+        """Drop expired counters, then the ones closest to expiry if still full."""
+        for key in [k for k, (_, expiry) in self._store.items() if expiry <= now]:
+            del self._store[key]
+        while self._store and len(self._store) >= self._max_keys:
+            oldest = min(self._store.items(), key=lambda item: item[1][1])[0]
+            del self._store[oldest]
 
     async def incr(self, key: str, window: int) -> int:
         async with self._lock:
             now = time.monotonic()
-            if key in self._store:
-                count, expiry = self._store[key]
+            entry = self._store.get(key)
+            if entry is not None:
+                count, expiry = entry
                 if now < expiry:
                     new_count = count + 1
                     self._store[key] = (new_count, expiry)
                     return new_count
+                del self._store[key]
+            if len(self._store) >= self._max_keys:
+                self._make_room(now)
             self._store[key] = (1, now + window)
             return 1
 

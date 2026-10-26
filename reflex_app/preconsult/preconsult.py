@@ -855,6 +855,7 @@ if api_router:
     from fastapi.exceptions import RequestValidationError
     from pydantic import ValidationError
     from botocore.exceptions import BotoCoreError, ClientError
+    from google.api_core.exceptions import GoogleAPIError
     from starlette.responses import Response
     from preconsult.core.errors import (
         RedisUnavailableError,
@@ -866,6 +867,7 @@ if api_router:
         llm_unavailable_handler,
         validation_handler,
         request_validation_handler,
+        google_api_handler,
         bedrock_api_handler,
         generic_handler,
     )
@@ -898,6 +900,7 @@ if api_router:
     # request-body failures; without this the stable `validation_failed` code
     # never reached 422 responses. Handler strips submitted values (PHI).
     custom_api.add_exception_handler(RequestValidationError, request_validation_handler)
+    custom_api.add_exception_handler(GoogleAPIError, google_api_handler)
     custom_api.add_exception_handler(BotoCoreError, bedrock_api_handler)
     custom_api.add_exception_handler(ClientError, bedrock_api_handler)
     custom_api.add_exception_handler(Exception, generic_handler)

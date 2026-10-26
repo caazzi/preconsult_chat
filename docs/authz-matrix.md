@@ -2,17 +2,33 @@
 
 One row per `/api/*` route. "Auth" is enforced by the router-level
 `authenticate` dependency (session cookie **or** `X-API-KEY`) plus any per-route
-ownership check. Error codes are stable and machine-readable
-(`src/preconsult/core/errors.py`).
+ownership check. The single exception is the session bootstrap
+(`POST /api/session/init`), which uses `init_access` — see the note below.
+Error codes are stable and machine-readable (`src/preconsult/core/errors.py`).
 
 | Method | Path | Auth | Ownership | Rate limit | Success | Error codes |
 |---|---|---|---|---|---|---|
-| POST | `/api/session/init` | cookie or key | n/a (creates) | 2/min, 20/day per IP | 200 `{session_id}` + Set-Cookie | `rate_limited`, `redis_*`, `service_unavailable` |
+| POST | `/api/session/init` | bootstrap: credential unless `ALLOW_PUBLIC_INIT` | n/a (creates) | 2/min, 20/day per IP | 200 `{session_id}` + Set-Cookie | `auth_failed`, `validation_failed`, `rate_limited`, `redis_*`, `service_unavailable` |
 | POST | `/api/initial-questions-stream` | cookie or key | cookie `session_id` must equal body `session_id` | 5/min per IP | 200 `text/event-stream` | `auth_failed`, `session_expired`, `rate_limited`, upstream codes |
 | POST | `/api/interview-questions-stream` | cookie or key | cookie `session_id` must equal body `session_id` | 5/min per IP | 200 `text/event-stream` | `auth_failed`, `session_expired`, `rate_limited`, upstream codes |
 | POST | `/api/generate-pdf` | cookie or key | cookie `session_id` must equal body `session_id` | none | 200 `application/pdf` | `auth_failed`, `session_expired` |
 | POST | `/api/analytics/event` | cookie or key | n/a (anonymous counters) | none | 200 `{status: ok}` | `auth_failed` |
 | GET | `/api/analytics/stats` | cookie or key | n/a (aggregate) | none | 200 `[...]` | `auth_failed` |
+
+### The bootstrap exception
+
+`POST /api/session/init` is the only route that may be reachable without a
+credential. It is the call that **mints** the cookie every other row requires,
+so requiring that cookie first would be circular (the React SPA at `/next`
+holds no credential and no cookie on first load).
+
+It stays closed by default: `ALLOW_PUBLIC_INIT=false` makes `init` behave like
+every other route. When enabled, the guards are the per-IP rate limit
+(2/min, 20/day), the bot gate, and the bounds on `SessionInitRequest` — all
+three are load-bearing, because an open bootstrap is also an open LLM-spend
+and Redis-fill path. Do not enable it until client-IP bucketing has been
+verified in the deployed environment: if every request resolved to one IP,
+the 20/day quota would become a single global cap.
 
 ## Non-`/api/*` routes
 

@@ -16,7 +16,7 @@ from httpx import ASGITransport
 import preconsult.api.endpoints as endpoints
 import preconsult.services.session_service as srv
 from preconsult.core.config import SESSION_COOKIE_NAME
-from reflex_app.preconsult.preconsult import api as app
+from preconsult.host import app
 
 PAYLOAD = {
     "age_bracket": "26-35",

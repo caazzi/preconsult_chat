@@ -13,7 +13,7 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from reflex_app.preconsult.preconsult import api as app
+from preconsult.host import app
 
 # (method, path, json-body-or-None)
 API_ROUTES = [

@@ -4,27 +4,45 @@ A client-side router needs unknown *navigation* routes to fall back to
 ``index.html``, but a missing *file* must stay a 404: serving HTML for a missing
 hashed asset — and letting it be cached ``immutable`` — is how a partial deploy
 turns into "Unexpected token '<'" and a poisoned browser/CDN cache.
+
+After the cutover the same class is mounted at ``/`` and inherits the origin's
+404 semantics, so scanner probes and Reflex backend prefixes must stay plain
+404s (never the shell). Those cases are exercised through a root mount.
 """
+
+import logging
 
 import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from reflex_app.preconsult.preconsult import SPAStaticFiles
+from preconsult.site.static import SPAStaticFiles
 
 SHELL = "<html>shell</html>"
 ASSET_BODY = "console.log(1)"
 
 
-@pytest.fixture()
-def client(tmp_path):
+def _build_dist(tmp_path):
     (tmp_path / "index.html").write_text(SHELL)
     assets = tmp_path / "assets"
     assets.mkdir()
     (assets / "app.js").write_text(ASSET_BODY)
+    return tmp_path
 
+
+@pytest.fixture()
+def client(tmp_path):
     app = Starlette()
-    app.mount("/next", SPAStaticFiles(directory=str(tmp_path), html=True))
+    app.mount("/next", SPAStaticFiles(directory=str(_build_dist(tmp_path)), html=True))
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture()
+def root_client(tmp_path):
+    """The post-cutover shape: the SPA owns ``/``."""
+    app = Starlette()
+    app.mount("/", SPAStaticFiles(directory=str(_build_dist(tmp_path)), html=True))
     with TestClient(app) as test_client:
         yield test_client
 
@@ -73,3 +91,63 @@ def test_missing_file_outside_assets_is_404(client):
     assert response.status_code == 404
     assert "shell" not in response.text
     assert "immutable" not in response.headers.get("cache-control", "")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/wp-admin/install.php",
+        "/wp-admin/",
+        "/.env",
+        "/index.php",
+    ],
+)
+def test_scanner_probes_are_plain_text_404_on_root_mount(root_client, path):
+    response = root_client.get(path)
+
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("text/plain")
+    # Scanner traffic must never be answered with (and cost) the SPA shell.
+    assert "shell" not in response.text
+
+
+@pytest.mark.parametrize("path", ["/_event", "/_event/", "/_upload/x"])
+def test_backend_prefixes_are_plain_text_404_on_root_mount(root_client, path):
+    response = root_client.get(path)
+
+    # Regression guard: a stale Reflex client hitting /_event must get a clear
+    # 404, never the SPA shell (HTML here breaks the Engine.IO handshake).
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "shell" not in response.text
+
+
+def test_unknown_navigation_on_root_mount_still_serves_shell(root_client):
+    response = root_client.get("/some/deep/link")
+
+    # The guards must not swallow the client-side router's fallback.
+    assert response.status_code == 200
+    assert "shell" in response.text
+    cache_control = response.headers["cache-control"]
+    assert "no-store" in cache_control
+    assert "immutable" not in cache_control
+
+
+def test_backend_prefix_404_logs_normalized_path_only(root_client, caplog):
+    with caplog.at_level(logging.WARNING, logger="preconsult.observability"):
+        response = root_client.get("/_event?sid=should-not-be-logged")
+
+    assert response.status_code == 404
+
+    records = [
+        record
+        for record in caplog.records
+        if "static.backend_prefix_404" in record.getMessage()
+    ]
+    assert len(records) == 1
+
+    message = records[0].getMessage()
+    # Metadata only: the normalized path, never the query string or user input.
+    assert "path='_event'" in message
+    assert "?" not in message
+    assert "should-not-be-logged" not in message

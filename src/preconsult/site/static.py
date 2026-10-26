@@ -5,21 +5,73 @@ React app needs the same contract either way — real files are immutable and
 content-hashed, the shell is ``no-store``, an unknown navigation falls back to
 ``index.html``, and a missing *file* stays a 404.
 
+Because the mount moves to ``/`` it inherits the whole origin's 404 semantics:
+every path the router does not know lands here, so scanner probes (``.php``,
+``wp-admin``, ``.env``, …) and Reflex backend prefixes (``/_event``, …) are
+answered explicitly instead of being handed the SPA shell — that is why the
+guards below live in this module rather than in the old Reflex host.
+
 It is Reflex-free; the host imports it for the ``/next`` mount today and will
 mount it at ``/`` after the cutover.
 """
 
 from __future__ import annotations
 
+import logging
+
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
+
+from preconsult.core.observability import log_event, new_request_id
 
 
 class SPAStaticFiles(StaticFiles):
     _IMMUTABLE = "public, max-age=31536000, immutable"
     _NO_STORE = "no-store, no-cache, must-revalidate"
 
+    # Reflex backend endpoints must never be answered by the SPA fallback. A
+    # backend path reaching the shell means the state socket got HTML instead
+    # of a handshake (it then silently drops events), so answer with a clear
+    # 404 text response and make the regression visible in the logs.
+    _BACKEND_PREFIXES = (
+        "_event",
+        "_ping",
+        "_health",
+        "_upload",
+        "auth-codespace",
+        "_all_routes",
+    )
+
     async def get_response(self, path: str, scope) -> Response:
+        path_lower = path.lower()
+
+        # Scanner probes are never app routes. Answer them with a cheap plain
+        # 404 before touching the filesystem or the shell fallback.
+        if any(
+            path_lower.endswith(ext)
+            for ext in (".php", ".asp", ".aspx", ".jsp", ".cgi")
+        ) or (
+            "wp-admin" in path_lower
+            or "wp-content" in path_lower
+            or ".env" in path_lower
+            or "phpmyadmin" in path_lower
+        ):
+            return Response("Not Found", status_code=404, media_type="text/plain")
+
+        if any(
+            path_lower == prefix or path_lower.startswith(prefix + "/")
+            for prefix in self._BACKEND_PREFIXES
+        ):
+            # Metadata only: the normalized path (never the query string or
+            # any user content), so the zero-PHI guarantee holds.
+            log_event(
+                logging.WARNING,
+                "static.backend_prefix_404",
+                request_id=new_request_id(),
+                path=path_lower,
+            )
+            return Response("Not Found", status_code=404, media_type="text/plain")
+
         # Starlette normalizes the mount root to ".", so a bare "." check on
         # the last segment would misclassify the document as a file and pin it
         # immutable for a year (the stale-shell hazard). Only real files are

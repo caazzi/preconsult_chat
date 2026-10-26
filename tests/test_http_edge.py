@@ -17,7 +17,7 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from reflex_app.preconsult.preconsult import api as app
+from preconsult.host import app
 
 BASE_URL = "http://test"
 AUTH_HEADERS = {"X-API-KEY": "ci_test_key_123"}

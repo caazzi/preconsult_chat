@@ -5,7 +5,7 @@ import asyncio
 import json
 from httpx import ASGITransport
 from botocore.exceptions import ClientError, BotoCoreError
-from reflex_app.preconsult.preconsult import api as app
+from preconsult.host import app
 from preconsult.core.errors import (
     RedisUnavailableError,
     LLMUnavailableError,
@@ -242,9 +242,11 @@ def test_both_provider_error_handlers_are_registered():
     from botocore.exceptions import ClientError as BotocoreClientError
     from google.api_core.exceptions import GoogleAPIError
 
-    import reflex_app.preconsult.preconsult as host
+    from preconsult.host import build_starlette_app
 
-    mount = next(r for r in host.app._api.routes if getattr(r, "path", None) == "/api")
+    mount = next(
+        r for r in build_starlette_app().routes if getattr(r, "path", None) == "/api"
+    )
     handlers = mount.app.exception_handlers
 
     assert GoogleAPIError in handlers

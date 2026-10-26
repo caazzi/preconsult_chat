@@ -19,7 +19,7 @@ import httpx
 from httpx import ASGITransport
 from unittest.mock import patch, AsyncMock
 
-from reflex_app.preconsult.preconsult import api as app
+from preconsult.host import app
 from preconsult.services.agent_service import StreamEvent
 
 HEADERS = {"X-API-KEY": "ci_test_key_123"}

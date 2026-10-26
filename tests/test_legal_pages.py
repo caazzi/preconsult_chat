@@ -20,7 +20,7 @@ from preconsult.site.legal import (
     legal_html,
     resolve_lang,
 )
-from reflex_app.preconsult.preconsult import api as app
+from preconsult.host import app
 
 
 def _client():

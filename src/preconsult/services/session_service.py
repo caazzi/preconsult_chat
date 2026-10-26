@@ -174,7 +174,7 @@ async def create_session(data: Dict[str, Any]) -> str:
         try:
             await client.hset(key, mapping=_serialize(data))
             await client.expire(key, SESSION_TTL)
-            logging.info(f"Criada sessao {session_id} no Redis")
+            logging.info("Criada sessao %s no Redis", session_id[:8])
             return session_id
         except Exception as e:
             if _is_quota_error(e):

@@ -22,8 +22,9 @@ OpenAPI 3.1 cannot encode but that a client must honour.
   - Else call the same-origin `/api<path>` (dev / same-image serving).
   - **Never** append `/api` again when `API_BASE_URL` already ends in `/api`
     (would produce `/api/api/...`).
-- Every `/api/**` request must send the header `X-API-KEY`. A missing/invalid
-  key returns `403` with a stable `auth_failed` code (gated by the bot gate
+- Every `/api/**` request must authenticate with the signed session cookie **or**
+  the `X-API-KEY` header (see `docs/authz-matrix.md`). A missing/invalid
+  credential returns `403` with a stable `auth_failed` code (gated by the bot gate
   before shipping for scanner-like user-agents).
 
 ---

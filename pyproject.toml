@@ -9,7 +9,7 @@ dependencies = [
     "gunicorn==26.2.0",
     "langchain-aws==0.2.35",
     "langchain-google-vertexai==2.1.2",
-    "langchain==0.3.27",
+    "langchain==1.4.7",
     "google-cloud-aiplatform==1.165.0",
     "pydantic==2.14.1",
     "reportlab==5.1.0",

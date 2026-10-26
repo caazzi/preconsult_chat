@@ -70,7 +70,9 @@ async def test_init_sets_signed_httponly_session_cookie(
     mock_quota.return_value = True
     mock_rate.return_value = True
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.post("/api/session/init", json=PAYLOAD, headers=KEY_HEADERS)
 
     assert resp.status_code == 200
@@ -92,7 +94,9 @@ async def test_cookie_alone_authorizes_post(mock_rate, mock_get):
     mock_get.return_value = {"lang": "en"}
     mock_rate.return_value = True
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         client.cookies.set(SESSION_COOKIE_NAME, sign_session_id("sess-1"))
         resp = await client.post(
             "/api/interview-questions-stream", json={"session_id": "sess-1"}
@@ -109,7 +113,9 @@ async def test_cookie_for_other_session_is_rejected(mock_rate, mock_get):
     mock_get.return_value = {"lang": "en"}
     mock_rate.return_value = True
 
-    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         client.cookies.set(SESSION_COOKIE_NAME, sign_session_id("sess-mine"))
         resp = await client.post(
             "/api/interview-questions-stream", json={"session_id": "sess-theirs"}
@@ -120,7 +126,9 @@ async def test_cookie_for_other_session_is_rejected(mock_rate, mock_get):
 
 @pytest.mark.asyncio
 async def test_no_credentials_returns_403():
-    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.post(
             "/api/interview-questions-stream", json={"session_id": "x"}
         )
@@ -130,10 +138,49 @@ async def test_no_credentials_returns_403():
 
 @pytest.mark.asyncio
 async def test_wrong_api_key_returns_403():
-    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.post(
             "/api/interview-questions-stream",
             json={"session_id": "x"},
             headers={"X-API-KEY": "nope"},
         )
     assert resp.status_code == 403
+
+
+# --- Non-ASCII credentials must be a 403, never a 500 ----------------------
+#
+# ``secrets.compare_digest(str, str)`` raises ``TypeError`` on non-ASCII strings,
+# and Starlette decodes headers/cookies as latin-1, so a raw byte >= 0x80 used to
+# crash the auth dependency (500). ``secure_compare`` compares UTF-8 bytes.
+
+
+class TestNonAsciiCredentials:
+    def test_non_ascii_cookie_signature_is_rejected_without_raising(self):
+        assert verify_session_cookie("abc.é") is None
+
+    def test_ascii_session_id_still_verifies(self):
+        assert verify_session_cookie(sign_session_id("sess-abc")) == "sess-abc"
+
+    def test_non_ascii_api_key_is_invalid_without_raising(self):
+        from preconsult.api.endpoints import _has_valid_api_key
+
+        assert _has_valid_api_key("é") is False
+
+    def test_api_key_guard_cases(self):
+        from preconsult.api.endpoints import _has_valid_api_key
+
+        assert _has_valid_api_key(None) is False
+        assert _has_valid_api_key("ci_test_key_123") is True
+
+    @pytest.mark.asyncio
+    async def test_raw_non_ascii_header_returns_403_not_500(self):
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(
+                "/api/session/init", json={}, headers=[(b"x-api-key", b"caf\xe9")]
+            )
+        assert resp.status_code == 403
+        assert resp.json()["code"] == "auth_failed"

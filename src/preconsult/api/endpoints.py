@@ -9,7 +9,6 @@ import asyncio
 import html
 import json
 import logging
-import secrets
 from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
@@ -25,7 +24,11 @@ from preconsult.core.config import (
 )
 from preconsult.core.observability import new_request_id, log_event, timed
 from preconsult.core.parsing import has_emergency_red_flag
-from preconsult.core.session_auth import sign_session_id, verify_session_cookie
+from preconsult.core.session_auth import (
+    secure_compare,
+    sign_session_id,
+    verify_session_cookie,
+)
 from preconsult.services.agent_service import (
     stream_interview_questions,
     get_interview_chain,
@@ -61,11 +64,14 @@ def _has_valid_api_key(api_key_header: str | None) -> bool:
     # Constant-time comparison so a caller cannot infer the key byte-by-byte
     # from response timing. Guard against an unset key (config permits None under
     # BUILD_MODE) or a missing header.
+    # ``secure_compare`` compares UTF-8 bytes, so a non-ASCII header
+    # (Starlette decodes latin-1) is a plain mismatch -> 403, not
+    # ``TypeError`` -> 500.
     expected = PRECONSULT_API_KEY
     return bool(
         expected
         and api_key_header
-        and secrets.compare_digest(api_key_header, expected)
+        and secure_compare(api_key_header, expected)
     )
 
 

@@ -14,6 +14,7 @@ export function apiUrl(path: string): string {
 /** Stable error codes surfaced by the backend (never renamed casually). */
 export type ApiErrorCode =
   | "auth_failed"
+  | "bot_blocked"
   | "rate_limited"
   | "session_expired"
   | "validation_failed"

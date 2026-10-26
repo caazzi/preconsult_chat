@@ -1,5 +1,6 @@
 import logging
 from fastapi import Request, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from botocore.exceptions import ClientError
@@ -91,14 +92,82 @@ async def llm_unavailable_handler(request: Request, exc: LLMUnavailableError):
     )
 
 
-async def validation_handler(request: Request, exc: ValidationError):
-    logging.warning(f"Erro de validacao: {exc}")
+def _sanitize_validation_errors(exc) -> list[dict]:
+    """Reduce validation errors to PHI-free fields.
+
+    Both pydantic's ``ValidationError`` and FastAPI's
+    ``RequestValidationError`` report an ``input`` key holding the submitted
+    value (which can be a chief complaint) plus a ``ctx`` key that often holds
+    the raw value/exception. Neither may be echoed back or logged, so only
+    ``loc``, ``type`` and ``msg`` survive.
+    """
+    safe: list[dict] = []
+    for err in exc.errors():
+        if isinstance(err, dict):
+            loc = err.get("loc") or ()
+            err_type = err.get("type")
+            msg = err.get("msg")
+        else:  # defensive: tolerate non-dict error details
+            loc = getattr(err, "loc", ()) or ()
+            err_type = getattr(err, "type", None)
+            msg = getattr(err, "msg", None)
+        try:
+            loc_list = list(loc)
+        except TypeError:
+            loc_list = []
+        safe.append(
+            {
+                "loc": loc_list,
+                "type": str(err_type) if err_type is not None else "",
+                "msg": str(msg) if msg is not None else "",
+            }
+        )
+    return safe
+
+
+def _log_validation_rejection(exc) -> list[dict]:
+    """Log a validation rejection without any content or raw values.
+
+    Only the number of errors and their ``loc`` paths (field names/indices)
+    are emitted; the exception string embeds ``input`` values and must never be
+    interpolated.
+    """
+    errors = _sanitize_validation_errors(exc)
+    logging.warning(
+        "Validacao rejeitada: %d erro(s) campos=%s",
+        len(errors),
+        [error["loc"] for error in errors],
+    )
+    return errors
+
+
+async def request_validation_handler(request: Request, exc: RequestValidationError):
+    """Handle FastAPI request-body validation failures (the real 422 path).
+
+    FastAPI raises ``RequestValidationError`` around the body's pydantic
+    ``ValidationError``, so the ``ValidationError`` handler below never sees
+    request-body failures. This handler keeps the stable ``validation_failed``
+    code and strips the submitted values from the response and the logs.
+    """
+    errors = _log_validation_rejection(exc)
     return JSONResponse(
         status_code=422,
         content={
             "detail": "Dados invalidos enviados.",
             "code": "validation_failed",
-            "errors": exc.errors(),
+            "errors": errors,
+        },
+    )
+
+
+async def validation_handler(request: Request, exc: ValidationError):
+    errors = _log_validation_rejection(exc)
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "Dados invalidos enviados.",
+            "code": "validation_failed",
+            "errors": errors,
         },
     )
 

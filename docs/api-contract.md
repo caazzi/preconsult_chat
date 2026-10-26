@@ -26,6 +26,12 @@ OpenAPI 3.1 cannot encode but that a client must honour.
   the `X-API-KEY` header (see `docs/authz-matrix.md`). A missing/invalid
   credential returns `403` with a stable `auth_failed` code (gated by the bot gate
   before shipping for scanner-like user-agents).
+- **Bootstrap exception:** `POST /api/session/init` issues the cookie, so it
+  cannot require one. With `ALLOW_PUBLIC_INIT=true` it is callable anonymously
+  (guarded by the per-IP limits, the bot gate and bounded payloads); with the
+  default `false` it behaves like every other route. Request bodies are bounded
+  (`SessionInitRequest`), and an oversized/invalid body returns `422
+  validation_failed` without echoing the submitted values.
 
 ---
 

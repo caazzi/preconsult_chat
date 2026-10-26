@@ -67,19 +67,23 @@ def test_every_deploy_input_line_is_an_entry(key, pattern):
         )
 
 
-def test_the_required_runtime_inputs_are_wired():
-    inputs = _deploy_inputs()
+def _env_pairs() -> dict:
+    return dict(
+        line.split("=", 1)
+        for line in _deploy_inputs()["env_vars"].splitlines()
+        if line.strip()
+    )
 
-    env_names = {
+
+def test_the_required_runtime_inputs_are_wired():
+    env = _env_pairs()
+    secret_names = {
         line.split("=", 1)[0]
-        for line in inputs["env_vars"].splitlines()
+        for line in _deploy_inputs()["secrets"].splitlines()
         if line.strip()
     }
-    secret_names = {
-        line.split("=", 1)[0] for line in inputs["secrets"].splitlines() if line.strip()
-    }
 
-    assert {"API_BASE_URL", "BEDROCK_REGION", "LLM_MODEL"} <= env_names
+    assert {"API_BASE_URL", "LLM_PROVIDER", "LLM_MODEL", "VERTEX_AI_REGION"} <= set(env)
     # SESSION_SECRET is fatal at startup outside BUILD_MODE (core/config.py), so
     # dropping it from the deploy would produce a revision that cannot boot.
     assert {"SESSION_SECRET", "REDIS_URL", "PRECONSULT_API_KEY"} <= secret_names
@@ -174,3 +178,40 @@ def test_drift_parsers_tolerate_control_characters_in_gcloud_json():
 
     assert "json.load(" not in read_script
     assert read_script.count("strict=False") >= 4
+
+
+def test_the_deploy_environment_matches_the_selected_provider():
+    """Mixing providers bricks the deploy in two different ways.
+
+    Bedrock env/secret refs on a Vertex deployment fail the revision outright
+    when the AWS secrets do not exist (that is what blocked every deploy until
+    2026-10-26). Vertex vars on a Bedrock deployment point the model at a Gemini
+    id, so every call fails at runtime instead.
+    """
+    env = _env_pairs()
+    secret_names = {
+        line.split("=", 1)[0]
+        for line in _deploy_inputs()["secrets"].splitlines()
+        if line.strip()
+    }
+    provider = env["LLM_PROVIDER"]
+
+    if provider == "bedrock":
+        assert {"BEDROCK_REGION"} <= set(env)
+        assert {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} <= secret_names
+    else:
+        assert "BEDROCK_REGION" not in env
+        assert not {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} & secret_names
+
+
+def test_the_workflow_owns_the_service_environment():
+    """`merge` would carry stale refs forward forever.
+
+    The failed deploys of 2026-10-26 merged AWS secret refs into the service
+    template; with `merge` those survive even after they leave this file, so
+    every later deploy keeps failing on secrets that do not exist.
+    """
+    inputs = _deploy_inputs()
+
+    assert inputs["env_vars_update_strategy"] == "overwrite"
+    assert inputs["secrets_update_strategy"] == "overwrite"

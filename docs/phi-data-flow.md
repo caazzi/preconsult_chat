@@ -11,7 +11,7 @@ allergies, family history, lifestyle answers, and the Q&A pairs.
 |---|---|---|---|
 | Request body (HTTPS/TLS) | Yes | in flight | e.g. `session/init` form, Q&A for PDF |
 | Server session store (Redis / in-memory shim) | Yes | 30-min TTL | capped `_MEMORY_SESSIONS_MAX`, oldest evicted |
-| LLM call (Bedrock Claude Haiku) | Chief complaint + structured form | request-scoped | The patient's free-text **answers never return to the LLM** (PRD §3.4). Bedrock not retained/trained. |
+| LLM call (`LLM_PROVIDER`: Vertex Gemini by default, Bedrock Claude Haiku when selected) | Chief complaint + structured form | request-scoped | The patient's free-text **answers never return to the LLM** (PRD §3.4). Provider not retained/trained per its enterprise terms. |
 | Server logs (`core/observability.py`) | **No** | — | metadata only (event, request id, lang, counts, durations); free-text values never serialized, only `len(...)` |
 | Error responses (`core/errors.py`) | **No** | — | generic localized detail + stable `code`; never exception internals or user values |
 | Browser client store (SPA) | Yes (in memory) | tab session | **No** `localStorage`/`sessionStorage` persistence (`TestP9` guard) |
@@ -37,7 +37,7 @@ allergies, family history, lifestyle answers, and the Q&A pairs.
 
 | Provider | Data | Posture |
 |---|---|---|
-| AWS Bedrock (Claude Haiku) | chief complaint + structured form | not retained, not used for training |
+| Google Vertex AI (default) / AWS Bedrock (opt-in) | chief complaint + structured form | not retained, not used for training |
 | Upstash Redis / in-memory | session PHI | 30-min TTL; in-memory fallback honored on outage |
 | Sentry | metadata only (`send_default_pii=False`) | release/env tagged, PHI-free |
 

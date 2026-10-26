@@ -12,12 +12,23 @@ import logging
 from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, JSONResponse
 from pydantic import BaseModel, Field
 from langchain_core.runnables import Runnable
 
-from preconsult.core.config import PRECONSULT_API_KEY, TRUST_PROXY_HEADERS
+from preconsult.core.config import (
+    PRECONSULT_API_KEY,
+    TRUST_PROXY_HEADERS,
+    SESSION_COOKIE_NAME,
+    SESSION_COOKIE_SECURE,
+)
 from preconsult.core.observability import new_request_id, log_event, timed
+from preconsult.core.parsing import has_emergency_red_flag
+from preconsult.core.session_auth import (
+    secure_compare,
+    sign_session_id,
+    verify_session_cookie,
+)
 from preconsult.services.agent_service import (
     stream_interview_questions,
     get_interview_chain,
@@ -35,16 +46,136 @@ from preconsult.services.session_service import (
 # --- Security & Helper Functions ---
 API_KEY_HEADER = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
-async def get_api_key(api_key_header: str = Security(API_KEY_HEADER)):
-    if api_key_header == PRECONSULT_API_KEY:
-        return api_key_header
+
+class AuthContext:
+    """How a request authenticated: a browser session cookie or the API key.
+
+    ``session_id`` is set for cookie auth (and used for ownership checks);
+    ``via`` is ``"cookie"`` or ``"header"`` (metadata only, never logged with a
+    value).
+    """
+
+    def __init__(self, via: str, session_id: str | None = None):
+        self.via = via
+        self.session_id = session_id
+
+
+def _has_valid_api_key(api_key_header: str | None) -> bool:
+    # Constant-time comparison so a caller cannot infer the key byte-by-byte
+    # from response timing. Guard against an unset key (config permits None under
+    # BUILD_MODE) or a missing header.
+    # ``secure_compare`` compares UTF-8 bytes, so a non-ASCII header
+    # (Starlette decodes latin-1) is a plain mismatch -> 403, not
+    # ``TypeError`` -> 500.
+    expected = PRECONSULT_API_KEY
+    return bool(
+        expected
+        and api_key_header
+        and secure_compare(api_key_header, expected)
+    )
+
+
+async def authenticate(
+    request: Request,
+    api_key_header: str = Security(API_KEY_HEADER),
+) -> AuthContext:
+    """Accept EITHER a valid session cookie OR the API key.
+
+    The cookie path is the browser's; the header path is kept for Reflex (which
+    still sends ``X-API-KEY``) and programmatic clients. Neither present/valid
+    → 403 ``auth_failed``.
+    """
+    cookie_session = verify_session_cookie(request.cookies.get(SESSION_COOKIE_NAME))
+    if cookie_session:
+        return AuthContext(via="cookie", session_id=cookie_session)
+    if _has_valid_api_key(api_key_header):
+        return AuthContext(via="header")
     raise HTTPException(status_code=403, detail="Could not validate credentials")
+
+
+# Back-compat alias: existing imports/tests may reference get_api_key.
+get_api_key = authenticate
+
+
+def _require_session_ownership(request: Request, session_id: str) -> None:
+    """Reject a cookie-authenticated request for someone else's session.
+
+    Header-auth (programmatic/Reflex) is trusted for now; cookie auth must match
+    the requested session, closing the horizontal-access gap.
+    """
+    cookie_session = verify_session_cookie(request.cookies.get(SESSION_COOKIE_NAME))
+    if cookie_session and cookie_session != session_id:
+        log_event(
+            logging.WARNING,
+            "auth.session_ownership_denied",
+            request_id=new_request_id(),
+        )
+        raise HTTPException(status_code=403, detail="Could not validate credentials")
+
+
+def _set_session_cookie(response: Response, session_id: str) -> None:
+    """Attach the signed, HttpOnly, session cookie to a response.
+
+    No ``max_age``/``expires`` ⇒ a session cookie the browser drops on close.
+    Server-side TTL (30 min) is the real bound.
+    """
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=sign_session_id(session_id),
+        httponly=True,
+        secure=SESSION_COOKIE_SECURE,
+        samesite="strict",
+        path="/",
+    )
+
 
 def _sanitize_input(text: str) -> str:
     """Sanitizes user text: strips whitespace and escapes HTML entities."""
     if not isinstance(text, str):
         return ""
     return html.escape(text.strip())
+
+
+_EMERGENCY_MESSAGES = {
+    "en": (
+        "[EMERGENCY ALERT] Your symptoms may require immediate medical attention. "
+        "Please call your local emergency number (e.g. 911) or go to the nearest "
+        "emergency room now. This tool cannot help with an emergency."
+    ),
+    "pt": (
+        "[ALERTA DE EMERGÊNCIA] Seus sintomas podem exigir atenção médica imediata. "
+        "Ligue para o serviço de emergência local (por exemplo, 192) ou vá ao pronto-socorro "
+        "mais próximo agora. Esta ferramenta não pode ajudar em uma emergência."
+    ),
+}
+
+
+def _emergency_message(lang: str) -> str:
+    return _EMERGENCY_MESSAGES.get(lang, _EMERGENCY_MESSAGES["en"])
+
+
+def _emergency_stream_response(lang: str, event: str, request_id: str) -> StreamingResponse:
+    """Short-circuit an SSE stream with a deterministic emergency warning.
+
+    The red-flag decision is made on the *input* (chief complaint) rather than
+    the model's output, so a patient describing a critical symptom is warned
+    immediately even if the LLM never utters a trigger token. Emits the same
+    ``data: <json>`` wire contract as a normal stream (HTTP 200) so the existing
+    client ``is_emergency_trigger`` path surfaces the dialog.
+    """
+    log_event(
+        logging.WARNING,
+        event,
+        request_id=request_id,
+        lang=lang,
+        trigger_side="input",
+    )
+    message = _emergency_message(lang)
+
+    async def event_generator():
+        yield f"data: {json.dumps(message)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 def get_client_ip(request: Request) -> str:
     """Extract the effective client IP for rate limiting / quotas.
@@ -127,7 +258,7 @@ _STRATEGIC_ERRORS = {
 }
 
 # --- API Router ---
-router = APIRouter(dependencies=[Depends(get_api_key)])
+router = APIRouter(dependencies=[Depends(authenticate)])
 
 @router.post(
     "/session/init",
@@ -141,7 +272,12 @@ router = APIRouter(dependencies=[Depends(get_api_key)])
     responses=_STRATEGIC_ERRORS,
 )
 async def init_session(request: SessionInitRequest, fastapi_req: Request):
-    """Initializes a new ephemeral Redis session with full form data."""
+    """Initializes a new ephemeral Redis session with full form data.
+
+    Also issues the signed session cookie that authenticates the browser for
+    all subsequent calls (the API key remains accepted for Reflex/programmatic
+    clients).
+    """
     request_id = new_request_id()
     ip = get_client_ip(fastapi_req)
 
@@ -188,7 +324,9 @@ async def init_session(request: SessionInitRequest, fastapi_req: Request):
             lang=request.lang,
         )
 
-    return {"session_id": session_id}
+    response = JSONResponse({"session_id": session_id})
+    _set_session_cookie(response, session_id)
+    return response
 
 @router.post(
     "/initial-questions-stream",
@@ -215,7 +353,8 @@ async def get_initial_questions_streamed(
     session_data = await get_session(request.session_id)
     if not session_data:
         raise HTTPException(status_code=404, detail="Session expired or invalid")
-        
+    _require_session_ownership(fastapi_req, request.session_id)
+
     sanitized_complaint = _sanitize_input(request.chief_complaint)
     await update_session(request.session_id, {"chief_complaint": sanitized_complaint})
     session_data["chief_complaint"] = sanitized_complaint
@@ -226,6 +365,12 @@ async def get_initial_questions_streamed(
         if lang == "en"
         else "⚠️ ERRO: Serviço temporariamente indisponível. Tente novamente."
     )
+
+    # Deterministic input-side red-flag gate: never rely solely on the model to
+    # signal an emergency. If the patient's own description trips a red flag,
+    # warn immediately without calling the LLM.
+    if has_emergency_red_flag(sanitized_complaint, session_data.get("complaint_detail", "")):
+        return _emergency_stream_response(lang, "stream.initial.emergency_input", request_id)
 
     log_event(
         logging.INFO,
@@ -238,16 +383,23 @@ async def get_initial_questions_streamed(
 
     async def event_generator():
         streamed = 0
+        structured = False
         try:
-            async for chunk in stream_interview_questions(session_data, lang, chain):
-                streamed += 1
-                yield f"data: {json.dumps(chunk)}\n\n"
+            async for event in stream_interview_questions(session_data, lang, chain):
+                if event.kind == "questions":
+                    structured = True
+                    payload = {"type": "questions", "questions": event.value}
+                    yield f"data: {json.dumps(payload)}\n\n"
+                else:
+                    streamed += 1
+                    yield f"data: {json.dumps(event.value)}\n\n"
             log_event(
                 logging.INFO,
                 "stream.initial.ok",
                 request_id=request_id,
                 session_id_short=request.session_id[:8],
                 chunks=streamed,
+                structured=structured,
             )
         except Exception as e:
             logging.error(f"Error during streaming initial questions: {e}", exc_info=True)
@@ -286,6 +438,7 @@ async def get_interview_questions_streamed(
     session_data = await get_session(request.session_id)
     if not session_data:
         raise HTTPException(status_code=404, detail="Session expired or invalid")
+    _require_session_ownership(fastapi_req, request.session_id)
 
     lang = session_data.get("lang", "en")
     err_msg = (
@@ -293,6 +446,10 @@ async def get_interview_questions_streamed(
         if lang == "en"
         else "⚠️ ERRO: Serviço temporariamente indisponível. Tente novamente."
     )
+
+    # Deterministic input-side red-flag gate (see initial-questions-stream).
+    if has_emergency_red_flag(session_data.get("chief_complaint", ""), session_data.get("complaint_detail", "")):
+        return _emergency_stream_response(lang, "stream.interview.emergency_input", request_id)
 
     log_event(
         logging.INFO,
@@ -304,16 +461,23 @@ async def get_interview_questions_streamed(
 
     async def event_generator():
         streamed = 0
+        structured = False
         try:
-            async for chunk in stream_interview_questions(session_data, lang, chain):
-                streamed += 1
-                yield f"data: {json.dumps(chunk)}\n\n"
+            async for event in stream_interview_questions(session_data, lang, chain):
+                if event.kind == "questions":
+                    structured = True
+                    payload = {"type": "questions", "questions": event.value}
+                    yield f"data: {json.dumps(payload)}\n\n"
+                else:
+                    streamed += 1
+                    yield f"data: {json.dumps(event.value)}\n\n"
             log_event(
                 logging.INFO,
                 "stream.interview.ok",
                 request_id=request_id,
                 session_id_short=request.session_id[:8],
                 chunks=streamed,
+                structured=structured,
             )
         except Exception as e:
             logging.error(f"Error during streaming interview questions: {e}", exc_info=True)
@@ -338,12 +502,13 @@ async def get_interview_questions_streamed(
     ),
     responses=_STRATEGIC_ERRORS,
 )
-async def generate_pdf_endpoint(request: GeneratePdfRequest):
+async def generate_pdf_endpoint(request: GeneratePdfRequest, fastapi_req: Request):
     """Generates PDF deterministically from session form data + Q&A pairs. No LLM call."""
     request_id = new_request_id()
     session_data = await get_session(request.session_id)
     if not session_data:
         raise HTTPException(status_code=404, detail="Session expired or invalid")
+    _require_session_ownership(fastapi_req, request.session_id)
 
     qa_pairs = [{"question": pair.question, "answer": pair.answer} for pair in request.qa_pairs]
     loop = asyncio.get_running_loop()

@@ -1,5 +1,6 @@
 import os
 import asyncio
+import json
 import logging
 import time
 import reflex as rx
@@ -846,8 +847,9 @@ app = rx.App(
 if api_router:
     from datetime import date
     from fastapi import FastAPI, HTTPException
+    from fastapi.exceptions import RequestValidationError
     from pydantic import ValidationError
-    from google.api_core.exceptions import GoogleAPIError
+    from botocore.exceptions import BotoCoreError, ClientError
     from starlette.responses import Response
     from preconsult.core.errors import (
         RedisUnavailableError,
@@ -858,7 +860,8 @@ if api_router:
         redis_quota_exceeded_handler,
         llm_unavailable_handler,
         validation_handler,
-        google_api_handler,
+        request_validation_handler,
+        bedrock_api_handler,
         generic_handler,
     )
     custom_api = FastAPI(
@@ -886,7 +889,12 @@ if api_router:
     custom_api.add_exception_handler(LLMUnavailableError, llm_unavailable_handler)
     custom_api.add_exception_handler(HTTPException, http_exception_handler)
     custom_api.add_exception_handler(ValidationError, validation_handler)
-    custom_api.add_exception_handler(GoogleAPIError, google_api_handler)
+    # FastAPI raises RequestValidationError (not pydantic ValidationError) for
+    # request-body failures; without this the stable `validation_failed` code
+    # never reached 422 responses. Handler strips submitted values (PHI).
+    custom_api.add_exception_handler(RequestValidationError, request_validation_handler)
+    custom_api.add_exception_handler(BotoCoreError, bedrock_api_handler)
+    custom_api.add_exception_handler(ClientError, bedrock_api_handler)
     custom_api.add_exception_handler(Exception, generic_handler)
     custom_api.include_router(api_router)
     app._api.mount("/api", custom_api)
@@ -1013,13 +1021,13 @@ if api_router:
             "Zero data persistence. No account required.\n\n"
             "PreConsult helps patients organize symptoms and prepare for "
             "doctor's appointments through a structured multi-step intake form. "
-            "The entire process runs in-browser, uses Google Vertex AI (Gemini) "
-            "to generate targeted clinical questions, and produces a downloadable "
-            "PDF report. All data is deleted when the browser tab is closed.\n\n"
+            "The entire process runs in-browser, uses Anthropic's Claude (Haiku) on "
+            "AWS Bedrock to generate targeted clinical questions, and produces a "
+            "downloadable PDF report. All data is deleted when the browser tab is closed.\n\n"
             "Key principles:\n"
             "- Zero data persistence: No data stored on servers after session ends\n"
             "- No account required: Fully anonymous usage\n"
-            "- AI-powered clinical questions via Google Vertex AI (Gemini 2.5 Flash Lite)\n"
+            "- AI-powered clinical questions via Anthropic Claude (Haiku) on AWS Bedrock\n"
             "- Multi-language: English and Portuguese (Brazil)\n"
             "- PDF report generation with form data and Q&A\n"
             "- Privacy-first: No tracking, no cookies, no PII collected\n\n"
@@ -1088,11 +1096,11 @@ if api_router:
   </ul>
 
   <h2>2. Geração de Perguntas por IA e Processamento</h2>
-  <p>Para fornecer perguntas clínicas de acompanhamento relevantes, o PreConsult utiliza o Google Vertex AI (Gemini 2.5 Flash Lite):</p>
+  <p>Para fornecer perguntas clínicas de acompanhamento relevantes, o PreConsult utiliza o Claude (Haiku) da Anthropic hospedado na AWS Bedrock:</p>
   <ul>
-    <li>As informações clínicas inseridas são transmitidas via conexão criptografada HTTPS para os endpoints corporativos do Google Vertex AI exclusivamente para gerar perguntas de acompanhamento contextuais.</li>
+    <li>As informações clínicas inseridas são transmitidas via conexão criptografada HTTPS para os endpoints corporativos da AWS Bedrock exclusivamente para gerar perguntas de acompanhamento contextuais.</li>
     <li>Nenhum identificador pessoal (nomes, endereços, documentos) é enviado ao serviço de IA.</li>
-    <li>Os dados processados via Google Vertex AI não são retidos pelo Google nem utilizados para treinar modelos públicos de aprendizado de máquina.</li>
+    <li>Os dados processados via AWS Bedrock não são retidos pelo provedor nem utilizados para treinar modelos públicos de aprendizado de máquina.</li>
   </ul>
 
   <h2>3. Cookies e Métricas Locais</h2>
@@ -1164,11 +1172,11 @@ if api_router:
   </ul>
 
   <h2>2. AI Question Generation & Third-Party Processing</h2>
-  <p>To provide relevant clinical follow-up questions, PreConsult utilizes Google Vertex AI (Gemini 2.5 Flash Lite):</p>
+  <p>To provide relevant clinical follow-up questions, PreConsult utilizes Anthropic's Claude (Haiku) hosted on AWS Bedrock:</p>
   <ul>
-    <li>The clinical information you enter is transmitted via encrypted HTTPS connection to Google Vertex AI enterprise endpoints solely to generate contextual follow-up questions.</li>
-    <li>No personal identifiers (names, addresses, IDs) are sent to the AI service.</li>
-    <li>Data processed via enterprise Google Vertex AI is not retained by Google or used to train public machine learning models.</li>
+    <li>The clinical information you enter is transmitted via encrypted HTTPS connection to AWS Bedrock enterprise endpoints solely to generate contextual follow-up questions.</li>
+    <li>No personal identifiers (names, addresses, documents) are sent to the AI service.</li>
+    <li>Data processed via AWS Bedrock is not retained by the provider or used to train public machine learning models.</li>
   </ul>
 
   <h2>3. Cookies & Local Analytics</h2>
@@ -1639,6 +1647,66 @@ def _backend_redirect(request):
 
 app._api.add_route("/_event", _backend_redirect, methods=["GET", "POST"])
 
+
+# --- Shadow SPA at /next ----------------------------------------------------
+# The React rewrite (web/) is served from the same image under /next while
+# Reflex still owns /. It must be mounted BEFORE the root static catch-all so
+# /next/* resolves to the SPA, but it only ever matches the /next prefix, so it
+# cannot shadow /api, /_event, or /health. The SPA is a client-side router, so
+# any non-file path under /next must fall through to index.html; hashed assets
+# are immutable and the document is no-store (mirrors the Reflex shell rules).
+class SPAStaticFiles(StaticFiles):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    _IMMUTABLE = "public, max-age=31536000, immutable"
+    _NO_STORE = "no-store, no-cache, must-revalidate"
+
+    async def get_response(self, path: str, scope) -> Response:
+        # Starlette normalizes the mount root to ".", so a bare "." check on
+        # the last segment would misclassify the document as a file and pin it
+        # immutable for a year (the stale-shell hazard). Only real files are
+        # immutable; the shell is always no-store.
+        is_document = path in (".", "index.html")
+        is_file = not is_document and (
+            path.startswith("assets/")
+            or "/assets/" in path
+            or "." in path.rsplit("/", 1)[-1]
+        )
+        try:
+            response = await super().get_response(path, scope)
+        except Exception as exc:
+            # StaticFiles raises HTTPException(404) for a missing path. Only an
+            # unknown *navigation* route may fall back to the app shell; a
+            # missing file must stay a 404. Serving HTML for a missing hashed
+            # asset -- and caching it immutable -- is how a broken deploy turns
+            # into "Unexpected token '<'" and a poisoned browser/CDN cache.
+            if getattr(exc, "status_code", None) != 404 or is_file:
+                raise
+            response = await super().get_response("index.html", scope)
+            self._apply_cache_headers(response, immutable=False)
+            return response
+        self._apply_cache_headers(response, immutable=is_file)
+        return response
+
+    @staticmethod
+    def _apply_cache_headers(response: Response, *, immutable: bool) -> None:
+        if immutable:
+            response.headers["Cache-Control"] = SPAStaticFiles._IMMUTABLE
+        else:
+            response.headers["Cache-Control"] = SPAStaticFiles._NO_STORE
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        response.headers["Vary"] = "Accept-Encoding"
+
+
+_NEXT_DIST = os.environ.get(
+    "WEB_DIST_DIR",
+    os.path.abspath(os.path.join(os.getcwd(), "..", "web", "dist")),
+)
+if os.path.exists(_NEXT_DIST):
+    app._api.mount("/next", SPAStaticFiles(directory=_NEXT_DIST, html=True), name="spa")
+
 _STATIC_DIR = os.path.join(os.getcwd(), ".web", "build", "client")
 if os.path.exists(_STATIC_DIR):
     app._api.mount("/", CustomStaticFiles(directory=_STATIC_DIR, html=True), name="static")
@@ -1964,12 +2032,18 @@ class _BotGateMiddleware:
                 path=path[:200],
                 ua_hash=ua_hash,
             )
+            body = json.dumps(
+                {"detail": "Forbidden", "code": "bot_blocked"}
+            ).encode("utf-8")
             await send({
                 "type": "http.response.start",
                 "status": 403,
-                "headers": [(b"content-type", b"text/plain"), (b"content-length", b"9")],
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ],
             })
-            await send({"type": "http.response.body", "body": b"Forbidden"})
+            await send({"type": "http.response.body", "body": body})
             return
 
         await self.app(scope, receive, send)

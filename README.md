@@ -35,7 +35,7 @@ PreConsult bridges that gap with a guided AI interview that generates a structur
           │                     │
           ▼                     ▼
 ┌───────────────────┐ ┌───────────────────┐
-│   Redis Session   │ │    Vertex AI      │
+│   Redis Session   │ │    Claude Haiku    │
 │ (30-min Context)  │ │ (Clinical LLM)    │
 └───────────────────┘ └───────────────────┘
 ```
@@ -110,7 +110,7 @@ With low real-user volume this keeps the free tier comfortably within budget.
 | Core | Reflex 0.9.8.post1 (Unified Frontend & API Host) |
 | Backend | FastAPI (0.141.1, integrated into Reflex backend) |
 | Session | Redis (6.4.0, ephemeral, 30-min TTL, in-memory fallback for rate limiting) |
-| AI | Vertex AI Gemini 2.5 Flash Lite (`langchain-google-vertexai` 2.1.2) |
+| AI | Anthropic Claude Haiku via AWS Bedrock (`langchain-aws` 0.2.35) |
 | PDF | ReportLab 5.0.0 (in-memory, deterministic, localized EN/PT) |
 | UI/UX | Glassmorphism, mobile-first, 48px touch targets, prefers-reduced-motion, EN/PT i18n |
 | Monitoring | Sentry SDK (2.68.0, PII-safe, env/release-tagged) + structured, PHI-safe request logging + stable error codes + `GET /health`, `/health/live`, `/health/ready` |
@@ -135,7 +135,7 @@ The project uses `uv` for fast dependency management.
 
 - Python 3.11
 - Redis (via `docker compose` or local install)
-- GCP service account with Vertex AI access
+- AWS credentials with Bedrock access to Claude Haiku (e.g. `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, or an ambient role)
 - `.env` file in the project root
 
 ### Running the App
@@ -152,8 +152,10 @@ Create a `.env` file:
 
 ```bash
 PRECONSULT_API_KEY=your_key
-GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
-GOOGLE_CLOUD_PROJECT=your_project_id
+AWS_ACCESS_KEY_ID=your_access_key_id
+AWS_SECRET_ACCESS_KEY=your_secret_access_key
+BEDROCK_REGION=us-east-1
+LLM_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
 REDIS_URL=redis://localhost:6379/0
 SENTRY_DSN=  # optional
 GTAG_ID=     # optional
@@ -183,7 +185,7 @@ page tree). CI fails the build if coverage drops below the threshold.
 An optional hermetic **E2E** suite boots the real backend under a single gunicorn
 worker and drives a headless browser over the real Socket.IO path. It guards the
 socket-session stability (the multi-worker `400 "Invalid session"` bug) and the
-landing→Step-1 wizard transition, with no live Vertex AI or serverless Redis.
+landing→Step-1 wizard transition, with no live Bedrock or serverless Redis.
 
 ```bash
 uv sync --extra e2e
@@ -312,7 +314,7 @@ app-preconsult/
 │   ├── core/errors.py       # Exception handlers, sanitization & error codes
 │   ├── core/observability.py# PHI-safe structured logging & request ids
 │   ├── core/parsing.py      # Shared question/emergency parsing helpers
-│   ├── core/llm.py          # Vertex AI Gemini singleton
+│   ├── core/llm.py          # AWS Bedrock Claude Haiku singleton
 │   ├── main.py              # FastAPI app + Sentry + health check
 │   └── services/
 │       ├── agent_service.py  # LangChain prompts + OPQRST streaming

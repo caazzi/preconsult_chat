@@ -496,16 +496,14 @@ def test_stale_session_keyerror_returns_400_not_500():
         asyncio.run(run2())
 
 
-def test_state_scroll_and_draft_scripts():
+def test_state_scroll_script_only_no_draft_persistence():
     state = State()
     scroll_script = state._scroll_top_script()
     assert "scrollTo" in repr(scroll_script) or "scrollTo" in str(scroll_script.args)
 
-    draft_script = state._save_draft_script()
-    assert "localStorage.setItem" in repr(draft_script) or "localStorage.setItem" in str(draft_script.args)
-
-    clear_script = state._clear_draft_script()
-    assert "localStorage.removeItem" in repr(clear_script) or "localStorage.removeItem" in str(clear_script.args)
+    # PHI draft persistence was removed to honor the zero-retention promise.
+    assert not hasattr(state, "_save_draft_script")
+    assert not hasattr(state, "_clear_draft_script")
 
 
 def test_state_reset_intake():
@@ -518,7 +516,7 @@ def test_state_reset_intake():
     assert state.step == 0
     assert state.chief_complaint == ""
     assert state.session_id == ""
-    assert len(events) == 3
+    assert len(events) == 2
 
 
 def test_mobile_ui_layout_responsiveness():
@@ -609,6 +607,68 @@ def test_state_set_answer_out_of_bounds():
     # Test setting answer for index 3 when list length is 1
     state.set_answer(3, "Answer 4")
     assert state.current_answers == ["Answer 1", "", "", "Answer 4"]
+
+
+def _spa_scope(path: str) -> dict:
+    return {
+        "type": "http",
+        "method": "GET",
+        "scheme": "http",
+        "server": ("test", 80),
+        "client": ("127.0.0.1", 1234),
+        "path": path,
+        "raw_path": path.encode(),
+        "root_path": "",
+        "query_string": b"",
+        "headers": [],
+        "http_version": "1.1",
+        "app": {},
+    }
+
+
+def _build_spa_dist(tmp_path):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text(
+        '<html><body><div id="root"></div>'
+        '<script src="/next/assets/app.js"></script></body></html>',
+        encoding="utf-8",
+    )
+    (dist / "assets" / "app.js").write_text("console.log(1)", encoding="utf-8")
+    return dist
+
+
+def test_spa_static_files_falls_back_to_index_for_client_routes(tmp_path):
+    """A client-side route (no file on disk) must serve the SPA shell."""
+    import asyncio
+
+    from reflex_app.preconsult.preconsult import SPAStaticFiles
+
+    dist = _build_spa_dist(tmp_path)
+    spa = SPAStaticFiles(directory=str(dist), html=True)
+
+    response = asyncio.run(spa.get_response("privacy", _spa_scope("/next/privacy")))
+    assert response.status_code == 200
+    # The shell came from index.html (FileResponse over the built document).
+    assert str(response.path).endswith("index.html")
+
+
+def test_spa_static_files_cache_headers(tmp_path):
+    """Hashed assets are immutable; the document shell is no-store."""
+    import asyncio
+
+    from reflex_app.preconsult.preconsult import SPAStaticFiles
+
+    dist = _build_spa_dist(tmp_path)
+    spa = SPAStaticFiles(directory=str(dist), html=True)
+
+    asset = asyncio.run(
+        spa.get_response("assets/app.js", _spa_scope("/next/assets/app.js"))
+    )
+    assert "max-age=31536000" in asset.headers["Cache-Control"]
+
+    doc = asyncio.run(spa.get_response("index.html", _spa_scope("/next/")))
+    assert "no-store" in doc.headers["Cache-Control"]
 
 
 

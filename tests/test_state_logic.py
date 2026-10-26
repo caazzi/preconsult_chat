@@ -374,7 +374,7 @@ def test_go_to_step_2_success():
     events = list(s.go_to_step_2())
     assert s.step == 2
     assert s.error_message == ""
-    assert len(events) == 2  # scroll + save-draft
+    assert len(events) == 1  # scroll only (no draft persistence)
 
 
 def test_go_to_step_3_requires_specialist_and_complaint():
@@ -468,7 +468,7 @@ def test_reset_intake_clears_all_and_redirects():
     assert s.questions == []
     assert s.current_answers == []
     assert s.is_emergency is False
-    assert len(events) == 3  # clear-draft + scroll-top + redirect
+    assert len(events) == 2  # scroll-top + redirect (no draft persistence)
 
 
 # ---------------------------------------------------------------------------
@@ -611,7 +611,7 @@ async def test_download_report_success():
 
     assert s.error_message == ""
     assert events is not None
-    assert len(events) == 3  # gtag call + clear-draft + download
+    assert len(events) == 2  # gtag call + download (no draft persistence)
 
 
 @pytest.mark.asyncio
@@ -676,6 +676,27 @@ async def test_admin_access_granted_with_token(monkeypatch):
     assert state.authorized is True
     assert state.analytics_data == [{"date": "x"}]
     api_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_admin_access_denied_when_token_env_unset(monkeypatch):
+    """No configured admin token must never authorize, even with a query token."""
+    monkeypatch.delenv("ADMIN_DASHBOARD_TOKEN", raising=False)
+    state = AdminState()
+    object.__setattr__(state, "router", _FakeRouter(query={"token": "anything"}))
+    await state.load_analytics()
+    assert state.authorized is False
+    assert state.analytics_data == []
+
+
+@pytest.mark.asyncio
+async def test_admin_access_denied_with_wrong_token(monkeypatch):
+    monkeypatch.setenv("ADMIN_DASHBOARD_TOKEN", "secret")
+    state = AdminState()
+    object.__setattr__(state, "router", _FakeRouter(query={"token": "wrong"}))
+    await state.load_analytics()
+    assert state.authorized is False
+    assert state.analytics_data == []
 
 
 # ---------------------------------------------------------------------------

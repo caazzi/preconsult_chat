@@ -1,0 +1,153 @@
+{
+  "is_emergency_trigger": [
+    {
+      "expected": true,
+      "input": "EMERGENCY: call 911",
+      "name": "en_emergency"
+    },
+    {
+      "expected": true,
+      "input": "please dial 911 now",
+      "name": "en_911"
+    },
+    {
+      "expected": true,
+      "input": "[ALERTA DE EMERGÊNCIA] ligue 192",
+      "name": "pt_accented"
+    },
+    {
+      "expected": true,
+      "input": "urgencia nao mencionada",
+      "name": "pt_unaccented"
+    },
+    {
+      "expected": true,
+      "input": "Urgência",
+      "name": "pt_titlecase"
+    },
+    {
+      "expected": true,
+      "input": "URGENCIA",
+      "name": "pt_upper_unaccented"
+    },
+    {
+      "expected": false,
+      "input": "1. Question one?\n2. Question two?",
+      "name": "non_emergency_questions"
+    },
+    {
+      "expected": false,
+      "input": "",
+      "name": "empty"
+    },
+    {
+      "expected": false,
+      "input": "please ring my doctor today",
+      "name": "unrelated_doctor"
+    },
+    {
+      "expected": false,
+      "input": "session id 1234",
+      "name": "session_id_number"
+    },
+    {
+      "expected": false,
+      "input": "the patient is fine",
+      "name": "benign"
+    }
+  ],
+  "split_questions": [
+    {
+      "expected": [
+        "One?",
+        "Two?"
+      ],
+      "input": "\n1. One?\n2. Two?",
+      "name": "numbered_dot"
+    },
+    {
+      "expected": [
+        "One?",
+        "Two?"
+      ],
+      "input": "1) One?\n2) Two?",
+      "name": "numbered_paren"
+    },
+    {
+      "expected": [
+        "One?",
+        "Two?"
+      ],
+      "input": "- One?\n- Two?",
+      "name": "dash"
+    },
+    {
+      "expected": [
+        "One?",
+        "Two?",
+        "Three?"
+      ],
+      "input": "One?\nTwo?\nThree?",
+      "name": "plain_newline_fallback"
+    },
+    {
+      "expected": [
+        "Just one?"
+      ],
+      "input": "Just one?",
+      "name": "single_line"
+    },
+    {
+      "expected": [],
+      "input": "",
+      "name": "empty"
+    },
+    {
+      "expected": [],
+      "input": "   ",
+      "name": "whitespace_only"
+    },
+    {
+      "expected": [
+        "One?",
+        "Two?",
+        "Three?"
+      ],
+      "input": "1. One?\r\n2. Two?\r\n3. Three?",
+      "name": "crlf"
+    },
+    {
+      "expected": [
+        "One?",
+        "Two?"
+      ],
+      "input": "\n1. One?\n2. Two?\n\n\n",
+      "name": "trailing_newlines"
+    },
+    {
+      "expected": [
+        "One?",
+        "Two?",
+        "Three?"
+      ],
+      "input": "\n1. One?\n- Two?\n3) Three?",
+      "name": "mixed_separators"
+    },
+    {
+      "expected": [
+        "One?",
+        "Two?"
+      ],
+      "input": "\n1.   One?\n2.    Two?",
+      "name": "leading_spaces_after_marker"
+    },
+    {
+      "expected": [
+        "Is this one long\nquestion spanning two lines?",
+        "Second?"
+      ],
+      "input": "\n1. Is this one long\nquestion spanning two lines?\n2. Second?",
+      "name": "multiline_question_body"
+    }
+  ]
+}

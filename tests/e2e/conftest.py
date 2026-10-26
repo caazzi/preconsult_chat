@@ -4,9 +4,9 @@ provide a Playwright browser.
 
 The landing→Step-1 wizard transition and the socket-session stability are purely
 client-side state over the Socket.IO channel, so the current specs need no live
-Vertex AI or serverless Redis. Should deeper steps (session init, LLM streams)
+Bedrock or serverless Redis. Should deeper steps (session init, LLM streams)
 be added later, intercept their API via `page.route` in the spec rather than
-touching real Vertex/Redis.
+touching real Bedrock/Redis.
 
 These specs are intentionally NOT part of the coverage-gated unit suite: they
 exercise the real HTTP + Socket.IO path (the exact surface where the multi-worker

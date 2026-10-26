@@ -1,0 +1,45 @@
+# Authz Matrix — `src/preconsult` API
+
+One row per `/api/*` route. "Auth" is enforced by the router-level
+`authenticate` dependency (session cookie **or** `X-API-KEY`) plus any per-route
+ownership check. Error codes are stable and machine-readable
+(`src/preconsult/core/errors.py`).
+
+| Method | Path | Auth | Ownership | Rate limit | Success | Error codes |
+|---|---|---|---|---|---|---|
+| POST | `/api/session/init` | cookie or key | n/a (creates) | 2/min, 20/day per IP | 200 `{session_id}` + Set-Cookie | `rate_limited`, `redis_*`, `service_unavailable` |
+| POST | `/api/initial-questions-stream` | cookie or key | cookie `session_id` must equal body `session_id` | 5/min per IP | 200 `text/event-stream` | `auth_failed`, `session_expired`, `rate_limited`, upstream codes |
+| POST | `/api/interview-questions-stream` | cookie or key | cookie `session_id` must equal body `session_id` | 5/min per IP | 200 `text/event-stream` | `auth_failed`, `session_expired`, `rate_limited`, upstream codes |
+| POST | `/api/generate-pdf` | cookie or key | cookie `session_id` must equal body `session_id` | none | 200 `application/pdf` | `auth_failed`, `session_expired` |
+| POST | `/api/analytics/event` | cookie or key | n/a (anonymous counters) | none | 200 `{status: ok}` | `auth_failed` |
+| GET | `/api/analytics/stats` | cookie or key | n/a (aggregate) | none | 200 `[...]` | `auth_failed` |
+
+## Non-`/api/*` routes
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/health`, `/health/live`, `/health/ready`, `/health/metrics` | none | PHI-free status/counters only |
+| GET | `/privacy`, `/terms`, `/robots.txt`, `/sitemap.xml`, `/llms.txt` | none | static content |
+| — | `/` (SPA shell), `/assets/*` | none | hashed assets immutable; document `no-store` |
+| GET | `/admin/dashboard` | admin token | dropped as a frontend in a later step |
+
+## Decisions (Option A)
+
+- **One browser concept for "not authenticated enough to proceed":**
+  a missing/expired cookie or an aged-out session resolves to
+  **`404 session_expired`** — the user restarts. There is deliberately **no**
+  `401 unauthorized` for the browser.
+- **`403 auth_failed`** is reserved for: missing/invalid credentials, a
+  **cookie for a different session** (ownership), and `Origin`/CSRF rejects —
+  i.e. security signals a real user should not normally see.
+- Internal logs distinguish the cause (e.g. `auth.session_ownership_denied`)
+  without exposing it as a client-visible concept.
+
+## Enforcement points
+
+- `authenticate` — router dependency (`endpoints.py`).
+- `_require_session_ownership` — session-scoped endpoints (`endpoints.py`).
+- `_BotGateMiddleware` — pre-auth scanner block on Redis-backed paths
+  (`preconsult.py`).
+- Tests: `tests/test_session_auth.py`, `tests/test_authz_matrix.py`,
+  `tests/test_api_integration.py`, `tests/test_security.py`.

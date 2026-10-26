@@ -85,6 +85,15 @@ These are reflex-specific rules that WILL bite if ignored:
   complaint detail values. Only non-content counters (e.g. `len(...)`) are allowed.
 - Every structured event is tagged with `revision` (`GIT_SHA`/`K_REVISION`) so logs are attributable
   to a deployed build. Keep that tag; do not drop it.
+- Emergency detection must NOT rest solely on the LLM's output. `has_emergency_red_flag`
+  (`core/parsing.py`, reusing the `is_emergency_trigger` token list) gates the stream endpoints on
+  the patient-supplied chief complaint / detail BEFORE any model call; a hit short-circuits to a
+  localized emergency SSE event (`stream.initial.emergency_input` / `stream.interview.emergency_input`,
+  metadata-only, `trigger_side=input`) and the LLM is never invoked. Keep the input gate in front of
+  the output-side `is_emergency_trigger` client check.
+- The intake draft is NOT persisted to `localStorage` (or any client store): it would outlive tab
+  close and contradict the zero-retention promise. Do not reintroduce client-side PHI persistence;
+  `tests/test_security.py::TestP9_NoPHIDraftPersistence` guards this.
 - `_RequestIDMiddleware` (in `preconsult.py`) tracks per-request outcome counters and the
   failure-tell-tale events `socket.handshake_rejected` (`/_event` 400) and `static.asset_404`
   (`/assets` 404) — the signature of a stale-`index.html` shell. They are exposed read-only via
@@ -199,6 +208,17 @@ outages), so Redis must be reserved for actual patient sessions:
 - `.env` is secret and must not be read or edited for value changes without care; secrets live in
   Google Secret Manager (`SECUREMED_API_KEY`, `REDIS_URL`) and are wired as secret references, not
   plaintext env vars, in every deploy.
+- **LLM provider is AWS Bedrock (Anthropic Claude Haiku), not Vertex/Gemini.** `core/llm.py`
+  constructs a `ChatBedrockConverse` client from `LLM_MODEL` + `BEDROCK_REGION` (both env-overridable).
+  Do NOT re-introduce `langchain-google-vertexai` or `google-cloud-aiplatform`. Bedrock is a regional
+  service and Claude is not available in every region; the single fixed region is deliberate — do not
+  route by UI language (language ≠ data residency). Upstream Bedrock failures map to the existing
+  stable codes via `bedrock_api_handler` (`botocore.ClientError` throttling → `503 llm_unavailable`,
+  everything else → `502 ai_upstream_error`); keep those codes unchanged.
+  **INTERIM (Phase 1):** the container still runs on GCP, so Bedrock credentials
+  (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`) are GCP Secret Manager references until the Phase 3
+  compute migration to AWS replaces them with a task role. Scope the IAM policy to
+  `bedrock:InvokeModelWithResponseStream` on the single Haiku model.
 - Deploy-affecting changes include anything the container runs: error-response shape (codes),
   health routes, config flags (e.g. `TRUST_PROXY_HEADERS`), Sentry init. Such a change is only
   "done" after the CI/CD-built revision serves `200` — local commits alone are NOT deployment.

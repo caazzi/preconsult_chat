@@ -46,9 +46,10 @@ gcloud config set project "$PROJECT_ID"
 # live config and keep the API key out of logs/command line.
 API_KEY_SECRET=${API_KEY_SECRET:-"SECUREMED_API_KEY"}
 REDIS_URL_SECRET=${REDIS_URL_SECRET:-"REDIS_URL"}
+SESSION_SECRET_SECRET=${SESSION_SECRET_SECRET:-"SESSION_SECRET"}
 SECRET_VERSION=${SECRET_VERSION:-"latest"}
 
-for s in "$API_KEY_SECRET" "$REDIS_URL_SECRET"; do
+for s in "$API_KEY_SECRET" "$REDIS_URL_SECRET" "$SESSION_SECRET_SECRET"; do
     if ! gcloud secrets list --project="$PROJECT_ID" --format="value(name)" 2>/dev/null | grep -qx "$s"; then
         echo "❌ Error: SecretManager secret '$s' not found in project $PROJECT_ID."
         exit 1
@@ -90,8 +91,8 @@ gcloud run deploy "$SERVICE_NAME" \
     --session-affinity \
     $PROFILE_FLAGS \
     --timeout 300s \
-    --set-env-vars="API_BASE_URL=https://pre-consult.org,VERTEX_AI_REGION=us-central1,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},LLM_MODEL=gemini-2.5-flash" \
-    --update-secrets="PRECONSULT_API_KEY=${API_KEY_SECRET}:${SECRET_VERSION},REDIS_URL=${REDIS_URL_SECRET}:${SECRET_VERSION}"
+    --set-env-vars="API_BASE_URL=https://pre-consult.org,BEDROCK_REGION=us-east-1,LLM_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0" \
+    --update-secrets="PRECONSULT_API_KEY=${API_KEY_SECRET}:${SECRET_VERSION},REDIS_URL=${REDIS_URL_SECRET}:${SECRET_VERSION},SESSION_SECRET=${SESSION_SECRET_SECRET}:${SECRET_VERSION}"
 
 echo "✅ Backend Deployment Finished!"
 echo "🔗 Service URL: https://preconsult-tcjbweemnq-uc.a.run.app"

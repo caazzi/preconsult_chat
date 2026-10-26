@@ -72,8 +72,11 @@ These are reflex-specific rules that WILL bite if ignored:
   `tests/test_question_parsing.py` — do NOT re-inline the regex in `state.py`.
 - `/health` probes are TTL-throttled; tests that mock `check_redis_health` /
   `probe_event_channel` must clear the cache with `_reset_health_probe_cache_unlocked()`
-  (or rely on the conftest fixture) or a warm cache will mask the mock.
-- The served `api` object is wrapped by `_BotGateMiddleware`. Tests POSTing to
+  (or rely on the conftest fixture) or a warm cache will mask the mock. The handlers and the cache
+  live in `src/preconsult/site/health.py`; patching the *host's* `probe_event_channel` no longer
+  reaches them — set `preconsult.site.health.event_channel_probe` instead.
+- The served `api` object is wrapped by `BotGateMiddleware`
+  (`src/preconsult/site/middleware.py`). Tests POSTing to
   `/api/*` use httpx's default UA (passes the gate); don't set scanner-like UAs
   (e.g. `curl`) in API tests or the 403 gate will intercept before the endpoint.
 
@@ -154,7 +157,7 @@ outages), so Redis must be reserved for actual patient sessions:
 - **`State.log_analytics_event` is a no-op until a real session exists**
   (`session_id` set) — bots that never start the flow must not reach the
   analytics Redis write path. Keep that gate when touching analytics.
-- **A conservative bot gate** (`_BotGateMiddleware` in `preconsult.py`) blocks
+- **A conservative bot gate** (`BotGateMiddleware` in `src/preconsult/site/middleware.py`) blocks
   scanner/CLI user-agents on Redis-backed `/api/*` paths with a fast `403` before
   storage. Browsers pass through; `/_event` no longer touches Redis, so it stays
   ungated.

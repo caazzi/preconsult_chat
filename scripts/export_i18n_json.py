@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Export the PreConsult translations (reflex_app/preconsult/i18n.py) as
+Export the PreConsult translations (src/preconsult/core/i18n.py) as
 deterministic JSON consumed by a (future, non-Reflex) frontend.
 
 The Python dict in i18n.py remains the single source of truth; this emits a
@@ -22,14 +22,14 @@ import os
 import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REFLEX_APP_DIR = os.path.join(PROJECT_ROOT, "reflex_app", "preconsult")
+SRC_DIR = os.path.join(PROJECT_ROOT, "src")
 
 
 def load_translations() -> dict:
-    """Import the i18n module without the project on the default sys.path."""
-    if REFLEX_APP_DIR not in sys.path:
-        sys.path.insert(0, REFLEX_APP_DIR)
-    from i18n import translations
+    """Import the translations from the canonical source module."""
+    if SRC_DIR not in sys.path:
+        sys.path.insert(0, SRC_DIR)
+    from preconsult.core.i18n import translations
 
     return translations
 

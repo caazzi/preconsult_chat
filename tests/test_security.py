@@ -84,11 +84,11 @@ class TestP5_ErrorResponsesSanitized:
 # ---------------------------------------------------------------------------
 class TestP6_Sprint5Features:
     def test_auto_destruction_notice_en(self):
-        from reflex_app.preconsult.i18n import translations
+        from preconsult.core.i18n import translations
         assert "deleted" in translations["en"]["complete_desc"].lower()
 
     def test_auto_destruction_notice_pt(self):
-        from reflex_app.preconsult.i18n import translations
+        from preconsult.core.i18n import translations
         assert "apagados" in translations["pt"]["complete_desc"].lower()
 
     def test_emergency_rule_in_interview_prompt(self):

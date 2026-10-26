@@ -327,8 +327,9 @@ async def test_health_endpoint():
 @pytest.mark.asyncio
 async def test_health_event_channel_reports_socket():
     """/health must surface whether the Reflex event socket is reachable."""
-    import reflex_app.preconsult.preconsult as pcm
-    with patch.object(pcm, "probe_event_channel", new_callable=AsyncMock) as mock_probe:
+    from preconsult.site import health as site_health
+
+    with patch.object(site_health, "event_channel_probe", new_callable=AsyncMock) as mock_probe:
         mock_probe.return_value = "ok"
         async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get("/health")
@@ -418,10 +419,10 @@ async def test_health_probe_is_throttled_not_per_request(mock_status):
     letting health/CI/scanner polling burn it. The real throttled wrapper should
     call the underlying Redis check exactly once across three /health requests.
     """
-    import reflex_app.preconsult.preconsult as pcm
+    from preconsult.site import health as site_health
     mock_status.return_value = "ok"
 
-    with patch.object(pcm, "probe_event_channel", new_callable=AsyncMock) as mock_ev:
+    with patch.object(site_health, "event_channel_probe", new_callable=AsyncMock) as mock_ev:
         mock_ev.return_value = "ok"
         async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             for _ in range(3):

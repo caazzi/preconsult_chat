@@ -1,18 +1,18 @@
-import { Link } from "react-router-dom";
-
 import { useI18n } from "../i18n/I18nProvider";
+import { handleHomeLink } from "../navigation";
 
 export function Header() {
   const { lang, t, setLang } = useI18n();
 
   return (
     <header className="flex w-full items-center justify-between border-b border-white/10 px-4 py-2 sm:px-6 sm:py-3">
-      <Link
-        to="/"
+      <a
+        href="/"
+        onClick={handleHomeLink}
         className="text-lg font-semibold text-cyan-300 sm:text-xl"
       >
         {t.title}
-      </Link>
+      </a>
       <div className="flex items-center gap-2">
         <label className="sr-only" htmlFor="lang-select">
           {t.lang_select_sr}

@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
@@ -17,6 +17,7 @@ import {
 } from "./wizard/WizardProvider";
 import { Stepper } from "./components/Stepper";
 import { Landing } from "./pages/Landing";
+import { normalizePath } from "./navigation";
 import {
   StepDemographics,
   StepComplaint,
@@ -68,28 +69,24 @@ function Home() {
   );
 }
 
-function RedirectHome() {
-  // Unknown paths (including stale /next/... bookmarks) render the landing
-  // instead of an empty <main>. The query string is preserved so a shared
-  // ?lang= link keeps its language.
-  const { search } = useLocation();
-  return <Navigate to={{ pathname: "/", search }} replace />;
-}
-
 function Shell() {
   const { lang } = useI18n();
+
+  // One route. A stale bookmark (e.g. /next/...) must still land on the
+  // wizard, so the address bar is rewritten to the root with the query kept —
+  // a shared ?lang= link keeps its language.
+  useEffect(() => {
+    normalizePath();
+  }, []);
+
   return (
     <WizardProvider lang={lang}>
       <div className="flex min-h-screen w-full flex-col items-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
         <Header />
         <main className="flex w-full flex-1 justify-center pt-4">
-          <Routes>
-            {/* /privacy and /terms are served as static HTML by the Python
-                backend (they negotiate ?lang=), so the SPA must not claim
-                them. */}
-            <Route path="/" element={<Home />} />
-            <Route path="*" element={<RedirectHome />} />
-          </Routes>
+          {/* /privacy and /terms are served as static HTML by the Python
+              backend (they negotiate ?lang=), so the SPA must not claim them. */}
+          <Home />
         </main>
         <Footer />
       </div>
@@ -100,11 +97,7 @@ function Shell() {
 export function App() {
   return (
     <I18nProvider>
-      <BrowserRouter
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-      >
-        <Shell />
-      </BrowserRouter>
+      <Shell />
     </I18nProvider>
   );
 }

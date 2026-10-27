@@ -203,6 +203,16 @@ def test_bedrock_api_handler_maps_throttling_to_503():
     assert "llm_unavailable" in resp.body.decode()
 
 
+def test_bedrock_exception_types_is_empty_without_the_extra(monkeypatch):
+    """The default image has no botocore; importing it must not be required."""
+    import sys
+
+    import preconsult.core.errors as errors
+
+    monkeypatch.setitem(sys.modules, "botocore", None)
+    assert errors.bedrock_exception_types() == ()
+
+
 def test_bedrock_api_handler_maps_botocore_error_to_502():
     resp = _run_handler(bedrock_api_handler, BotoCoreError())
     assert resp.status_code == 502

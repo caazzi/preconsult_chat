@@ -1,4 +1,5 @@
-// Pure port of reflex_app/preconsult/state.py::build_session_init_payload.
+// Pure port of the Reflex host's state.py::build_session_init_payload (the
+// Reflex app itself was deleted in the SPA cutover).
 //
 // Field mapping, localization of enum keys, filtering of blank medication
 // entries, and the allergies "None" fallback are preserved exactly. Kept pure

@@ -34,8 +34,11 @@ updates:
       patch-minor:
         applies-to: version-updates
         update-types: ["patch", "minor"]
-    # No `ignore` entries: reflex_app/ is gone, so the reflex 0.10 pin that used
-    # to live here is no longer a dependency at all.
+    # No `ignore` entries: the Reflex app was deleted when the SPA cutover
+    # completed, so the reflex 0.10 pin that used to live here is no longer a
+    # dependency at all. There is no other npm manifest: web/ is covered by the
+    # npm entry below (added on demand), and the generated `.web/` bundle that
+    # used to leak two stale lockfiles into the alert list is gone with it.
   # --- GitHub Actions -----------------------------------------------------
   # CI-only tooling; upgrading never affects the shipped container, so group
   # and auto-bump freely.

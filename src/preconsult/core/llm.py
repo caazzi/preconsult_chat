@@ -35,7 +35,9 @@ def _build_vertex():
         location=VERTEX_REGION,
         streaming=True,
         max_retries=3,
-        model_kwargs={"timeout": 30.0},
+        # core 1.x has a first-class `timeout`; passing it through model_kwargs
+        # now warns.
+        timeout=30.0,
     )
 
 

@@ -2,8 +2,9 @@
 
 One provider is active per deployment, selected by ``LLM_PROVIDER``:
 
-* ``vertex`` (default) - Google Vertex AI / Gemini, the provider the deployed
-  service is configured for.
+* ``vertex`` (default) - Google Vertex AI / Gemini through the google-genai
+  SDK (``langchain-google-genai``), the provider the deployed service is
+  configured for.
 * ``bedrock`` - Anthropic Claude on AWS Bedrock, kept for the later AWS
   migration behind the same singleton seam. Needs the ``bedrock`` extra
   (``uv sync --locked --extra bedrock``); the default image ships Vertex only.
@@ -26,17 +27,19 @@ _llm = None
 
 
 def _build_vertex():
-    from langchain_google_vertexai import ChatVertexAI
+    # `langchain-google-genai` drives Vertex through the google-genai SDK, which
+    # is far leaner than the langchain-google-vertexai wrapper: no
+    # google-cloud-aiplatform, grpcio/protobuf, bottleneck/numexpr or numpy.
+    from langchain_google_genai import ChatGoogleGenerativeAI
 
-    return ChatVertexAI(
-        model_name=LLM_MODEL,
-        temperature=0.2,
+    return ChatGoogleGenerativeAI(
+        model=LLM_MODEL,
+        vertexai=True,
         project=PROJECT_ID,
         location=VERTEX_REGION,
+        temperature=0.2,
         streaming=True,
         max_retries=3,
-        # core 1.x has a first-class `timeout`; passing it through model_kwargs
-        # now warns.
         timeout=30.0,
     )
 

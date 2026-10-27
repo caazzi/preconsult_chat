@@ -3,7 +3,6 @@ from fastapi import Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from google.api_core.exceptions import GoogleAPIError
 
 
 class RedisUnavailableError(Exception):
@@ -241,7 +240,32 @@ def _is_bedrock_throttling(exc: Exception) -> bool:
     return "throttl" in message or "too many requests" in message
 
 
-async def google_api_handler(request: Request, exc: GoogleAPIError):
+def google_exception_types() -> tuple[type[BaseException], ...]:
+    """Google client error types available in this install.
+
+    The active Vertex client is ``langchain-google-genai``, which raises
+    ``google.genai.errors.APIError``. ``google-api-core`` is no longer a
+    dependency at all, so ``GoogleAPIError`` is only registered when some other
+    package happens to provide it — importing it unconditionally would break the
+    boot, exactly like ``botocore`` did when the Bedrock extra was split out.
+    """
+    types: list[type[BaseException]] = []
+    try:
+        from google.genai.errors import APIError
+
+        types.append(APIError)
+    except ImportError:  # pragma: no cover - google-genai is a hard dependency
+        pass
+    try:
+        from google.api_core.exceptions import GoogleAPIError
+
+        types.append(GoogleAPIError)
+    except ImportError:
+        pass
+    return tuple(types)
+
+
+async def google_api_handler(request: Request, exc: Exception):
     """Map a Vertex/Gemini upstream failure to the stable 502/503 code.
 
     Vertex throttling is retriable (503 ``llm_unavailable``); everything else is
@@ -268,10 +292,21 @@ async def google_api_handler(request: Request, exc: GoogleAPIError):
 
 
 def _is_google_throttling(exc: Exception) -> bool:
-    """Whether a Vertex/Gemini error is a retriable throttling/quota condition."""
+    """Whether a Vertex/Gemini error is a retriable throttling/quota condition.
+
+    ``google.genai.errors.APIError`` carries the HTTP code and the gRPC-style
+    status, so both are checked before falling back to the message.
+    """
+    if getattr(exc, "code", None) == 429:
+        return True
+    if str(getattr(exc, "status", "")).upper() in {
+        "RESOURCE_EXHAUSTED",
+        "TOO_MANY_REQUESTS",
+    }:
+        return True
     try:
         from google.api_core import exceptions as google_exceptions
-    except ImportError:  # pragma: no cover - google deps are a hard dependency
+    except ImportError:  # pragma: no cover - api-core is not installed today
         google_exceptions = None
 
     if google_exceptions is not None and isinstance(

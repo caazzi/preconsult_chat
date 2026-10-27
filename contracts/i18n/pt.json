@@ -110,6 +110,8 @@
   "question_counter": "Pergunta {current} de {total}",
   "regenerate_questions": "Gerar outras perguntas",
   "remove": "Remover",
+  "seo_description": "Responda a uma entrevista clínica guiada antes da consulta e leve ao médico um resumo estruturado. Sem cadastro e sem armazenar dados de saúde.",
+  "seo_title": "PreConsult — Prepare-se para a consulta médica em 3 minutos",
   "smoking_label": "Tabagismo",
   "smoking_opts": [
     "Nunca fumei",

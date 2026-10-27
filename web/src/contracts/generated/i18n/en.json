@@ -110,6 +110,8 @@
   "question_counter": "Question {current} of {total}",
   "regenerate_questions": "Ask different questions",
   "remove": "Remove",
+  "seo_description": "Answer a guided clinical interview before your appointment and bring your doctor a structured summary. No sign-up, and no health data stored.",
+  "seo_title": "PreConsult — Prepare for your doctor's appointment in 3 minutes",
   "smoking_label": "Smoking status",
   "smoking_opts": [
     "Never smoked",

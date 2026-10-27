@@ -23,11 +23,14 @@ from starlette.testclient import TestClient
 from preconsult.site.static import SPAStaticFiles
 
 SHELL = "<html>shell</html>"
+PT_SHELL = "<html>shell-pt</html>"
 ASSET_BODY = "console.log(1)"
 
 
-def _build_dist(tmp_path):
+def _build_dist(tmp_path, *, portuguese: bool = True):
     (tmp_path / "index.html").write_text(SHELL)
+    if portuguese:
+        (tmp_path / "index.pt.html").write_text(PT_SHELL)
     assets = tmp_path / "assets"
     assets.mkdir()
     (assets / "app.js").write_text(ASSET_BODY)
@@ -59,6 +62,49 @@ def test_index_is_served_no_store(client):
     cache_control = response.headers["cache-control"]
     assert "no-store" in cache_control
     assert "immutable" not in cache_control
+
+
+def test_lang_pt_is_answered_with_the_portuguese_document(root_client):
+    """`/?lang=pt` is the crawler/hreflang URL for the pt landing."""
+    response = root_client.get("/?lang=pt")
+
+    assert response.status_code == 200
+    assert "shell-pt" in response.text
+    assert "no-store" in response.headers["cache-control"]
+
+
+def test_english_is_the_default_document(root_client):
+    assert "shell-pt" not in root_client.get("/").text
+    assert "shell-pt" not in root_client.get("/?lang=en").text
+
+
+def test_portuguese_document_is_never_cached_immutable(root_client):
+    """A document with a dot in its name must not be pinned immutable."""
+    response = root_client.get("/index.pt.html")
+
+    assert "shell-pt" in response.text
+    assert "no-store" in response.headers["cache-control"]
+    assert "immutable" not in response.headers["cache-control"]
+
+
+def test_unknown_navigation_keeps_the_requested_language(root_client):
+    response = root_client.get("/next/old?lang=pt")
+
+    assert "shell-pt" in response.text
+
+
+def test_missing_portuguese_document_falls_back_to_english(tmp_path):
+    app = Starlette()
+    app.mount(
+        "/",
+        SPAStaticFiles(directory=str(_build_dist(tmp_path, portuguese=False)), html=True),
+    )
+    with TestClient(app) as client:
+        response = client.get("/?lang=pt")
+
+    assert response.status_code == 200
+    assert "shell-pt" not in response.text
+    assert "shell" in response.text
 
 
 def test_unknown_navigation_route_falls_back_to_shell(client):

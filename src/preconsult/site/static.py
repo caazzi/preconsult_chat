@@ -18,6 +18,8 @@ mount it at ``/`` after the cutover.
 from __future__ import annotations
 
 import logging
+import os
+from urllib.parse import parse_qs
 
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
@@ -41,6 +43,36 @@ class SPAStaticFiles(StaticFiles):
         "auth-codespace",
         "_all_routes",
     )
+
+    # Prerendered per-language documents (see web/scripts/prerender.mjs). Both
+    # are documents, never immutable assets; the Portuguese one is selected by
+    # the `?lang=` the SPA mirrors into the URL (there is no cookie).
+    _PT_DOCUMENT = "index.pt.html"
+
+    def _document_for(self, scope) -> str:
+        """The prerendered document matching the request's language.
+
+        `/?lang=pt` is the crawler/`hreflang` URL for Portuguese, so it must be
+        answered with Portuguese HTML rather than the English shell. A build
+        without the pt variant (test fixtures, a partial deploy) falls back to
+        English instead of 404ing the landing.
+        """
+        if self._wants_portuguese(scope) and os.path.isfile(
+            os.path.join(os.fspath(self.directory), self._PT_DOCUMENT)
+        ):
+            return self._PT_DOCUMENT
+        return "index.html"
+
+    @staticmethod
+    def _wants_portuguese(scope) -> bool:
+        raw = scope.get("query_string") or b""
+        if not isinstance(raw, (bytes, bytearray)):
+            return False
+        try:
+            query = parse_qs(bytes(raw).decode("latin-1"))
+        except (UnicodeDecodeError, AttributeError):  # pragma: no cover - defensive
+            return False
+        return query.get("lang") == ["pt"]
 
     async def get_response(self, path: str, scope) -> Response:
         path_lower = path.lower()
@@ -76,14 +108,17 @@ class SPAStaticFiles(StaticFiles):
         # the last segment would misclassify the document as a file and pin it
         # immutable for a year (the stale-shell hazard). Only real files are
         # immutable; the shell is always no-store.
-        is_document = path in (".", "index.html")
+        is_document = path in (".", "index.html", self._PT_DOCUMENT)
         is_file = not is_document and (
             path.startswith("assets/")
             or "/assets/" in path
             or "." in path.rsplit("/", 1)[-1]
         )
+        # The mount root resolves to the prerendered document for this
+        # language; an explicit file request keeps its own path.
+        target = self._document_for(scope) if path == "." else path
         try:
-            response = await super().get_response(path, scope)
+            response = await super().get_response(target, scope)
         except Exception as exc:
             # StaticFiles raises HTTPException(404) for a missing path. Only an
             # unknown *navigation* route may fall back to the app shell; a
@@ -92,7 +127,9 @@ class SPAStaticFiles(StaticFiles):
             # into "Unexpected token '<'" and a poisoned browser/CDN cache.
             if getattr(exc, "status_code", None) != 404 or is_file:
                 raise
-            response = await super().get_response("index.html", scope)
+            response = await super().get_response(
+                self._document_for(scope), scope
+            )
             self._apply_cache_headers(response, immutable=False)
             return response
         self._apply_cache_headers(response, immutable=is_file)

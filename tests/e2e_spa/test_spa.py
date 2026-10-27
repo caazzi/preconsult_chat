@@ -52,6 +52,31 @@ def test_spa_boots_at_root(page, backend):
     assert page.locator('meta[property="og:image"]').count() == 1
 
 
+def test_landing_is_crawlable_without_javascript(browser, backend):
+    """The served document carries the landing before any JS runs.
+
+    `sitemap.xml` and `llms.txt` point at `/`, so what a crawler — or a visitor
+    with JavaScript disabled — receives must not be an empty `#root`. Each
+    language has its own prerendered document.
+    """
+    context = browser.new_context(java_script_enabled=False)
+    page = context.new_page()
+    try:
+        page.goto(f"{backend}/", wait_until="domcontentloaded")
+        assert "Prepare for your doctor" in page.get_by_role(
+            "heading", level=1
+        ).inner_text()
+        assert page.locator("html").get_attribute("lang") == "en"
+
+        # The pt URL is a real crawler document, not the English shell with a
+        # client-side language switch.
+        page.goto(f"{backend}/?lang=pt", wait_until="domcontentloaded")
+        assert "Prepare-se" in page.get_by_role("heading", level=1).inner_text()
+        assert page.locator("html").get_attribute("lang") == "pt"
+    finally:
+        context.close()
+
+
 def test_spa_has_no_localstorage_phi(page, backend):
     page.goto(f"{backend}/", wait_until="networkidle")
     # Zero-PHI: no localStorage/sessionStorage keys should be created.

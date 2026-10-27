@@ -13,26 +13,27 @@ add a step, extend this document, the funnel aggregation in
 
 ## Event keys & trigger points
 
-Emitted from `reflex_app/preconsult/state.py` (via `State.log_analytics_event`).
+Emitted from the SPA via `logEvent` in `web/src/api/analytics.ts`; call sites live
+in the wizard provider (`web/src/wizard/WizardProvider.tsx`).
 
 | Event key | Trigger point |
 |---|---|
-| `intake_started` | User clicks the landing CTA to start the flow (`start_intake`). |
-| `demographics_submitted` | User completes the demographics step (`go_to_step_2`). |
-| `complaint_submitted` | User completes the chief-complaint step (`go_to_step_3`). |
-| `history_submitted` | User completes the medical-history step (`go_to_step_4`). |
-| `lifestyle_submitted` | A session is created (`init_session` OK, `go_to_step_5`). |
-| `summary_generated` | User submits Q&A to build the summary (`submit_answers`). |
-| `pdf_downloaded` | User downloads the PDF report (`download_report`). |
+| `intake_started` | User starts the flow from the landing page. |
+| `demographics_submitted` | User completes the demographics step. |
+| `complaint_submitted` | User completes the chief-complaint step. |
+| `history_submitted` | User completes the medical-history step. |
+| `lifestyle_submitted` | A session is created and the question stream starts. |
+| `summary_generated` | User submits the Q&A to build the summary. |
+| `pdf_downloaded` | User downloads the PDF report. |
 
 ## Real-session gating (privacy/Redis budget)
 
-- **`log_analytics_event` is a no-op until a real session exists** (`session_id`
-  is set). Bots / early-exit visitors that never start the session flow must not
-  reach the analytics Redis write path — this protects the serverless Redis
+- **`logEvent` is a no-op until a real session exists** (empty `sessionId` returns
+  immediately). Bots / early-exit visitors that never start the session flow must
+  not reach the analytics Redis write path — this protects the serverless Redis
   quota and the zero-persistence privacy model.
-- The gating rule lives in `state.py::log_analytics_event` and is documented in
-  `AGENTS.md` ("Analytics are gated to real sessions").
+- The gating rule lives in `web/src/api/analytics.ts::logEvent` and is documented
+  in `AGENTS.md` ("Analytics are gated on a real session").
 - A rewrite must preserve this: **never fire a funnel event without a
   `session_id`.**
 
@@ -55,8 +56,8 @@ The 7-day stats endpoint aggregates daily counters by the event key, e.g.
 
 ## Sources of truth
 
-- Emitters: `reflex_app/preconsult/state.py` (`log_analytics_event`, `start_intake`,
-  `go_to_step_2/3/4`, `init_session`, `submit_answers`, `download_report`)
+- Emitters: `web/src/api/analytics.ts` (`logEvent`, keyed by the `FunnelEvent`
+  union) and its call sites in `web/src/wizard/WizardProvider.tsx`
 - Ingest: `src/preconsult/api/endpoints.py::log_analytics_event` +
   `AnalyticsEventRequest`
 - Aggregation: `src/preconsult/api/endpoints.py::get_analytics_stats`

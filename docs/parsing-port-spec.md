@@ -1,8 +1,9 @@
 # Question & Emergency Parsing — Port Specification
 
-Purpose: a **framework-neutral specification** so a future non-Python frontend
-(TS/JS) can implement `split_questions` and `is_emergency_trigger` as a 1:1 port
-of `src/preconsult/core/parsing.py`, verified against the test matrix below.
+Purpose: a **framework-neutral specification** of `split_questions` and
+`is_emergency_trigger`, so the TypeScript port in
+`web/src/contracts/parsing.ts` can be checked 1:1 against
+`src/preconsult/core/parsing.py` using the test matrix below.
 
 The Python source is **the single source of truth**; this document states the
 observable behavior in prose + table form, and the authoritative test suite is

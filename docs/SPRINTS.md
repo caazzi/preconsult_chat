@@ -1,5 +1,10 @@
 # Implementation Plan: SecureMed Chat Phase 3
 
+> **Historical document — do not implement from it.** This sprint log describes the
+> Reflex-era codebase (`reflex_app/`, `rx.*`, `state.py`), which has been replaced by the
+> Starlette host in `src/preconsult/host.py` and the React + Vite SPA in `web/`. It is kept
+> as a record of what was built; `AGENTS.md` and `README.md` describe the current stack.
+
 **For agents:** Each sprint is self-contained. Read the sprint you are assigned, read the files listed under "Read first", then implement. Reference `docs/PRD.md` for full product context.
 
 **Approach:** TDD — write tests first, implement to make them pass, delete old tests atomically with the code they cover. Never skip the security test suite (`tests/test_security.py`) — run it as a gate at the end of every sprint.

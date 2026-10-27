@@ -143,7 +143,9 @@ The system sends the collected data to the LLM with the Summarizer prompt (see S
 - Three large action buttons: **Download PDF**, **Copy to Clipboard**, **Print**
 - Privacy banner: *"Done! Your summary has been generated. Once you close this window, all data is permanently deleted."*
 
-> ✅ **ALIGNED — PDF download** — Implemented (`securemed.py:148-155`, `state.py:201-229`). PDF is generated in-memory and streamed directly to the browser.
+> ✅ **ALIGNED — PDF download** — Implemented (`src/preconsult/services/pdf_service.py` +
+> `POST /api/generate-pdf`, triggered from the SPA summary screen). PDF is generated in-memory and
+> streamed directly to the browser.
 >
 > ✅ **ALIGNED — Copy to Clipboard button** — Implemented within the final summary screen.
 >
@@ -321,7 +323,7 @@ A:  {patient_answer_2}
 |---|---|---|---|
 | 4.1 Progress bar / stepper | Visual indicator of wizard step (1 of 5) | Done | High |
 | 4.2 Trust microcopy | Empathetic copy at each step ("We'll help you organize your thoughts...") | Done | High |
-| 4.3 Entrance animations | Staggered: title → inputs → buttons using Reflex transitions | Done | Medium |
+| 4.3 Entrance animations | Staggered: title → inputs → buttons using CSS transitions | Done | Medium |
 | 4.4 Mobile touch targets | Min 44px height on all inputs/buttons, increased vertical spacing | Done | High |
 | 4.5 Accessibility & contrast | High contrast placeholders in glass inputs; ARIA labels on all fields | Done | Medium |
 
@@ -388,6 +390,8 @@ No health data will be stored. Product learning comes from anonymous behavioral 
 - Deployed to GCP Cloud Run with scale-to-zero
 - Achieved 100% test coverage (unit, integration, security)
 - Established GitHub Actions CI/CD pipeline
+- (Since superseded) The Reflex frontend host was replaced by a plain Starlette app
+  (`src/preconsult/host.py`) serving a standalone React + Vite SPA from `web/` at `/`
 
 ### Phase 3 — Current Backlog
 Priority order based on architecture dependency and user impact:

@@ -378,7 +378,6 @@ app-preconsult/
 ├── scripts/                    # Operational scripts
 │   ├── deploy_backend.sh       # Deploy an ALREADY-BUILT CI image (NEVER --source)
 │   ├── export_contracts.py     # Regenerate contracts/ from Python sources
-│   ├── export_i18n_json.py     # Part of the contract/export pipeline
 │   ├── run_e2e_spa.sh          # Build the SPA + run the Playwright specs
 │   ├── configure_cloudflare.sh # Cloudflare DNS/WAF/rate-limit configuration
 │   ├── run_lighthouse_audit.py # Lighthouse performance audit & JSON/HTML report CLI

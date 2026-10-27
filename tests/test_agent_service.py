@@ -113,10 +113,33 @@ def test_to_dict_normalizes_message_and_dict():
     from langchain_core.messages import AIMessageChunk
     from preconsult.services.agent_service import _to_dict
 
-    assert _to_dict({"content": "x"}) == {"content": "x"}
+    assert _to_dict({"content": "x"}) == {"content": "x", "tool_calls": []}
     out = _to_dict(AIMessageChunk(content="hello"))
     assert out["content"] == "hello"
     assert out["tool_calls"] == []
+
+
+def test_to_dict_flattens_content_blocks():
+    """langchain-core 1.x allows content to be a list of blocks.
+
+    A str-only consumer would drop every delta from such a message, so the
+    normaliser flattens text blocks and ignores non-text ones.
+    """
+    from langchain_core.messages import AIMessageChunk
+    from preconsult.services.agent_service import _to_dict
+
+    out = _to_dict(
+        AIMessageChunk(
+            content=[
+                {"type": "text", "text": "When did it "},
+                {"type": "text", "text": "start?"},
+                {"type": "image_url", "image_url": {"url": "ignored"}},
+            ]
+        )
+    )
+    assert out["content"] == "When did it start?"
+    assert _to_dict({"content": ["a", "b"]})["content"] == "ab"
+    assert _to_dict({"content": None})["content"] == ""
 
 def test_interview_prompt_contains_emergency_rule():
     chain = get_interview_chain()

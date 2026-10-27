@@ -255,7 +255,10 @@ outages), so Redis must be reserved for actual patient sessions:
   `bedrock` optional extra**, so the default image does not install boto3/botocore (~34 MB) for a
   provider it has no credentials for: a Bedrock deployment must build with
   `uv sync --locked --extra bedrock` (the Dockerfile's plain `uv sync --locked` installs Vertex
-  only), otherwise `get_llm()` raises a RuntimeError naming the extra. The default is the provider the deployed
+  only), otherwise `get_llm()` raises a RuntimeError naming the extra. **Because uv resolves a
+  single universal lock across extras, `langchain-aws` and `langchain-google-vertexai` must stay on
+  the same `langchain-core` major — upgrade them in the same change**, or `uv lock` fails with an
+  unsatisfiable `preconsult[bedrock]` (the constraint block in `pyproject.toml` records this). The default is the provider the deployed
   service actually has credentials for: production ran a Vertex build until 2026-09-08 and Bedrock
   credentials do not exist in Secret Manager, so a Bedrock-only `main` could not be deployed without
   breaking every question request. Bedrock is the planned next step, kept working behind the switch —

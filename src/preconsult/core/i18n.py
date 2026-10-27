@@ -69,6 +69,11 @@ translations = {
         "opqrst": "Clinical Questions",
         "question_counter": "Question {current} of {total}",
         "answers_ph": "Type your answer here...",
+        "answer_aria": "Answer for this question",
+        # Explicit "I don't know": a patient who does not know the answer must
+        # not be forced to invent one. The phrase is what the PDF prints.
+        "answer_unknown": "I don't know",
+        "regenerate_questions": "Ask different questions",
         "submit_continue": "Generate My Summary",
 
         "step_5": "Summary",
@@ -93,7 +98,7 @@ translations = {
         "err_timeout": "The request timed out. Please try again.",
         "err_rate_limit": "Too many requests. Please wait a moment.",
         "err_initial_ans": "Please answer the questions.",
-        "err_followup_ans": "Please answer all questions.",
+        "err_followup_ans": "Please answer every question, or tap \"I don't know\".",
         "err_download": "Failed to download PDF. Please try again.",
         "err_download_gen": "An unexpected error occurred during download.",
         "lang_select_sr": "Select language",
@@ -191,6 +196,9 @@ translations = {
         "opqrst": "Perguntas Clínicas",
         "question_counter": "Pergunta {current} de {total}",
         "answers_ph": "Digite sua resposta aqui...",
+        "answer_aria": "Resposta para esta pergunta",
+        "answer_unknown": "Não sei",
+        "regenerate_questions": "Gerar outras perguntas",
         "submit_continue": "Gerar Meu Resumo",
 
         "step_5": "Resumo",
@@ -215,7 +223,7 @@ translations = {
         "err_timeout": "A requisicao excedeu o tempo limite. Tente novamente.",
         "err_rate_limit": "Muitas requisições. Aguarde um momento.",
         "err_initial_ans": "Por favor, responda às perguntas.",
-        "err_followup_ans": "Por favor, responda a todas as perguntas.",
+        "err_followup_ans": "Responda todas as perguntas ou toque em \"Não sei\".",
         "err_download": "Falha ao baixar PDF. Tente novamente.",
         "err_download_gen": "Ocorreu um erro inesperado durante o download.",
         "lang_select_sr": "Selecionar idioma",

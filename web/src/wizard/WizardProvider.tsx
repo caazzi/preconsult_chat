@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -124,6 +125,25 @@ export function WizardProvider({
   const [error, setError] = useState("");
 
   const t = useMemo(() => getTranslations(lang), [lang]);
+
+  // Zero-retention means nothing is persisted, so an accidental reload, a
+  // back-swipe or a closed tab silently erases the whole intake. Once the
+  // patient has started, ask the browser to confirm before leaving. The draft
+  // still lives only in this tab's memory — this warns, it does not store.
+  //
+  // Never on the emergency screen: that CTA is the one navigation that must
+  // not be interrupted by a browser confirm dialog.
+  const started = step !== STEP_LANDING && !isEmergency;
+  useEffect(() => {
+    if (!started) return;
+    const confirmUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Legacy Firefox/Safari only show the prompt for a truthy returnValue.
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", confirmUnload);
+    return () => window.removeEventListener("beforeunload", confirmUnload);
+  }, [started]);
 
   const summaryText = useMemo(() => {
     const qsAns = questions

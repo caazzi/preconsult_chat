@@ -84,4 +84,14 @@ def test_spa_wizard_flow(page, backend):
 
     # The streamed questions render as answer fields.
     expect(page.get_by_text("Do you have fever?")).to_be_visible(timeout=10000)
-    expect(page.get_by_label("Answer for clinical question").first).to_be_visible()
+    answers = page.get_by_label("Answer for this question")
+    expect(answers.first).to_be_visible()
+
+    # A patient who does not know can say so instead of inventing an answer.
+    page.get_by_role("button", name="I don't know").first.click()
+    expect(answers.first).to_have_value("I don't know")
+
+    # Every question is answered, so the summary is generated and ready.
+    page.get_by_role("button", name="I don't know").nth(1).click()
+    page.get_by_role("button", name="Generate My Summary").click()
+    expect(page.get_by_text("Report Ready")).to_be_visible()

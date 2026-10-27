@@ -95,6 +95,12 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   emergency dialog). Language comes from `?lang=` then `navigator.language`, and is mirrored back
   into the URL — **no cookie and no `localStorage`/`sessionStorage` is written**
   (`site/legal.py` still reads a legacy `preconsult_lang` cookie if an old browser sends one).
+- Because nothing is persisted, the wizard registers a `beforeunload` confirm as soon as the intake
+  starts: an accidental reload, back-swipe or closed tab would otherwise silently erase every answer.
+  It is deliberately **skipped on the emergency screen** — that exit must never be interrupted. Keep
+  both behaviours. Likewise every Q&A question must stay answerable with an explicit localised
+  "I don't know" (`answer_unknown`): an empty answer is rejected, a *stated* unknown is not — forcing
+  a patient to type something invents clinical data.
 - The browser E2E job (`tests/e2e_spa`, driven by `scripts/run_e2e_spa.sh`) boots the real
   `preconsult.host:app`, serves the built SPA at `/`, and mocks `/api` at the browser route layer —
   no live LLM provider or serverless Redis. It asserts the SPA boots, walks the wizard, and writes

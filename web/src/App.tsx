@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
@@ -61,9 +61,21 @@ function WizardShell() {
 
 function Home() {
   const { step } = useWizard();
+  const stepRegionRef = useRef<HTMLDivElement>(null);
+
+  // After a step change the "Continue" button that had focus is gone, so focus
+  // falls back to <body> and a screen reader never announces the new step.
+  // Move focus to the step region instead.
+  useEffect(() => {
+    if (step === STEP_LANDING) return;
+    stepRegionRef.current?.focus();
+  }, [step]);
+
   return (
     <>
-      <WizardShell />
+      <div ref={stepRegionRef} tabIndex={-1} className="w-full outline-none">
+        <WizardShell />
+      </div>
       {step === STEP_LANDING && <FaqSection />}
     </>
   );

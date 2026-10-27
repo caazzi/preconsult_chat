@@ -100,29 +100,48 @@ export function WizardStep() {
           ))}
         </div>
       )}
-      <div className="max-h-[380px] space-y-3 overflow-y-auto pr-1">
-        {questions.map((q, idx) => (
-          <div key={idx} className="space-y-2">
-            <p className="text-xs font-bold text-slate-400">
-              {idx + 1} / {questions.length}
-            </p>
-            <p className="font-bold text-slate-100">{q}</p>
-            <textarea
-              aria-label="Answer for clinical question"
-              placeholder={t.answers_ph}
-              value={answers[idx] ?? ""}
-              onChange={(e) => setAnswer(idx, e.target.value)}
-              className="min-h-[80px] w-full rounded-lg border border-white/20 bg-slate-900 p-3 text-slate-100"
-            />
-          </div>
-        ))}
-      </div>
+      <ol className="max-h-[380px] list-none space-y-3 overflow-y-auto pl-0 pr-1">
+        {questions.map((q, idx) => {
+          const answer = answers[idx] ?? "";
+          const unknown = answer === t.answer_unknown;
+          return (
+            <li key={idx} className="space-y-2">
+              <p className="text-xs font-bold text-slate-400">
+                {idx + 1} / {questions.length}
+              </p>
+              <p className="font-bold text-slate-100">{q}</p>
+              <textarea
+                aria-label={t.answer_aria}
+                placeholder={t.answers_ph}
+                value={answer}
+                onChange={(e) => setAnswer(idx, e.target.value)}
+                className="min-h-[80px] w-full rounded-lg border border-white/20 bg-slate-900 p-3 text-slate-100"
+              />
+              {/* A patient who does not know the answer must not be forced to
+                  invent one — in a clinical intake that is fabricated data. */}
+              <button
+                type="button"
+                onClick={() => setAnswer(idx, t.answer_unknown)}
+                aria-pressed={unknown}
+                className={`min-h-[44px] rounded-lg border px-3 py-1 text-sm transition ${
+                  unknown
+                    ? "border-cyan-300 bg-cyan-500/25 text-cyan-100"
+                    : "border-white/20 text-slate-300 hover:bg-white/5"
+                }`}
+              >
+                {t.answer_unknown}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
           onClick={() => void reloadQuestions()}
           disabled={loading}
-          aria-label={t.step_4}
+          aria-label={t.regenerate_questions}
+          title={t.regenerate_questions}
           className="min-h-[48px] rounded-lg border border-white/20 px-4 py-2 text-slate-200 hover:bg-white/5 disabled:opacity-60"
         >
           ↻

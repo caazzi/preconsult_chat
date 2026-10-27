@@ -1,5 +1,5 @@
 import { useI18n } from "../i18n/I18nProvider";
-import { useWizard, STEP_LANDING } from "../wizard/WizardProvider";
+import { useWizard } from "../wizard/WizardProvider";
 
 const HOW = [
   ["message-square", "step_how_1", "step_sub_1"],
@@ -9,7 +9,7 @@ const HOW = [
 
 export function Landing() {
   const { t } = useI18n();
-  const { setStep } = useWizard();
+  const { startIntake } = useWizard();
 
   return (
     <div className="space-y-5">
@@ -44,7 +44,7 @@ export function Landing() {
 
       <button
         type="button"
-        onClick={() => setStep(STEP_LANDING + 1)}
+        onClick={startIntake}
         className="min-h-[48px] w-full rounded-lg bg-cyan-500 px-4 py-3 font-semibold text-slate-950 transition hover:scale-[1.01] hover:bg-cyan-400"
       >
         {t.start_cta}

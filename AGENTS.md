@@ -161,9 +161,13 @@ outages), so Redis must be reserved for actual patient sessions:
   contract, asset graph, served revision, legal pages).** Full session/stream/rate-limit/SSE
   coverage runs in the `test` job against a local `redis:alpine`. Don't add session-create/stream
   stages to the deployed smoke test.
-- **Analytics are gated on a real session** — `logEvent` in `web/src/api/analytics.ts` is a no-op
-  without a `session_id`, so bots that never start the flow cannot reach the analytics Redis write
-  path. Keep that gate when touching analytics.
+- **Analytics have two tiers, and only one touches Redis.** The four pre-session steps
+  (`intake_started` … `history_submitted`) are counted in memory (`funnel.*` in
+  `GET /health/metrics`) and logged, because no session exists until the lifestyle step — they must
+  never write to Redis. The three session steps stay gated on a real `session_id`
+  (`logEvent` in `web/src/api/analytics.ts`), so bots that never start the flow cannot reach the
+  analytics write path. Keep both: the server-side split (`ANONYMOUS_FUNNEL_EVENTS` + the
+  `FunnelEvent` whitelist in `endpoints.py`) and the client gate.
 - **A conservative bot gate** (`BotGateMiddleware` in `src/preconsult/site/middleware.py`) blocks
   scanner/CLI user-agents on the Redis-backed `/api/*` paths with a fast `403` before storage.
   Browsers pass through; the gate deliberately covers `/api/*` only (the SPA document and static

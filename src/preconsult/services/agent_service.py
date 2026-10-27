@@ -135,6 +135,29 @@ def get_interview_chain() -> Runnable:
     return _interview_chain
 
 
+def _text_of(content) -> str:
+    """Flatten message content to text.
+
+    langchain-core 1.x types content as ``str | list[str | dict]``: Gemini can
+    return a list of content blocks, and a consumer that only accepts ``str``
+    would silently drop every delta. Non-text blocks (images, reasoning) are
+    ignored because only text is rendered and regex-parsed here.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                text = block.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+    return ""
+
+
 def _to_dict(msg) -> dict:
     """Normalize a message into a plain dict for the streaming consumer.
 
@@ -142,10 +165,12 @@ def _to_dict(msg) -> dict:
     exposing ``content`` / ``tool_calls``.
     """
     if isinstance(msg, dict):
-        return msg
-    content = getattr(msg, "content", "")
-    tool_calls = getattr(msg, "tool_calls", None) or []
-    return {"content": content, "tool_calls": tool_calls}
+        content = msg.get("content", "")
+        tool_calls = msg.get("tool_calls") or []
+    else:
+        content = getattr(msg, "content", "")
+        tool_calls = getattr(msg, "tool_calls", None) or []
+    return {"content": _text_of(content), "tool_calls": tool_calls}
 
 
 def _extract_questions(tool_call) -> list[str] | None:

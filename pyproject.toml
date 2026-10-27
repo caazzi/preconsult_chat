@@ -7,13 +7,18 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "fastapi==0.161.1",
     "gunicorn==26.2.0",
-    "langchain-aws==0.2.35",
+    # Only the LangChain *provider* package is used: the code imports
+    # `langchain_core` (its dependency) and never the `langchain` meta-package,
+    # which was pulling in sqlalchemy + langchain-text-splitters for nothing.
     "langchain-google-vertexai==2.1.2",
-    "langchain==0.3.27",
-    "google-cloud-aiplatform==1.165.0",
     "pydantic==2.14.1",
     "reportlab==5.1.0",
-    "uvicorn[standard]==0.54.0",
+    # Plain uvicorn instead of `uvicorn[standard]`: the performance pieces
+    # (uvloop, httptools) stay, while `watchfiles` (only for --reload) and
+    # `websockets` (we serve no WebSocket) stay out of the image.
+    "uvicorn==0.54.0",
+    "uvloop==0.22.1",
+    "httptools==0.8.0",
     "python-dotenv==1.2.4",
     "redis==6.4.0",
     "sentry-sdk==2.73.0",
@@ -24,6 +29,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Bedrock is opt-in (LLM_PROVIDER=bedrock) and this deployment has no AWS
+# credentials, so boto3/botocore (~34 MB) stay out of the default image. A
+# Bedrock deployment installs the extra:
+#   uv sync --locked --extra bedrock
+# CI installs --all-extras, so the Bedrock path keeps its tests.
+bedrock = [
+    "langchain-aws==0.2.35",
+]
 test = [
     "pytest",
     "pytest-asyncio",

@@ -3,7 +3,6 @@ from fastapi import Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from botocore.exceptions import ClientError
 from google.api_core.exceptions import GoogleAPIError
 
 
@@ -200,9 +199,37 @@ async def bedrock_api_handler(request: Request, exc: Exception):
     )
 
 
+def _botocore_exceptions():
+    """``botocore.exceptions``, or ``None`` when the ``bedrock`` extra is absent.
+
+    ``botocore`` is optional, so it must not be imported at module scope: the
+    default Vertex-only image ships without it, and every API module imports
+    ``core.errors``.
+    """
+    try:
+        import botocore.exceptions as botocore_exceptions
+    except ImportError:  # pragma: no cover - the extras are installed in CI
+        return None
+    return botocore_exceptions
+
+
+def bedrock_exception_types() -> tuple[type[BaseException], ...]:
+    """Botocore's error types for handler registration, or ``()`` without the extra."""
+    botocore_exceptions = _botocore_exceptions()
+    if botocore_exceptions is None:
+        return ()
+    return (
+        botocore_exceptions.BotoCoreError,
+        botocore_exceptions.ClientError,
+    )
+
+
 def _is_bedrock_throttling(exc: Exception) -> bool:
     """Whether a Bedrock error is a retriable throttling/quota condition."""
-    if isinstance(exc, ClientError):
+    botocore_exceptions = _botocore_exceptions()
+    if botocore_exceptions is not None and isinstance(
+        exc, botocore_exceptions.ClientError
+    ):
         code = exc.response.get("Error", {}).get("Code", "")
         return code in (
             "ThrottlingException",

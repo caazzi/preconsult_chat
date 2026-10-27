@@ -42,6 +42,8 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
 ## Verification before you claim a task is done
 
 - Lint the code you changed with ruff: `uv run ruff check .`
+- Sync dev environments with `uv sync --locked --all-extras --dev`. The Bedrock client tests
+  need the `bedrock` extra even though the image installs Vertex only.
 - Run the test suite **with the coverage gate** (this is the exact CI command):
   ```bash
   uv run python -m pytest tests/ -v --cov --cov-report=term-missing --cov-fail-under=80
@@ -243,7 +245,11 @@ outages), so Redis must be reserved for actual patient sessions:
 - **The active LLM provider is selected by `LLM_PROVIDER`, and the default is `vertex`
   (Google Vertex AI / Gemini), not Bedrock.** `core/llm.py` builds a `ChatVertexAI` client from
   `LLM_MODEL` + `VERTEX_REGION` + `PROJECT_ID`, or a `ChatBedrockConverse` client from
-  `LLM_MODEL` + `BEDROCK_REGION` when `LLM_PROVIDER=bedrock`. The default is the provider the deployed
+  `LLM_MODEL` + `BEDROCK_REGION` when `LLM_PROVIDER=bedrock`. **Bedrock lives in the
+  `bedrock` optional extra**, so the default image does not install boto3/botocore (~34 MB) for a
+  provider it has no credentials for: a Bedrock deployment must build with
+  `uv sync --locked --extra bedrock` (the Dockerfile's plain `uv sync --locked` installs Vertex
+  only), otherwise `get_llm()` raises a RuntimeError naming the extra. The default is the provider the deployed
   service actually has credentials for: production ran a Vertex build until 2026-09-08 and Bedrock
   credentials do not exist in Secret Manager, so a Bedrock-only `main` could not be deployed without
   breaking every question request. Bedrock is the planned next step, kept working behind the switch —

@@ -5,7 +5,8 @@ One provider is active per deployment, selected by ``LLM_PROVIDER``:
 * ``vertex`` (default) - Google Vertex AI / Gemini, the provider the deployed
   service is configured for.
 * ``bedrock`` - Anthropic Claude on AWS Bedrock, kept for the later AWS
-  migration behind the same singleton seam.
+  migration behind the same singleton seam. Needs the ``bedrock`` extra
+  (``uv sync --locked --extra bedrock``); the default image ships Vertex only.
 
 The client class is imported lazily so the process only pays for the provider it
 actually uses; callers (and tests) still only depend on ``get_llm()``.
@@ -39,7 +40,17 @@ def _build_vertex():
 
 
 def _build_bedrock():
-    from langchain_aws import ChatBedrockConverse
+    try:
+        from langchain_aws import ChatBedrockConverse
+    except ImportError as exc:
+        # Bedrock is an opt-in extra so the default image does not carry
+        # boto3/botocore (~34 MB) for a provider it has no credentials for.
+        # Surface a config error, not an opaque 500 on the first question.
+        raise RuntimeError(
+            "LLM_PROVIDER=bedrock requires the 'bedrock' extra, which the "
+            "default image does not install. Rebuild with "
+            "`uv sync --locked --extra bedrock` (see AGENTS.md)."
+        ) from exc
 
     return ChatBedrockConverse(
         model=LLM_MODEL,

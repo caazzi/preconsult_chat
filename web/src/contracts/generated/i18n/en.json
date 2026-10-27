@@ -106,7 +106,6 @@
   "privacy_badge": "🔒 Zero Data Persistence: No account needed. Your data is deleted upon closing.",
   "privacy_badge_landing": "🔒 No sign-up. Your data is deleted when you close.",
   "privacy_step_note": "🔒 Your answers are temporary and private",
-  "privacy_text": "PreConsult is committed to protecting your privacy. We do not store, sell, or share any personal health information you enter. All data is processed temporarily in memory and permanently deleted when you close the browser tab. No account creation, cookies for tracking, or persistent identifiers are used. We use Anthropic's Claude (Haiku) hosted on AWS Bedrock to generate clinical questions based on the information you provide, but no conversation data is retained after your session ends.",
   "privacy_title": "Privacy Policy",
   "question_counter": "Question {current} of {total}",
   "regenerate_questions": "Ask different questions",

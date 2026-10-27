@@ -1,6 +1,5 @@
-import { Link } from "react-router-dom";
-
 import { useI18n } from "../i18n/I18nProvider";
+import { handleHomeLink } from "../navigation";
 
 export function Footer() {
   const { t, lang } = useI18n();
@@ -26,7 +25,9 @@ export function Footer() {
         </a>
       </div>
       <div className="mt-2 text-center text-[10px] text-slate-600">
-        <Link to="/">PreConsult</Link>
+        <a href="/" onClick={handleHomeLink}>
+          PreConsult
+        </a>
       </div>
     </footer>
   );

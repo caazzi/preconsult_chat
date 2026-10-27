@@ -10,7 +10,7 @@ dependencies = [
     # Only the LangChain *provider* package is used: the code imports
     # `langchain_core` (its dependency) and never the `langchain` meta-package,
     # which was pulling in sqlalchemy + langchain-text-splitters for nothing.
-    "langchain-google-vertexai==2.1.2",
+    "langchain-google-vertexai==3.2.5",
     "pydantic==2.14.1",
     "reportlab==5.1.0",
     # Plain uvicorn instead of `uvicorn[standard]`: the performance pieces

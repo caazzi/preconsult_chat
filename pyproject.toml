@@ -43,6 +43,23 @@ e2e = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.uv]
+# Security floors for transitive dependencies that are not ours to declare in
+# `[project.dependencies]` (they are pulled in by httpx/starlette/reportlab).
+# Pinning them here makes the constraint explicit in the manifest Dependabot
+# reads, and stops a plain `uv lock` from silently re-resolving back below the
+# patched versions:
+#   certifi  GHSA-6q48-6c7w-9gw2 (compromised emSign intermediate CAs)
+#   anyio    GHSA-82r6-8w77-94w6 (TLSStream IDNA 2003 host encoding)
+#   pillow   GHSA-5x8w-8jj5-q52h + 4 more (image-decode memory corruption)
+# Pillow only arrives via reportlab (we never decode images), but the upgrade is
+# free and keeps the alert list honest.
+constraint-dependencies = [
+    "certifi>=2026.10.18",
+    "anyio>=4.14.2",
+    "pillow>=13.0.0",
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = [
@@ -50,7 +67,7 @@ markers = [
     "e2e: browser end-to-end tests (drive a real backend via Playwright)",
 ]
 # `-m 'not e2e'` keeps browser specs out of the default suite (they need the
-# `e2e` extra + Playwright + a booted backend). scripts/run_e2e.sh overrides
+# `e2e` extra + Playwright + a booted backend). scripts/run_e2e_spa.sh overrides
 # with an explicit `-m e2e`.
 addopts = "--strict-markers -m 'not e2e'"
 norecursedirs = [

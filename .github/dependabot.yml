@@ -34,17 +34,8 @@ updates:
       patch-minor:
         applies-to: version-updates
         update-types: ["patch", "minor"]
-    ignore:
-      # reflex 0.10 is a breaking change wearing a minor version: it rewrote the
-      # app/registration internals, so importing the host module fails with
-      # "'App' object has no attribute '_context_middleware'" and a cascade of
-      # RegistrationContext errors. The tracked state.js socket patch is also
-      # ported specifically for 0.9.8 (see AGENTS.md), and reflex_app/ is
-      # scheduled for deletion in the SPA cutover - so an upgrade now is
-      # throwaway work. Remove this entry when reflex_app/ goes.
-      - dependency-name: "reflex"
-        versions: [">=0.10.0"]
-
+    # No `ignore` entries: reflex_app/ is gone, so the reflex 0.10 pin that used
+    # to live here is no longer a dependency at all.
   # --- GitHub Actions -----------------------------------------------------
   # CI-only tooling; upgrading never affects the shipped container, so group
   # and auto-bump freely.

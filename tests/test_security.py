@@ -46,19 +46,22 @@ class TestP2_APIKeyEnforced:
 
 
 # ---------------------------------------------------------------------------
-# P4: Reflex frontend must not have a hardcoded default API key
+# P4: the frontend must not carry a hardcoded default API key
 # ---------------------------------------------------------------------------
-class TestP4_NoDefaultKeyInReflexFrontend:
-    def test_reflex_state_has_no_default_key(self):
-        """reflex_app/preconsult/state.py must not contain a hardcoded default API key."""
-        state_path = os.path.join(
-            os.path.dirname(__file__), "..", "reflex_app", "preconsult", "state.py"
-        )
-        with open(state_path) as f:
-            source = f.read()
-        assert "dev_key_123" not in source, (
-            "Insecure default API key still present in reflex_app/preconsult/state.py"
-        )
+class TestP4_NoDefaultKeyInFrontend:
+    def test_frontend_has_no_hardcoded_api_key(self):
+        """The SPA authenticates with the session cookie and must hold no key."""
+        web_src = os.path.join(os.path.dirname(__file__), "..", "web", "src")
+        offenders = []
+        for root, _dirs, files in os.walk(web_src):
+            for name in files:
+                if not name.endswith((".ts", ".tsx")):
+                    continue
+                path = os.path.join(root, name)
+                with open(path) as f:
+                    if "dev_key_123" in f.read():
+                        offenders.append(path)
+        assert not offenders, f"Insecure default API key in the SPA: {offenders}"
 
 
 # ---------------------------------------------------------------------------
@@ -191,17 +194,18 @@ class TestP9_NoPHIDraftPersistence:
         closed; localStorage outlives tab close, so persisting the draft there
         would contradict that claim. Guard against reintroduction.
         """
-        state_path = os.path.join(
-            os.path.dirname(__file__), "..", "reflex_app", "preconsult", "state.py"
-        )
-        with open(state_path) as f:
-            source = f.read()
-        assert "localStorage.setItem" not in source, (
-            "PHI draft persistence via localStorage reintroduced in state.py"
-        )
-        assert "preconsult_draft" not in source, (
-            "Legacy preconsult_draft localStorage key reintroduced in state.py"
-        )
+        web_src = os.path.join(os.path.dirname(__file__), "..", "web", "src")
+        offenders = []
+        for root, _dirs, files in os.walk(web_src):
+            for name in files:
+                if not name.endswith((".ts", ".tsx")):
+                    continue
+                path = os.path.join(root, name)
+                with open(path) as f:
+                    source = f.read()
+                if "localStorage.setItem" in source or "preconsult_draft" in source:
+                    offenders.append(path)
+        assert not offenders, f"PHI draft persistence reintroduced in the SPA: {offenders}"
 
 
 def test_bot_gate_blocks_scanner_before_redis():
@@ -228,7 +232,7 @@ def test_bot_gate_allows_real_browser_user_agent():
     import asyncio
     import httpx
     from httpx import ASGITransport
-    from reflex_app.preconsult.preconsult import api as app
+    from preconsult.host import app
 
     async def run():
         async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

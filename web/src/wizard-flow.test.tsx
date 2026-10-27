@@ -42,7 +42,7 @@ describe("wizard flow (mocked backend)", () => {
   it("walks demographics -> complaint -> history and creates a session", async () => {
     const fetchSpy = mockSessionInit();
     const user = userEvent.setup();
-    window.history.pushState({}, "", "/next/?lang=en");
+    window.history.pushState({}, "", "/?lang=en");
     render(<App />);
 
     await advanceToHistory(user);

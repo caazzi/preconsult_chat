@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useI18n } from "../i18n/I18nProvider";
 
 export function Footer() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
 
   return (
     <footer className="mx-auto w-full max-w-3xl px-4 py-4">
@@ -12,11 +12,16 @@ export function Footer() {
         {t.footer_disclaimer}
       </p>
       <div className="mt-2 flex items-center justify-center gap-2 text-xs">
-        <a href="/privacy" className="text-cyan-300 hover:underline">
+        {/* Legal pages are static HTML served by the Python backend; they
+            negotiate their language from ?lang= before Accept-Language. */}
+        <a
+          href={`/privacy?lang=${lang}`}
+          className="text-cyan-300 hover:underline"
+        >
           {t.footer_privacy}
         </a>
         <span className="text-slate-500">·</span>
-        <a href="/terms" className="text-cyan-300 hover:underline">
+        <a href={`/terms?lang=${lang}`} className="text-cyan-300 hover:underline">
           {t.footer_terms}
         </a>
       </div>

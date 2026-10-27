@@ -28,8 +28,6 @@ Thumbs.db
 .DS_Store
 
 # Reflex App tooling and dependencies
-.web/
-.states/
 .python-version
 .github/
 scripts/

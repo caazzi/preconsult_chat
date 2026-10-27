@@ -4,7 +4,7 @@ Session-cookie auth tests (additive, Option A + C).
 Covers:
   - init issues a signed HttpOnly session cookie,
   - the cookie alone authorizes subsequent calls (no X-API-KEY),
-  - the header alone still works (Reflex/programmatic back-compat),
+  - the header alone still works (programmatic back-compat),
   - a tampered/forged cookie is rejected,
   - a valid cookie for a DIFFERENT session is rejected (ownership),
   - missing/absent credentials → 403 auth_failed.

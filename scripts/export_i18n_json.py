@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Export the PreConsult translations (src/preconsult/core/i18n.py) as
-deterministic JSON consumed by a (future, non-Reflex) frontend.
+deterministic JSON consumed by the SPA (web/).
 
 The Python dict in i18n.py remains the single source of truth; this emits a
 lossless, key-parity-checked, stable-ordered JSON artifact so any frontend

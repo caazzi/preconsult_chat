@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Hermetic Playwright E2E runner for the shadow SPA (web/) served at /next.
+# Hermetic Playwright E2E runner for the React SPA (web/), which is the canonical
+# document served at / by the Python host (`preconsult.host:app`).
 #
-# Builds web/ (Vite) so it can be mounted, then runs the specs in tests/e2e_spa
-# against a real single-worker gunicorn instance. The SPA's /api calls are
-# mocked at the browser route layer, so no live Bedrock/Redis is needed.
+# Builds web/ (Vite) so the host can mount the bundle at /, then runs the specs
+# in tests/e2e_spa. The spec's `backend` fixture boots a real single-worker
+# gunicorn instance of `preconsult.host:app` from the repo root, and the SPA's
+# /api calls are mocked at the browser route layer, so no live Vertex AI or
+# serverless Redis is needed.
 #
 # Usage:
 #   scripts/run_e2e_spa.sh
@@ -13,6 +16,7 @@ set -euo pipefail
 # Env:
 #   E2E_HOST/E2E_PORT   where the local backend listens (default 127.0.0.1:8000)
 #   E2E_WORKERS         gunicorn --workers count (default 1)
+#   E2E_GUNICORN        gunicorn executable (default: .venv/bin/gunicorn)
 
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
@@ -24,6 +28,9 @@ BASE="http://${HOST}:${PORT}"
 
 echo "== PreConsult SPA Playwright E2E (backend=${BASE}, workers=${WORKERS}) =="
 
+# 1. Build the SPA bundle. The host serves web/dist at / and its documents
+#    (legal pages) from the repo, so the sources must be present before pytest
+#    starts the backend fixture.
 echo "--- building web/ (Vite) ---"
 (
   cd web
@@ -31,22 +38,13 @@ echo "--- building web/ (Vite) ---"
   npm run build
 )
 
+# 2. Ensure Playwright browsers are present (no-op if already installed).
 echo "--- ensure Playwright browsers + system deps ---"
 "${ROOT}/.venv/bin/python" -m playwright install chromium >/dev/null 2>&1 || true
 
-echo "--- building Reflex shell (so / and its static mount are present) ---"
-# The SPA app imports the Reflex module; the backend also serves /. Building the
-# Reflex frontend keeps the full stack realistic (and applies the socket patch).
-TPL="${ROOT}/.venv/lib/python3.11/site-packages/reflex_base/.templates/web/utils/state.js"
-if [ -f "$TPL" ]; then
-  cp "${ROOT}/reflex_app/web_utils/state.js" "$TPL"
-fi
-(
-  cd reflex_app
-  REFLEX_API_URL="${BASE}" REFLEX_TRANSPORT="${REFLEX_TRANSPORT:-websocket}" \
-    BUILD_MODE=true "${ROOT}/.venv/bin/python" -m reflex export --frontend-only --no-zip
-)
-
+# 3. Run the specs from the repo root. The backend fixture boots
+#    `preconsult.host:app` itself (cwd = repo root), so pytest is all that needs
+#    to run here.
 echo "--- running specs ---"
 E2E_HOST="${HOST}" E2E_PORT="${PORT}" E2E_WORKERS="${WORKERS}" \
   "${ROOT}/.venv/bin/python" -m pytest tests/e2e_spa \

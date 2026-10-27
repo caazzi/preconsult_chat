@@ -1,8 +1,8 @@
 """Crawler-facing documents stay byte-identical after the extraction.
 
 ``robots.txt``, ``sitemap.xml`` and ``llms.txt`` were inline literals in the
-Reflex host module; they now come from ``preconsult.site.seo``, which has no
-framework dependency so the post-cutover app can serve the same text. These
+old host module; they now come from ``preconsult.site.seo``, which has no
+framework dependency. These
 tests check the served contract (status, media type, cache headers, content)
 and the deterministic sitemap rendering.
 """

@@ -1,8 +1,6 @@
-"""Composition contract of the Reflex-free host (`preconsult.host`).
+"""Composition contract of the served host (`preconsult.host`).
 
-The Reflex host is still the deployed app, but this one is what replaces it —
-so the properties that must survive the cutover are pinned here rather than
-inherited from tests that will be deleted with `reflex_app/`:
+This is the deployed app, so the properties that make it safe are pinned here:
 
 * registration order (`/api` first, SPA mount last, so the catch-all never
   shadows an API or document route);

@@ -1,6 +1,6 @@
 """Public session bootstrap contract (ALLOW_PUBLIC_INIT).
 
-The React SPA (served at /next) has no credential before it calls
+The React SPA (served at /) has no credential before it calls
 `POST /api/session/init`, and that endpoint is what issues the cookie. So the
 bootstrap must be callable anonymously *without* weakening any other route.
 

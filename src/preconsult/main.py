@@ -1,11 +1,12 @@
-"""
-Re-exports the Reflex ASGI app for development convenience.
+"""Entry point for the served ASGI app.
 
-In production, the app is served via `reflex_app.preconsult.preconsult:api`.
-This module exists so that `uvicorn preconsult.main:app` works locally.
+The app is built by ``preconsult.host`` (a Starlette app with the API, health,
+crawler documents, legal pages and the SPA); this module exists so ASGI servers
+can use the stable ``preconsult.main:app`` target, and so Sentry is initialised
+once before the app is constructed.
 
-Exception handlers are already registered on the mounted FastAPI sub-app inside
-`reflex_app.preconsult.preconsult`, so this entrypoint only re-exports it.
+There is no second frontend host and no state socket: the React SPA is served
+from the same app at ``/``.
 """
 
 import logging
@@ -20,5 +21,4 @@ from preconsult.core.sentry import init_sentry  # noqa: E402
 if SENTRY_DSN:
     init_sentry(SENTRY_DSN)
 
-# Re-exported as the ASGI app: `uvicorn preconsult.main:app`.
-from reflex_app.preconsult.preconsult import api as app  # noqa: E402, F401
+from preconsult.host import app  # noqa: E402, F401

@@ -1,4 +1,8 @@
-"""Caching + fallback contract of the shadow SPA static mount (``/next``).
+"""Caching + fallback contract of the SPA static mount.
+
+The mount is exercised at ``/next`` in the fixtures below and at ``/`` in the
+``root_client`` fixture: after the cutover it is the root mount, and the
+semantics must be identical either way.
 
 A client-side router needs unknown *navigation* routes to fall back to
 ``index.html``, but a missing *file* must stay a 404: serving HTML for a missing

@@ -72,6 +72,14 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   under `/assets` are content-hashed + immutable, an unknown *navigation* falls back to the shell,
   and a missing *file* stays a 404. Keep the explicit scanner-probe / backend-prefix 404s — a path
   the router does not know must not be answered with HTML.
+- `web/scripts/prerender.mjs` (part of `npm run build`) writes the landing copy into `#root` of
+  **two** documents: `index.html` (en, served at `/`) and `index.pt.html` (pt, served at
+  `/?lang=pt`). The copy comes from the generated i18n contracts, and `main.tsx` removes the block
+  before mounting — React owns `#root` and there is no hydration to mismatch. **Both files are
+  documents**: `no-store`, never immutable (`SPAStaticFiles._PT_DOCUMENT`). A missing pt variant
+  falls back to English rather than 404ing the landing. The point is that `sitemap.xml` and
+  `llms.txt` advertise `/`, so a crawler (or a visitor with JS disabled) must not receive an empty
+  `#root`; `tests/e2e_spa` asserts that with JavaScript turned off.
 - The app resolves the bundle from `WEB_DIST_DIR`, then `./web/dist`, then `../web/dist`; a missing
   bundle is logged as a packaging error (path only, PHI-free) instead of becoming a silent root 404.
 - **The frontend holds no API key.** The SPA authenticates with the HttpOnly session cookie minted

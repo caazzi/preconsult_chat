@@ -21,13 +21,15 @@ COPY . .
 # Installing the project here (NOT --no-install-project) means the runtime
 # `uv run` never rebuilds/re-syncs the wheel, eliminating the ~40s of
 # `Building preconsult @ file:///app` CPU work that happened on every cold start.
-RUN uv sync --frozen
+# --locked (not --frozen): a stale uv.lock must fail the image build, not ship a
+# resolution that no longer matches pyproject.toml.
+RUN uv sync --locked
 
-# --- Stage 1b: Build the shadow SPA (web/) ---------------------------------
-# The React rewrite is served at /next from the SAME image (see preconsult.py).
-# Vite's base is /next/, so emitted asset URLs need no extra config. The web/
-# sources (incl. web/scripts and web/package-lock.json) are kept by
-# .dockerignore negations; node_modules/ is installed fresh here.
+# --- Stage 1b: Build the SPA (web/) ----------------------------------------
+# The SPA is the canonical document at / (see src/preconsult/host.py). Vite's
+# base is /, so emitted asset URLs need no extra config. The web/ sources (incl.
+# web/scripts and web/package-lock.json) are kept by .dockerignore negations;
+# node_modules/ is installed fresh here.
 WORKDIR /app/web
 RUN npm ci --no-audit --no-fund
 # Sync the generated contracts from the Python source of truth, then build.
@@ -74,7 +76,7 @@ WORKDIR /app
 # the worker drop Cloud Run proxy connections with "Invalid HTTP request
 # received" / 502 protocol errors, while the identical command serves 200 on
 # localhost and the direct venv invocation serves cleanly behind the proxy.
-# `uv sync --frozen` in the builder bakes the project + venv, so startup stays
+# `uv sync --locked` in the builder bakes the project + venv, so startup stays
 # fast (seconds) with no runtime rebuild. 'exec' ensures signals (like SIGTERM
 # for scale-down) correctly reach gunicorn.
 CMD ["sh", "-c", "exec /app/.venv/bin/gunicorn preconsult.main:app --bind 0.0.0.0:${PORT:-8080} --worker-class uvicorn.workers.UvicornWorker --workers 1 --threads 4"]

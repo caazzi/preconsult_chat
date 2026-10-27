@@ -67,10 +67,21 @@ build-backend = "hatchling.build"
 #   pillow   GHSA-5x8w-8jj5-q52h + 4 more (image-decode memory corruption)
 # Pillow only arrives via reportlab (we never decode images), but the upgrade is
 # free and keeps the alert list honest.
+#   urllib3  GHSA-vxq7-64xx-v4gw (unbounded stream/read_chunked buffering)
+#   langchain-core GHSA-pjwx-r37v-7724 (unsafe deserialization <= 0.3.84)
+#
+# Deliberately NOT floor-able here: the pyarrow use-after-free
+# (GHSA-rgxp-2hwp-jwgg) is only patched in pyarrow 23.0.1, but
+# langchain-google-vertexai 2.1.2 pins pyarrow>=19.0.1,<22. It disappears with
+# the 3.x provider migration, which drops pyarrow from the tree entirely
+# instead of bumping it (that migration must move langchain-aws in lockstep,
+# since both providers share the universal lock).
 constraint-dependencies = [
     "certifi>=2026.10.18",
     "anyio>=4.14.2",
     "pillow>=13.0.0",
+    "urllib3>=2.8.0",
+    "langchain-core>=0.3.85",
 ]
 
 [tool.pytest.ini_options]

@@ -300,20 +300,30 @@ async def test_anonymous_funnel_event_counts_in_memory_not_redis(mock_get_redis)
     mock_get_redis.assert_not_called()
 
 
-def test_every_funnel_key_is_assigned_to_exactly_one_tier():
+def test_funnel_keys_are_partitioned_and_exported():
     """A new key must pick a tier deliberately, not default into Redis."""
-    from typing import get_args
+    import json
+    from pathlib import Path
 
-    from preconsult.api.endpoints import (
+    from preconsult.core.analytics import (
         ANONYMOUS_FUNNEL_EVENTS,
+        FUNNEL_EVENTS,
         SESSION_FUNNEL_EVENTS,
-        FunnelEvent,
     )
 
-    assert set(get_args(FunnelEvent)) == set(ANONYMOUS_FUNNEL_EVENTS) | set(
+    assert set(FUNNEL_EVENTS) == set(ANONYMOUS_FUNNEL_EVENTS) | set(
         SESSION_FUNNEL_EVENTS
     )
     assert not set(ANONYMOUS_FUNNEL_EVENTS) & set(SESSION_FUNNEL_EVENTS)
+
+    # The SPA types itself from this file, so it is part of the contract.
+    contract = json.loads(
+        (Path(__file__).resolve().parents[1] / "contracts" / "funnel_events.json").read_text()
+    )
+    assert contract == {
+        "anonymous": list(ANONYMOUS_FUNNEL_EVENTS),
+        "session": list(SESSION_FUNNEL_EVENTS),
+    }
 
 
 @pytest.mark.asyncio

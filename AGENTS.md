@@ -166,8 +166,9 @@ outages), so Redis must be reserved for actual patient sessions:
   `GET /health/metrics`) and logged, because no session exists until the lifestyle step — they must
   never write to Redis. The three session steps stay gated on a real `session_id`
   (`logEvent` in `web/src/api/analytics.ts`), so bots that never start the flow cannot reach the
-  analytics write path. Keep both: the server-side split (`ANONYMOUS_FUNNEL_EVENTS` + the
-  `FunnelEvent` whitelist in `endpoints.py`) and the client gate.
+  analytics write path. Keep both: the server-side split and the client gate. The key lists
+  live in `core/analytics.py` and are exported to `contracts/funnel_events.json` →
+  `web/src/contracts/generated/funnel_events.ts`; never hand-edit the keys on either side.
 - **A conservative bot gate** (`BotGateMiddleware` in `src/preconsult/site/middleware.py`) blocks
   scanner/CLI user-agents on the Redis-backed `/api/*` paths with a fast `403` before storage.
   Browsers pass through; the gate deliberately covers `/api/*` only (the SPA document and static

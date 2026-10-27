@@ -12,11 +12,11 @@ import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
 from ipaddress import ip_address
-from typing import Annotated, Literal
+from typing import Annotated
 from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
 from fastapi.responses import StreamingResponse, Response, JSONResponse
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 from langchain_core.runnables import Runnable
 
 from preconsult.core.config import (
@@ -27,6 +27,7 @@ from preconsult.core.config import (
     SESSION_COOKIE_NAME,
     SESSION_COOKIE_SECURE,
 )
+from preconsult.core.analytics import ANONYMOUS_FUNNEL_EVENTS, FUNNEL_EVENTS
 from preconsult.core.observability import (
     new_request_id,
     log_event,
@@ -619,38 +620,19 @@ async def generate_pdf_endpoint(request: GeneratePdfRequest, fastapi_req: Reques
     return Response(content=pdf_bytes, media_type='application/pdf', headers=headers)
 
 
-# Pre-session funnel steps happen before the session exists (it is created at
-# the lifestyle step), so they can never be keyed by one. They are counted in
-# memory and logged, never written to Redis: the free-tier quota is reserved for
-# real patient sessions. The remaining keys keep the 7-day Redis funnel.
-ANONYMOUS_FUNNEL_EVENTS = (
-    "intake_started",
-    "demographics_submitted",
-    "complaint_submitted",
-    "history_submitted",
-)
-SESSION_FUNNEL_EVENTS = (
-    "lifestyle_submitted",
-    "summary_generated",
-    "pdf_downloaded",
-)
-
-# The whitelist is the contract in docs/analytics-contract.md. It also bounds
-# the Redis hash fields: an unvalidated `str` let any client grow the free-tier
-# hash with invented keys.
-FunnelEvent = Literal[
-    "intake_started",
-    "demographics_submitted",
-    "complaint_submitted",
-    "history_submitted",
-    "lifestyle_submitted",
-    "summary_generated",
-    "pdf_downloaded",
-]
-
-
 class AnalyticsEventRequest(BaseModel):
-    event: FunnelEvent
+    # The whitelist comes from core/analytics.py, which is also what
+    # scripts/export_contracts.py hands to the SPA - one list, not three. It
+    # also bounds the Redis hash fields: a bare `str` let any client grow the
+    # free-tier hash with invented keys.
+    event: str
+
+    @field_validator("event")
+    @classmethod
+    def _known_event(cls, value: str) -> str:
+        if value not in FUNNEL_EVENTS:
+            raise ValueError("unknown funnel event")
+        return value
 
 
 @router.post(

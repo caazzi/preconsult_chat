@@ -10,22 +10,9 @@
 //     early exits cannot reach the write path.
 
 import { apiFetch } from "./client";
+import { SESSION_FUNNEL_EVENTS, type FunnelEvent } from "../contracts/generated/funnel_events";
 
-export type FunnelEvent =
-  | "intake_started"
-  | "demographics_submitted"
-  | "complaint_submitted"
-  | "history_submitted"
-  | "lifestyle_submitted"
-  | "summary_generated"
-  | "pdf_downloaded";
-
-/** Events recorded in Redis, and therefore gated on a real session. */
-const SESSION_GATED_EVENTS: readonly FunnelEvent[] = [
-  "lifestyle_submitted",
-  "summary_generated",
-  "pdf_downloaded",
-];
+export type { FunnelEvent };
 
 /**
  * Fire-and-forget funnel event. Session-gated keys are a no-op without a
@@ -33,7 +20,10 @@ const SESSION_GATED_EVENTS: readonly FunnelEvent[] = [
  * analytics must not break the user flow.
  */
 export function logEvent(event: FunnelEvent, sessionId = ""): void {
-  if (SESSION_GATED_EVENTS.includes(event) && !sessionId) return;
+  // Only the Redis-backed tier needs a session; the pre-session steps are
+  // counted in memory by the backend.
+  if ((SESSION_FUNNEL_EVENTS as readonly string[]).includes(event) && !sessionId)
+    return;
   void apiFetch("/analytics/event", {
     method: "POST",
     body: JSON.stringify({ event }),

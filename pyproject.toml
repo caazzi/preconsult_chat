@@ -10,7 +10,7 @@ dependencies = [
     # Only the LangChain *provider* package is used: the code imports
     # `langchain_core` (its dependency) and never the `langchain` meta-package,
     # which was pulling in sqlalchemy + langchain-text-splitters for nothing.
-    "langchain-google-vertexai==2.1.2",
+    "langchain-google-vertexai==3.2.5",
     "pydantic==2.14.1",
     "reportlab==5.1.0",
     # Plain uvicorn instead of `uvicorn[standard]`: the performance pieces
@@ -35,7 +35,7 @@ dependencies = [
 #   uv sync --locked --extra bedrock
 # CI installs --all-extras, so the Bedrock path keeps its tests.
 bedrock = [
-    "langchain-aws==0.2.35",
+    "langchain-aws==1.9.1",
 ]
 test = [
     "pytest",
@@ -68,20 +68,20 @@ build-backend = "hatchling.build"
 # Pillow only arrives via reportlab (we never decode images), but the upgrade is
 # free and keeps the alert list honest.
 #   urllib3  GHSA-vxq7-64xx-v4gw (unbounded stream/read_chunked buffering)
-#   langchain-core GHSA-pjwx-r37v-7724 (unsafe deserialization <= 0.3.84)
+#   langchain-core  GHSA-2g6r-c272-w58r + GHSA-qh6h-p6c9-ff54 (patched 1.2.22)
 #
-# Deliberately NOT floor-able here: the pyarrow use-after-free
-# (GHSA-rgxp-2hwp-jwgg) is only patched in pyarrow 23.0.1, but
-# langchain-google-vertexai 2.1.2 pins pyarrow>=19.0.1,<22. It disappears with
-# the 3.x provider migration, which drops pyarrow from the tree entirely
-# instead of bumping it (that migration must move langchain-aws in lockstep,
-# since both providers share the universal lock).
+# Both provider packages are pinned to the langchain-core 1.x line and MUST move
+# together: they share one universal lock (the `bedrock` extra is resolved
+# alongside the runtime deps), so `langchain-google-vertexai` 3.x cannot be
+# installed while `langchain-aws` is still on 0.x. The 3.x Vertex provider also
+# drops `pyarrow` (137 MB) and `numpy` for it, which is why the pyarrow
+# GHSA-rgxp-2hwp-jwgg alert disappears here instead of being floored.
 constraint-dependencies = [
     "certifi>=2026.10.18",
     "anyio>=4.14.2",
     "pillow>=13.0.0",
     "urllib3>=2.8.0",
-    "langchain-core>=0.3.85",
+    "langchain-core>=1.6.10",
 ]
 
 [tool.pytest.ini_options]

@@ -55,6 +55,20 @@ def reset_counters() -> None:
         _counters.clear()
 
 
+def record_funnel_step(event: str) -> None:
+    """Count one anonymous funnel step and emit its structured log line.
+
+    Pre-session steps (landing -> history) happen before the session exists, so
+    they can never be keyed by session. They are counted in RAM — exposed read-only
+    at ``GET /health/metrics`` as ``funnel.<event>`` — and emitted as one log line
+    for persistent history, deliberately without a Redis write: Redis is reserved
+    for real patient sessions. Both artefacts are PHI-free (a stable event name
+    and a counter, nothing else).
+    """
+    _inc(f"funnel.{event}")
+    log_event(logging.INFO, "funnel.step", step=event)
+
+
 def new_request_id() -> str:
     """Short, random, correlatable request id (16 chars, URL-safe, no PHI)."""
     return secrets.token_urlsafe(9)

@@ -284,12 +284,50 @@ async def test_analytics_event_endpoint(mock_get_redis):
     mock_get_redis.return_value = mock_client
 
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post("/api/analytics/event", json={"event": "test_event"}, headers=HEADERS)
+        resp = await client.post("/api/analytics/event", json={"event": "lifestyle_submitted"}, headers=HEADERS)
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
     expected_key = f"analytics:{date.today().isoformat()}"
-    mock_client.hincrby.assert_called_once_with(expected_key, "test_event", 1)
+    mock_client.hincrby.assert_called_once_with(expected_key, "lifestyle_submitted", 1)
     mock_client.expire.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("preconsult.api.endpoints.get_redis")
+async def test_anonymous_funnel_event_counts_in_memory_not_redis(mock_get_redis):
+    """Pre-session steps have no session to key on and must not spend Redis."""
+    from preconsult.core.observability import snapshot_counters
+
+    before = snapshot_counters().get("funnel.intake_started", 0)
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/analytics/event", json={"event": "intake_started"}, headers=HEADERS)
+    assert resp.status_code == 200
+    assert snapshot_counters().get("funnel.intake_started", 0) == before + 1
+    mock_get_redis.assert_not_called()
+
+
+def test_every_funnel_key_is_assigned_to_exactly_one_tier():
+    """A new key must pick a tier deliberately, not default into Redis."""
+    from typing import get_args
+
+    from preconsult.api.endpoints import (
+        ANONYMOUS_FUNNEL_EVENTS,
+        SESSION_FUNNEL_EVENTS,
+        FunnelEvent,
+    )
+
+    assert set(get_args(FunnelEvent)) == set(ANONYMOUS_FUNNEL_EVENTS) | set(
+        SESSION_FUNNEL_EVENTS
+    )
+    assert not set(ANONYMOUS_FUNNEL_EVENTS) & set(SESSION_FUNNEL_EVENTS)
+
+
+@pytest.mark.asyncio
+async def test_unknown_analytics_event_is_rejected():
+    """The whitelist bounds the Redis hash fields to the documented keys."""
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/api/analytics/event", json={"event": "made_up_key"}, headers=HEADERS)
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -500,7 +538,7 @@ async def test_analytics_event_still_ok_when_redis_down():
         import preconsult.services.session_service as svc
         svc._redis_available = False
         async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/api/analytics/event", json={"event": "test"}, headers=HEADERS)
+            resp = await client.post("/api/analytics/event", json={"event": "summary_generated"}, headers=HEADERS)
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok"}
     finally:

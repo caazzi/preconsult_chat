@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import date, timedelta
 from ipaddress import ip_address
-from typing import Annotated
+from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
 from fastapi.responses import StreamingResponse, Response, JSONResponse
@@ -26,7 +26,12 @@ from preconsult.core.config import (
     SESSION_COOKIE_NAME,
     SESSION_COOKIE_SECURE,
 )
-from preconsult.core.observability import new_request_id, log_event, timed
+from preconsult.core.observability import (
+    new_request_id,
+    log_event,
+    record_funnel_step,
+    timed,
+)
 from preconsult.core.parsing import has_emergency_red_flag
 from preconsult.core.session_auth import (
     secure_compare,
@@ -601,8 +606,38 @@ async def generate_pdf_endpoint(request: GeneratePdfRequest, fastapi_req: Reques
     return Response(content=pdf_bytes, media_type='application/pdf', headers=headers)
 
 
+# Pre-session funnel steps happen before the session exists (it is created at
+# the lifestyle step), so they can never be keyed by one. They are counted in
+# memory and logged, never written to Redis: the free-tier quota is reserved for
+# real patient sessions. The remaining keys keep the 7-day Redis funnel.
+ANONYMOUS_FUNNEL_EVENTS = (
+    "intake_started",
+    "demographics_submitted",
+    "complaint_submitted",
+    "history_submitted",
+)
+SESSION_FUNNEL_EVENTS = (
+    "lifestyle_submitted",
+    "summary_generated",
+    "pdf_downloaded",
+)
+
+# The whitelist is the contract in docs/analytics-contract.md. It also bounds
+# the Redis hash fields: an unvalidated `str` let any client grow the free-tier
+# hash with invented keys.
+FunnelEvent = Literal[
+    "intake_started",
+    "demographics_submitted",
+    "complaint_submitted",
+    "history_submitted",
+    "lifestyle_submitted",
+    "summary_generated",
+    "pdf_downloaded",
+]
+
+
 class AnalyticsEventRequest(BaseModel):
-    event: str
+    event: FunnelEvent
 
 
 @router.post(
@@ -610,13 +645,19 @@ class AnalyticsEventRequest(BaseModel):
     tags=[TAG_ANALYTICS],
     summary="Record an anonymous funnel analytics event",
     description=(
-        "Increments a counter for an anonymous funnel event key. Best-effort: never raises on "
-        "Redis failure. Emitting clients gate events to real sessions (analytics keys documented "
-        "in docs/analytics-contract.md)."
+        "Counts one funnel event key. Pre-session keys are counted in memory and logged "
+        "(no Redis, no session required); session keys increment the 7-day Redis funnel. "
+        "Best-effort: never raises on Redis failure. Keys are documented in "
+        "docs/analytics-contract.md."
     ),
     responses=_AUTH_FORBIDDEN,
 )
 async def log_analytics_event(request: AnalyticsEventRequest):
+    if request.event in ANONYMOUS_FUNNEL_EVENTS:
+        # No Redis access on purpose: no session exists yet, and every visit
+        # would otherwise burn free-tier quota before the patient needs one.
+        record_funnel_step(request.event)
+        return {"status": "ok"}
     try:
         client = get_redis()
         today_str = date.today().isoformat()

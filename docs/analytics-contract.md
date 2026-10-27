@@ -26,16 +26,28 @@ in the wizard provider (`web/src/wizard/WizardProvider.tsx`).
 | `summary_generated` | User submits the Q&A to build the summary. |
 | `pdf_downloaded` | User downloads the PDF report. |
 
-## Real-session gating (privacy/Redis budget)
+## Two storage tiers (privacy / Redis budget)
 
-- **`logEvent` is a no-op until a real session exists** (empty `sessionId` returns
-  immediately). Bots / early-exit visitors that never start the session flow must
-  not reach the analytics Redis write path — this protects the serverless Redis
-  quota and the zero-persistence privacy model.
-- The gating rule lives in `web/src/api/analytics.ts::logEvent` and is documented
-  in `AGENTS.md` ("Analytics are gated on a real session").
-- A rewrite must preserve this: **never fire a funnel event without a
-  `session_id`.**
+The session is created at the **lifestyle** step, so the four steps before it have
+no `session_id` to key on. Splitting by tier is what makes the top of the funnel
+observable at all — a single "no session, no event" rule silently zeroed the
+first four rungs.
+
+| Step keys | Recorded in | Needs a session? |
+|---|---|---|
+| `intake_started`, `demographics_submitted`, `complaint_submitted`, `history_submitted` | in-memory counter `funnel.<key>` (read via `GET /health/metrics`) + one `funnel.step` log line | no |
+| `lifestyle_submitted`, `summary_generated`, `pdf_downloaded` | Redis hash `analytics:<date>` (`GET /api/analytics/stats`) | yes |
+
+- The split is enforced **server-side** (`ANONYMOUS_FUNNEL_EVENTS` in
+  `src/preconsult/api/endpoints.py`), and the request model is a `Literal`
+  whitelist — a client cannot invent a key or grow the free-tier Redis hash.
+- Pre-session steps **never touch Redis**: the serverless quota stays reserved for
+  real patient sessions.
+- `logEvent` (`web/src/api/analytics.ts`) still refuses to send a **session** key
+  without a `session_id`, so bots and early exits cannot reach the write path.
+- Both tiers are PHI-free: a stable event name and a counter, nothing else.
+- `/health/metrics` counters are per-worker and reset when the revision restarts;
+  the `funnel.step` log lines are the persistent history.
 
 ## Mapping to `GET /api/analytics/stats`
 
@@ -51,8 +63,9 @@ The 7-day stats endpoint aggregates daily counters by the event key, e.g.
 | `summary` | `summary_generated` |
 | `pdf` | `pdf_downloaded` |
 
-> `intake_started` is recorded but does not appear as its own funnel field
-> (the funnel starts at `demographics`). `date` is the bucket's ISO date.
+> `intake_started` is recorded (in memory / logs, see the tiers above) but does
+> not appear as its own field here — the 7-day Redis funnel starts at
+> `demographics`. `date` is the bucket's ISO date.
 
 ## Sources of truth
 

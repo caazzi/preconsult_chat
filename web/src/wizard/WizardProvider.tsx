@@ -94,6 +94,7 @@ type WizardContextValue = {
   removeMedication: (idx: number) => void;
   setAnswer: (idx: number, value: string) => void;
   clearError: () => void;
+  startIntake: () => void;
   goBack: () => void;
   goToComplaint: () => void;
   goToHistory: () => void;
@@ -212,32 +213,37 @@ export function WizardProvider({
     setError("");
   }, []);
 
+  const startIntake = useCallback(() => {
+    logEvent("intake_started");
+    setStep(STEP_DEMOGRAPHICS);
+  }, []);
+
+  // The funnel event fires only after validation passes, and outside the state
+  // updater: a side effect inside setData's updater would run twice under
+  // StrictMode and double-count the step.
   const goToComplaint = useCallback(() => {
-    setData((prev) => {
-      if (!prev.gender.trim()) {
-        setError(t.err_gender);
-        return prev;
-      }
-      setError("");
-      setStep(STEP_COMPLAINT);
-      return prev;
-    });
-  }, [t]);
+    if (!data.gender.trim()) {
+      setError(t.err_gender);
+      return;
+    }
+    setError("");
+    logEvent("demographics_submitted");
+    setStep(STEP_COMPLAINT);
+  }, [data.gender, t]);
 
   const goToHistory = useCallback(() => {
-    setData((prev) => {
-      if (!prev.specialist.trim() || !prev.chiefComplaint.trim()) {
-        setError(t.err_chief_complaint);
-        return prev;
-      }
-      setError("");
-      setStep(STEP_HISTORY);
-      return prev;
-    });
-  }, [t]);
+    if (!data.specialist.trim() || !data.chiefComplaint.trim()) {
+      setError(t.err_chief_complaint);
+      return;
+    }
+    setError("");
+    logEvent("complaint_submitted");
+    setStep(STEP_HISTORY);
+  }, [data.specialist, data.chiefComplaint, t]);
 
   const goToLifestyle = useCallback(() => {
     setError("");
+    logEvent("history_submitted");
     setStep(STEP_LIFESTYLE);
   }, []);
 
@@ -355,6 +361,7 @@ export function WizardProvider({
       removeMedication,
       setAnswer,
       clearError,
+      startIntake,
       goBack,
       goToComplaint,
       goToHistory,
@@ -384,6 +391,7 @@ export function WizardProvider({
       removeMedication,
       setAnswer,
       clearError,
+      startIntake,
       goBack,
       goToComplaint,
       goToHistory,

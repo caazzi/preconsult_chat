@@ -1,9 +1,13 @@
 // Funnel analytics. Event keys are pinned by docs/analytics-contract.md and
-// must match the backend aggregation exactly.
+// must match the backend whitelist exactly.
 //
-// PRIVACY/BUDGET GATE: never emit an event without an active session id. Bots
-// and early-exit visitors must not reach the analytics Redis write path (this
-// preserves the free-tier Upstash quota and the zero-persistence posture).
+// TWO TIERS, and the difference is a Redis-budget decision:
+//   - Pre-session steps (intake_started .. history_submitted) happen before a
+//     session exists. The server counts them in RAM and logs them, so they are
+//     allowed without a session id and never touch Redis.
+//   - Session steps (lifestyle_submitted, summary_generated, pdf_downloaded) are
+//     the 7-day Redis funnel and stay gated on a real session, so bots and
+//     early exits cannot reach the write path.
 
 import { apiFetch } from "./client";
 
@@ -16,12 +20,20 @@ export type FunnelEvent =
   | "summary_generated"
   | "pdf_downloaded";
 
+/** Events recorded in Redis, and therefore gated on a real session. */
+const SESSION_GATED_EVENTS: readonly FunnelEvent[] = [
+  "lifestyle_submitted",
+  "summary_generated",
+  "pdf_downloaded",
+];
+
 /**
- * Fire-and-forget funnel event. No-op when `sessionId` is empty. Never throws —
+ * Fire-and-forget funnel event. Session-gated keys are a no-op without a
+ * `sessionId`; pre-session steps are allowed anonymously. Never throws —
  * analytics must not break the user flow.
  */
-export function logEvent(event: FunnelEvent, sessionId: string): void {
-  if (!sessionId) return;
+export function logEvent(event: FunnelEvent, sessionId = ""): void {
+  if (SESSION_GATED_EVENTS.includes(event) && !sessionId) return;
   void apiFetch("/analytics/event", {
     method: "POST",
     body: JSON.stringify({ event }),

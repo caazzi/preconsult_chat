@@ -77,6 +77,16 @@ async function advanceToQuestions(user: ReturnType<typeof userEvent.setup>) {
   await generateQuestions(user);
 }
 
+/** Event names posted to /api/analytics/event, in order. */
+function postedEvents(fetchSpy: ReturnType<typeof mockApi>): string[] {
+  return fetchSpy.mock.calls
+    .filter(([url]) => String(url).includes("/api/analytics/event"))
+    .map((call) => {
+      const init = call[1] as RequestInit;
+      return (JSON.parse(String(init.body)) as { event: string }).event;
+    });
+}
+
 describe("wizard flow (mocked backend)", () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -201,5 +211,33 @@ describe("wizard flow (mocked backend)", () => {
     expect(
       screen.getByRole("button", { name: /ask different questions/i }),
     ).toBeInTheDocument();
+  });
+
+  it("records every step before a session exists", async () => {
+    // Regression guard: the session is created at the lifestyle step, so a
+    // "no session, no event" rule silently zeroed the top of the funnel.
+    const fetchSpy = mockApi();
+    const user = userEvent.setup();
+    window.history.pushState({}, "", "/?lang=en");
+    render(<App />);
+
+    await startIntake(user);
+    expect(postedEvents(fetchSpy)).toEqual(["intake_started"]);
+
+    await fillDemographicsAndComplaint(user);
+    expect(postedEvents(fetchSpy)).toEqual([
+      "intake_started",
+      "demographics_submitted",
+      "complaint_submitted",
+    ]);
+    // Still no session: those three went to the anonymous (in-memory) tier.
+    expect(
+      fetchSpy.mock.calls.some(([url]) =>
+        String(url).includes("/api/session/init"),
+      ),
+    ).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /^continue$/i }));
+    expect(postedEvents(fetchSpy)).toContain("history_submitted");
   });
 });

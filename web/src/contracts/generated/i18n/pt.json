@@ -106,7 +106,6 @@
   "privacy_badge": "🔒 Privacidade Total: Sem cadastro. Seus dados são apagados ao fechar.",
   "privacy_badge_landing": "🔒 Sem cadastro. Seus dados são apagados ao fechar.",
   "privacy_step_note": "🔒 Suas respostas são temporárias e privadas",
-  "privacy_text": "O PreConsult está comprometido com a proteção da sua privacidade. Não armazenamos, vendemos ou compartilhamos nenhuma informação pessoal de saúde que você inserir. Todos os dados são processados temporariamente em memória e permanentemente excluídos quando você fecha a aba do navegador. Não utilizamos criação de conta, cookies de rastreamento ou identificadores persistentes. Usamos o Claude (Haiku) da Anthropic hospedado na AWS Bedrock para gerar perguntas clínicas com base nas informações fornecidas, mas nenhum dado da conversa é retido após o término da sessão.",
   "privacy_title": "Política de Privacidade",
   "question_counter": "Pergunta {current} de {total}",
   "regenerate_questions": "Gerar outras perguntas",

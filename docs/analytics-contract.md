@@ -38,9 +38,13 @@ first four rungs.
 | `intake_started`, `demographics_submitted`, `complaint_submitted`, `history_submitted` | in-memory counter `funnel.<key>` (read via `GET /health/metrics`) + one `funnel.step` log line | no |
 | `lifestyle_submitted`, `summary_generated`, `pdf_downloaded` | Redis hash `analytics:<date>` (`GET /api/analytics/stats`) | yes |
 
-- The split is enforced **server-side** (`ANONYMOUS_FUNNEL_EVENTS` in
-  `src/preconsult/api/endpoints.py`), and the request model is a `Literal`
-  whitelist — a client cannot invent a key or grow the free-tier Redis hash.
+- The key lists live in **`src/preconsult/core/analytics.py`** and are
+  generated outwards: `contracts/funnel_events.json` →
+  `web/src/contracts/generated/funnel_events.ts` (typed). Do not hand-edit the
+  keys here or in the SPA — change the Python tuple and regenerate.
+- The split is enforced **server-side**: the request model validates against
+  `FUNNEL_EVENTS`, so a client cannot invent a key or grow the free-tier Redis
+  hash.
 - Pre-session steps **never touch Redis**: the serverless quota stays reserved for
   real patient sessions.
 - `logEvent` (`web/src/api/analytics.ts`) still refuses to send a **session** key
@@ -71,6 +75,8 @@ The 7-day stats endpoint aggregates daily counters by the event key, e.g.
 
 - Emitters: `web/src/api/analytics.ts` (`logEvent`, keyed by the `FunnelEvent`
   union) and its call sites in `web/src/wizard/WizardProvider.tsx`
+- Key list: `src/preconsult/core/analytics.py` (exported to
+  `contracts/funnel_events.json`)
 - Ingest: `src/preconsult/api/endpoints.py::log_analytics_event` +
   `AnalyticsEventRequest`
 - Aggregation: `src/preconsult/api/endpoints.py::get_analytics_stats`

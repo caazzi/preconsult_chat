@@ -9,13 +9,14 @@ import asyncio
 import html
 import json
 import logging
+from dataclasses import dataclass
 from datetime import date, timedelta
 from ipaddress import ip_address
-from typing import Annotated, Literal
+from typing import Annotated
 from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
 from fastapi.responses import StreamingResponse, Response, JSONResponse
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 from langchain_core.runnables import Runnable
 
 from preconsult.core.config import (
@@ -26,6 +27,7 @@ from preconsult.core.config import (
     SESSION_COOKIE_NAME,
     SESSION_COOKIE_SECURE,
 )
+from preconsult.core.analytics import ANONYMOUS_FUNNEL_EVENTS, FUNNEL_EVENTS
 from preconsult.core.observability import (
     new_request_id,
     log_event,
@@ -401,6 +403,102 @@ async def init_session(request: SessionInitRequest, fastapi_req: Request):
     _set_session_cookie(response, session_id)
     return response
 
+@dataclass(frozen=True)
+class _StreamSession:
+    """Everything both question streams need once auth/limit/session pass."""
+
+    session_id: str
+    session_data: dict
+    lang: str
+    err_msg: str
+    request_id: str
+
+
+async def _open_stream(session_id: str, fastapi_req: Request) -> _StreamSession:
+    """Rate limit, load the session and enforce cookie ownership.
+
+    Shared by both stream endpoints so the order (limit before storage) and the
+    stable error codes cannot drift between them.
+    """
+    request_id = new_request_id()
+    ip = get_client_ip(fastapi_req)
+    if not await check_rate_limit(f"stream:{ip}", limit=5, window=60):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait a moment.")
+
+    session_data = await get_session(session_id)
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Session expired or invalid")
+    _require_session_ownership(fastapi_req, session_id)
+
+    lang = session_data.get("lang", "en")
+    err_msg = (
+        "⚠️ ERROR: Service temporarily unavailable. Please try again."
+        if lang == "en"
+        else "⚠️ ERRO: Serviço temporariamente indisponível. Tente novamente."
+    )
+    return _StreamSession(session_id, session_data, lang, err_msg, request_id)
+
+
+def _emergency_response_if_flagged(
+    ctx: _StreamSession,
+    complaint: str,
+    detail: str,
+    event: str,
+) -> StreamingResponse | None:
+    """Deterministic input-side red-flag gate.
+
+    Never rely solely on the model to signal an emergency: if the patient's own
+    words trip a red flag, warn immediately and never call the LLM. Kept in one
+    place because a fix landing in one stream and not the other would be a
+    clinical safety regression, not a style issue.
+    """
+    if has_emergency_red_flag(complaint, detail):
+        return _emergency_stream_response(ctx.lang, event, ctx.request_id)
+    return None
+
+
+def _question_stream(
+    ctx: _StreamSession, chain: Runnable, *, topic: str
+) -> StreamingResponse:
+    """SSE response streaming the interview questions for this session.
+
+    ``topic`` is the log-event namespace (``stream.initial`` / ``stream.interview``);
+    the event payload is identical for both endpoints.
+    """
+
+    async def event_generator():
+        streamed = 0
+        structured = False
+        try:
+            async for event in stream_interview_questions(ctx.session_data, ctx.lang, chain):
+                if event.kind == "questions":
+                    structured = True
+                    payload = {"type": "questions", "questions": event.value}
+                    yield f"data: {json.dumps(payload)}\n\n"
+                else:
+                    streamed += 1
+                    yield f"data: {json.dumps(event.value)}\n\n"
+            log_event(
+                logging.INFO,
+                f"{topic}.ok",
+                request_id=ctx.request_id,
+                session_id_short=ctx.session_id[:8],
+                chunks=streamed,
+                structured=structured,
+            )
+        except Exception as e:
+            logging.error(f"Error during {topic} stream: {e}", exc_info=True)
+            log_event(
+                logging.ERROR,
+                f"{topic}.error",
+                request_id=ctx.request_id,
+                error_type=type(e).__name__,
+            )
+            yield f"data: {json.dumps(' ' + ctx.err_msg)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @router.post(
     "/initial-questions-stream",
     tags=[TAG_STREAM],
@@ -417,74 +515,31 @@ async def get_initial_questions_streamed(
     fastapi_req: Request,
     chain: Runnable = Depends(get_interview_chain)
 ):
-    """ Streams interview questions based on chief complaint. """
-    request_id = new_request_id()
-    ip = get_client_ip(fastapi_req)
-    if not await check_rate_limit(f"stream:{ip}", limit=5, window=60):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait a moment.")
-
-    session_data = await get_session(request.session_id)
-    if not session_data:
-        raise HTTPException(status_code=404, detail="Session expired or invalid")
-    _require_session_ownership(fastapi_req, request.session_id)
+    """Streams interview questions based on chief complaint."""
+    ctx = await _open_stream(request.session_id, fastapi_req)
 
     sanitized_complaint = _sanitize_input(request.chief_complaint)
     await update_session(request.session_id, {"chief_complaint": sanitized_complaint})
-    session_data["chief_complaint"] = sanitized_complaint
-    
-    lang = session_data.get("lang", "en")
-    err_msg = (
-        "⚠️ ERROR: Service temporarily unavailable. Please try again."
-        if lang == "en"
-        else "⚠️ ERRO: Serviço temporariamente indisponível. Tente novamente."
-    )
+    ctx.session_data["chief_complaint"] = sanitized_complaint
 
-    # Deterministic input-side red-flag gate: never rely solely on the model to
-    # signal an emergency. If the patient's own description trips a red flag,
-    # warn immediately without calling the LLM.
-    if has_emergency_red_flag(sanitized_complaint, session_data.get("complaint_detail", "")):
-        return _emergency_stream_response(lang, "stream.initial.emergency_input", request_id)
+    emergency = _emergency_response_if_flagged(
+        ctx,
+        sanitized_complaint,
+        ctx.session_data.get("complaint_detail", ""),
+        "stream.initial.emergency_input",
+    )
+    if emergency is not None:
+        return emergency
 
     log_event(
         logging.INFO,
         "stream.initial.start",
-        request_id=request_id,
-        session_id_short=request.session_id[:8],
-        lang=lang,
+        request_id=ctx.request_id,
+        session_id_short=ctx.session_id[:8],
+        lang=ctx.lang,
         complaint_len=len(sanitized_complaint),
     )
-
-    async def event_generator():
-        streamed = 0
-        structured = False
-        try:
-            async for event in stream_interview_questions(session_data, lang, chain):
-                if event.kind == "questions":
-                    structured = True
-                    payload = {"type": "questions", "questions": event.value}
-                    yield f"data: {json.dumps(payload)}\n\n"
-                else:
-                    streamed += 1
-                    yield f"data: {json.dumps(event.value)}\n\n"
-            log_event(
-                logging.INFO,
-                "stream.initial.ok",
-                request_id=request_id,
-                session_id_short=request.session_id[:8],
-                chunks=streamed,
-                structured=structured,
-            )
-        except Exception as e:
-            logging.error(f"Error during streaming initial questions: {e}", exc_info=True)
-            log_event(
-                logging.ERROR,
-                "stream.initial.error",
-                request_id=request_id,
-                error_type=type(e).__name__,
-            )
-            yield f"data: {json.dumps(' ' + err_msg)}\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return _question_stream(ctx, chain, topic="stream.initial")
 
 @router.post(
     "/interview-questions-stream",
@@ -503,66 +558,25 @@ async def get_interview_questions_streamed(
     chain: Runnable = Depends(get_interview_chain)
 ):
     """Streams targeted interview questions based on full form context. Single LLM call."""
-    request_id = new_request_id()
-    ip = get_client_ip(fastapi_req)
-    if not await check_rate_limit(f"stream:{ip}", limit=5, window=60):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait a moment.")
+    ctx = await _open_stream(request.session_id, fastapi_req)
 
-    session_data = await get_session(request.session_id)
-    if not session_data:
-        raise HTTPException(status_code=404, detail="Session expired or invalid")
-    _require_session_ownership(fastapi_req, request.session_id)
-
-    lang = session_data.get("lang", "en")
-    err_msg = (
-        "⚠️ ERROR: Service temporarily unavailable. Please try again."
-        if lang == "en"
-        else "⚠️ ERRO: Serviço temporariamente indisponível. Tente novamente."
+    emergency = _emergency_response_if_flagged(
+        ctx,
+        ctx.session_data.get("chief_complaint", ""),
+        ctx.session_data.get("complaint_detail", ""),
+        "stream.interview.emergency_input",
     )
-
-    # Deterministic input-side red-flag gate (see initial-questions-stream).
-    if has_emergency_red_flag(session_data.get("chief_complaint", ""), session_data.get("complaint_detail", "")):
-        return _emergency_stream_response(lang, "stream.interview.emergency_input", request_id)
+    if emergency is not None:
+        return emergency
 
     log_event(
         logging.INFO,
         "stream.interview.start",
-        request_id=request_id,
-        session_id_short=request.session_id[:8],
-        lang=lang,
+        request_id=ctx.request_id,
+        session_id_short=ctx.session_id[:8],
+        lang=ctx.lang,
     )
-
-    async def event_generator():
-        streamed = 0
-        structured = False
-        try:
-            async for event in stream_interview_questions(session_data, lang, chain):
-                if event.kind == "questions":
-                    structured = True
-                    payload = {"type": "questions", "questions": event.value}
-                    yield f"data: {json.dumps(payload)}\n\n"
-                else:
-                    streamed += 1
-                    yield f"data: {json.dumps(event.value)}\n\n"
-            log_event(
-                logging.INFO,
-                "stream.interview.ok",
-                request_id=request_id,
-                session_id_short=request.session_id[:8],
-                chunks=streamed,
-                structured=structured,
-            )
-        except Exception as e:
-            logging.error(f"Error during streaming interview questions: {e}", exc_info=True)
-            log_event(
-                logging.ERROR,
-                "stream.interview.error",
-                request_id=request_id,
-                error_type=type(e).__name__,
-            )
-            yield f"data: {json.dumps(' ' + err_msg)}\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return _question_stream(ctx, chain, topic="stream.interview")
 
 @router.post(
     "/generate-pdf",
@@ -606,38 +620,19 @@ async def generate_pdf_endpoint(request: GeneratePdfRequest, fastapi_req: Reques
     return Response(content=pdf_bytes, media_type='application/pdf', headers=headers)
 
 
-# Pre-session funnel steps happen before the session exists (it is created at
-# the lifestyle step), so they can never be keyed by one. They are counted in
-# memory and logged, never written to Redis: the free-tier quota is reserved for
-# real patient sessions. The remaining keys keep the 7-day Redis funnel.
-ANONYMOUS_FUNNEL_EVENTS = (
-    "intake_started",
-    "demographics_submitted",
-    "complaint_submitted",
-    "history_submitted",
-)
-SESSION_FUNNEL_EVENTS = (
-    "lifestyle_submitted",
-    "summary_generated",
-    "pdf_downloaded",
-)
-
-# The whitelist is the contract in docs/analytics-contract.md. It also bounds
-# the Redis hash fields: an unvalidated `str` let any client grow the free-tier
-# hash with invented keys.
-FunnelEvent = Literal[
-    "intake_started",
-    "demographics_submitted",
-    "complaint_submitted",
-    "history_submitted",
-    "lifestyle_submitted",
-    "summary_generated",
-    "pdf_downloaded",
-]
-
-
 class AnalyticsEventRequest(BaseModel):
-    event: FunnelEvent
+    # The whitelist comes from core/analytics.py, which is also what
+    # scripts/export_contracts.py hands to the SPA - one list, not three. It
+    # also bounds the Redis hash fields: a bare `str` let any client grow the
+    # free-tier hash with invented keys.
+    event: str
+
+    @field_validator("event")
+    @classmethod
+    def _known_event(cls, value: str) -> str:
+        if value not in FUNNEL_EVENTS:
+            raise ValueError("unknown funnel event")
+        return value
 
 
 @router.post(

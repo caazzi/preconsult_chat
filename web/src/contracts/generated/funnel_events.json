@@ -1,0 +1,13 @@
+{
+  "anonymous": [
+    "intake_started",
+    "demographics_submitted",
+    "complaint_submitted",
+    "history_submitted"
+  ],
+  "session": [
+    "lifestyle_submitted",
+    "summary_generated",
+    "pdf_downloaded"
+  ]
+}

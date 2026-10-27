@@ -10,6 +10,8 @@ drifting. Three artifacts are produced under ``contracts/``:
   contracts/i18n/{en,pt}.json   translations (from src/preconsult/core/i18n.py)
   contracts/emergency_tokens.json  red-flag token list (core/parsing.py)
   contracts/parsing_vectors.json   split_questions/is_emergency_trigger vectors
+  contracts/funnel_events.json     funnel event keys + their storage tier
+                                   (core/analytics.py)
 
 The parsing vectors are authored here (data), then two test suites run them
 against BOTH the Python implementation and (later) the TypeScript port, so a
@@ -55,6 +57,22 @@ def _load_parsing():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod._EMERGENCY_TRIGGERS
+
+
+def load_funnel_events() -> dict:
+    """The funnel keys and their tier, from the canonical source module."""
+    if SRC_DIR not in sys.path:
+        sys.path.insert(0, SRC_DIR)
+
+    from preconsult.core.analytics import (
+        ANONYMOUS_FUNNEL_EVENTS,
+        SESSION_FUNNEL_EVENTS,
+    )
+
+    return {
+        "anonymous": list(ANONYMOUS_FUNNEL_EVENTS),
+        "session": list(SESSION_FUNNEL_EVENTS),
+    }
 
 
 def _assert_key_parity(translations: dict) -> None:
@@ -137,6 +155,10 @@ def export(output_dir: str) -> list[str]:
     vectors_path = os.path.join(output_dir, "parsing_vectors.json")
     _write_json(vectors_path, _parsing_vectors())
     written.append(vectors_path)
+
+    funnel_path = os.path.join(output_dir, "funnel_events.json")
+    _write_json(funnel_path, load_funnel_events())
+    written.append(funnel_path)
 
     return written
 

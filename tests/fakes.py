@@ -43,3 +43,23 @@ class ToolCallingFakeLLM(Runnable):
                     }
                 ],
             )
+
+
+def session_payload(**overrides: object) -> dict:
+    """A valid POST /api/session/init body.
+
+    One definition of the session schema for the whole suite: a test that cares
+    about a few fields overrides those keys instead of restating the other
+    eleven. Every field is optional server-side, so the minimal shape here is a
+    valid request. Returns a fresh dict, so callers may mutate it.
+    """
+    payload: dict = {
+        "age_bracket": "26-35",
+        "sex": "Female",
+        "lang": "en",
+        "specialist": "Cardiology",
+        "chief_complaint": "Chest pain",
+        "duration": "2 days",
+    }
+    payload.update(overrides)
+    return payload

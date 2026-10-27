@@ -7,7 +7,7 @@ from preconsult.services.agent_service import (
     StreamEvent,
 )
 import preconsult.services.agent_service as agent_service
-from tests.fakes import ToolCallingFakeLLM
+from tests.fakes import ToolCallingFakeLLM, session_payload
 
 @pytest.fixture(autouse=True)
 def reset_singletons():
@@ -33,20 +33,9 @@ async def test_interview_chain_streams_questions(mock_get_llm):
     mock_get_llm.return_value = fake_llm
     
     chain = get_interview_chain()
-    session_data = {
-        "age_bracket": "26-35",
-        "sex": "Female",
-        "specialist": "Cardiology",
-        "chief_complaint": "Chest pain",
-        "duration": "Weeks",
-        "complaint_detail": "",
-        "conditions": [],
-        "medications": [],
-        "allergies": "",
-        "family_history": [],
-        "smoking": "Never",
-        "alcohol": "Rarely"
-    }
+    session_data = session_payload(
+        duration="Weeks", smoking="Never", alcohol="Rarely"
+    )
     
     events = []
     async for event in stream_interview_questions(session_data, "en", chain):

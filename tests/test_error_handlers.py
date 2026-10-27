@@ -16,18 +16,10 @@ from preconsult.core.errors import (
     bedrock_api_handler,
     generic_handler,
 )
+from tests.fakes import session_payload
 
 HEADERS = {"X-API-KEY": "ci_test_key_123"}
-FULL_PAYLOAD = {
-    "age_bracket": "26-35",
-    "sex": "Female",
-    "lang": "en",
-    "specialist": "Cardiology",
-    "chief_complaint": "Chest pain",
-    "duration": "2 days",
-    "smoking": "No",
-    "alcohol": "No",
-}
+FULL_PAYLOAD = session_payload(smoking="No", alcohol="No")
 
 
 @pytest.mark.asyncio

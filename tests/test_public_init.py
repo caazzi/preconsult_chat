@@ -17,17 +17,13 @@ import preconsult.api.endpoints as endpoints
 import preconsult.services.session_service as srv
 from preconsult.core.config import SESSION_COOKIE_NAME
 from preconsult.host import app
+from tests.fakes import session_payload
 
-PAYLOAD = {
-    "age_bracket": "26-35",
-    "sex": "Female",
-    "lang": "en",
-    "specialist": "Cardiology",
-    "chief_complaint": "Chest pain",
-    "duration": "A few days",
-    "smoking": "Never",
-    "alcohol": "Never",
-}
+PAYLOAD = session_payload(
+    duration="A few days",
+    smoking="Never",
+    alcohol="Never",
+)
 
 PDF_BODY = {"session_id": "", "qa_pairs": [{"question": "Fever?", "answer": "No"}]}
 

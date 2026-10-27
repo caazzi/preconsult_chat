@@ -19,19 +19,11 @@ from httpx import ASGITransport
 from preconsult.host import app
 from preconsult.core.config import SESSION_COOKIE_NAME
 from preconsult.core.session_auth import sign_session_id, verify_session_cookie
+from tests.fakes import session_payload
 
 KEY_HEADERS = {"X-API-KEY": "ci_test_key_123"}
 
-PAYLOAD = {
-    "age_bracket": "26-35",
-    "sex": "Female",
-    "lang": "en",
-    "specialist": "Cardiology",
-    "chief_complaint": "Chest pain",
-    "duration": "2 days",
-    "smoking": "No",
-    "alcohol": "No",
-}
+PAYLOAD = session_payload(smoking="No", alcohol="No")
 
 
 # --- Pure signing tests -----------------------------------------------------

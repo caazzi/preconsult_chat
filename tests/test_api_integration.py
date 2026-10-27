@@ -5,24 +5,18 @@ import httpx
 from httpx import ASGITransport
 from preconsult.host import app
 from preconsult.services.agent_service import StreamEvent
+from tests.fakes import session_payload
 
 HEADERS = {"X-API-KEY": "ci_test_key_123"}
 
-FULL_SESSION_PAYLOAD = {
-    "age_bracket": "26-35",
-    "sex": "Female",
-    "lang": "en",
-    "specialist": "Gastroenterologist",
-    "chief_complaint": "Stomach pain and heartburn",
-    "duration": "Weeks",
-    "complaint_detail": "Gets worse at night",
-    "conditions": [],
-    "medications": [],
-    "allergies": "",
-    "family_history": [],
-    "smoking": "Never smoked",
-    "alcohol": "Rarely",
-}
+FULL_SESSION_PAYLOAD = session_payload(
+    specialist="Gastroenterologist",
+    chief_complaint="Stomach pain and heartburn",
+    duration="Weeks",
+    complaint_detail="Gets worse at night",
+    smoking="Never smoked",
+    alcohol="Rarely",
+)
 
 FULL_SESSION_DATA = {**FULL_SESSION_PAYLOAD}
 

@@ -1,19 +1,13 @@
 from preconsult.services.pdf_service import generate_pdf_report_in_memory
+from tests.fakes import session_payload
 
-MINIMAL_FORM = {
-    "specialist": "Gastroenterologist",
-    "age_bracket": "26-35",
-    "sex": "Female",
-    "chief_complaint": "Stomach pain",
-    "duration": "Weeks",
-    "complaint_detail": "",
-    "conditions": [],
-    "medications": [],
-    "allergies": "",
-    "family_history": [],
-    "smoking": "Never smoked",
-    "alcohol": "Rarely",
-}
+MINIMAL_FORM = session_payload(
+    specialist="Gastroenterologist",
+    chief_complaint="Stomach pain",
+    duration="Weeks",
+    smoking="Never smoked",
+    alcohol="Rarely",
+)
 
 MINIMAL_QA = [{"question": "Any nausea?", "answer": "Yes, sometimes."}]
 

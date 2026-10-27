@@ -59,6 +59,25 @@ async def test_get_llm_builds_bedrock_client_when_selected(monkeypatch):
         llm_module._llm = original
 
 
+async def test_bedrock_without_the_extra_fails_with_an_actionable_message(
+    monkeypatch,
+):
+    """The default image does not install boto3/botocore; say so, don't 500."""
+    import sys
+
+    import preconsult.core.llm as llm_module
+
+    original = llm_module._llm
+    llm_module._llm = None
+    monkeypatch.setattr(llm_module, "LLM_PROVIDER", "bedrock")
+    monkeypatch.setitem(sys.modules, "langchain_aws", None)
+    try:
+        with pytest.raises(RuntimeError, match="extra bedrock"):
+            llm_module.get_llm()
+    finally:
+        llm_module._llm = original
+
+
 async def test_only_the_selected_provider_client_is_constructed(monkeypatch):
     """Lazy imports: picking one provider must not touch the other package."""
     import preconsult.core.llm as llm_module

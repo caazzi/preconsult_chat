@@ -121,7 +121,7 @@ With low real-user volume this keeps the free tier comfortably within budget.
 | Frontend | React 18 + TypeScript + Vite 5 (`web/`), built to `web/dist` and served at `/` by the Python host |
 | Backend | FastAPI 0.161.1 (`/api` sub-app) inside a Starlette host (`src/preconsult/host.py`), ASGI served by uvicorn |
 | Session | Redis (6.4.0, ephemeral, 30-min TTL, signed HttpOnly session cookie, bounded in-memory fallback) |
-| AI | Google Vertex AI / Gemini by default, Anthropic Claude Haiku on AWS Bedrock behind `LLM_PROVIDER=bedrock` |
+| AI | Google Vertex AI / Gemini by default, Anthropic Claude Haiku on AWS Bedrock behind `LLM_PROVIDER=bedrock` (needs `uv sync --locked --extra bedrock`; the default image ships Vertex only) |
 | PDF | ReportLab 5.1.0 (in-memory, deterministic, localized EN/PT) |
 | UI/UX | Glassmorphism, mobile-first, 48px touch targets, prefers-reduced-motion, EN/PT i18n |
 | Monitoring | Sentry SDK (2.73.0, PII-safe, env/release-tagged) + structured, PHI-safe request logging + stable error codes + `GET /health`, `/health/live`, `/health/ready`, `/health/metrics` |

@@ -220,9 +220,12 @@ def test_bedrock_api_handler_maps_botocore_error_to_502():
 
 
 def test_google_api_handler_returns_502_sanitized():
-    from google.api_core.exceptions import PermissionDenied
+    from google.genai.errors import APIError
 
-    resp = _run_handler(google_api_handler, PermissionDenied("PERMISSION_DENIED: secret bucket"))
+    resp = _run_handler(
+        google_api_handler,
+        APIError(403, {"error": {"message": "PERMISSION_DENIED: secret bucket"}}),
+    )
     assert resp.status_code == 502
     body = resp.body.decode()
     assert "ai_upstream_error" in body
@@ -231,17 +234,23 @@ def test_google_api_handler_returns_502_sanitized():
 
 
 def test_google_api_handler_maps_throttling_to_503():
-    from google.api_core.exceptions import ResourceExhausted
+    from google.genai.errors import APIError
 
-    resp = _run_handler(google_api_handler, ResourceExhausted("429 quota exceeded"))
+    exc = APIError(
+        429, {"error": {"message": "quota exceeded", "status": "RESOURCE_EXHAUSTED"}}
+    )
+    resp = _run_handler(google_api_handler, exc)
     assert resp.status_code == 503
     assert "llm_unavailable" in resp.body.decode()
 
 
 def test_google_api_handler_maps_generic_error_to_502():
-    from google.api_core.exceptions import InternalServerError
+    from google.genai.errors import APIError
 
-    resp = _run_handler(google_api_handler, InternalServerError("upstream boom"))
+    resp = _run_handler(
+        google_api_handler,
+        APIError(500, {"error": {"message": "upstream boom", "status": "INTERNAL"}}),
+    )
     assert resp.status_code == 502
     assert "ai_upstream_error" in resp.body.decode()
     assert "upstream boom" not in resp.body.decode()
@@ -250,7 +259,7 @@ def test_google_api_handler_maps_generic_error_to_502():
 def test_both_provider_error_handlers_are_registered():
     """A provider swap must not leave one family of upstream errors unmapped."""
     from botocore.exceptions import ClientError as BotocoreClientError
-    from google.api_core.exceptions import GoogleAPIError
+    from google.genai.errors import APIError
 
     from preconsult.host import build_starlette_app
 
@@ -259,8 +268,30 @@ def test_both_provider_error_handlers_are_registered():
     )
     handlers = mount.app.exception_handlers
 
-    assert GoogleAPIError in handlers
+    assert APIError in handlers
     assert BotocoreClientError in handlers
+
+
+def test_google_exception_types_do_not_require_api_core():
+    """The Vertex client is google-genai; api-core is not installed at all."""
+    import sys
+
+    from google.genai.errors import APIError
+
+    import preconsult.core.errors as errors
+
+    assert APIError in errors.google_exception_types()
+    # Simulate the api-core branch being unavailable too: the tuple must still
+    # contain the type the active client raises.
+    original = sys.modules.get("google.api_core")
+    sys.modules["google.api_core"] = None
+    try:
+        assert APIError in errors.google_exception_types()
+    finally:
+        if original is None:
+            sys.modules.pop("google.api_core", None)
+        else:
+            sys.modules["google.api_core"] = original
 
 
 def test_generic_handler_returns_500_sanitized():

@@ -13,11 +13,10 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
-from google.api_core.exceptions import GoogleAPIError
 from pydantic import ValidationError
 
 from preconsult.api.endpoints import public_router, router
-from preconsult.core.errors import bedrock_exception_types
+from preconsult.core.errors import bedrock_exception_types, google_exception_types
 from preconsult.core.errors import (
     LLMUnavailableError,
     RedisQuotaExceededError,
@@ -83,7 +82,8 @@ def build_api_app() -> FastAPI:
     api.add_exception_handler(RequestValidationError, request_validation_handler)
     # Both provider families are mapped so a misconfigured LLM_PROVIDER surfaces
     # as the stable 502/503 codes instead of a generic 500.
-    api.add_exception_handler(GoogleAPIError, google_api_handler)
+    for google_error in google_exception_types():
+        api.add_exception_handler(google_error, google_api_handler)
     # Empty without the optional `bedrock` extra (the default image).
     for bedrock_error in bedrock_exception_types():
         api.add_exception_handler(bedrock_error, bedrock_api_handler)

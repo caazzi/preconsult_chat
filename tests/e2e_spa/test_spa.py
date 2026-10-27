@@ -1,8 +1,9 @@
-"""Shadow SPA E2E: the /next React app end-to-end with a mocked API.
+"""SPA E2E: the React app end-to-end at ``/`` with a mocked API.
 
 These specs drive the real built SPA (web/dist) served by the real backend at
-/next, but intercept /api at the browser layer so no live session/Bedrock/Redis
-is needed. They assert the SPA boots, routes under /next, and walks the wizard.
+``/``, but intercept ``/api`` at the browser layer so no live provider or
+serverless Redis is needed. They assert the SPA boots, carries the production
+head, walks the wizard and writes no client storage.
 """
 
 import json
@@ -40,17 +41,19 @@ def _mock_api(page):
     page.route("**/api/**", handler)
 
 
-def test_spa_boots_at_next(page, backend):
-    page.goto(f"{backend}/next/", wait_until="networkidle")
+def test_spa_boots_at_root(page, backend):
+    page.goto(f"{backend}/", wait_until="networkidle")
     # Landing hero is rendered by the SPA.
     assert page.get_by_role("button", name="Start Preparing").is_visible()
-    # The noindex meta is present on the shadow SPA.
+    # The document is the canonical one now: indexable, with real social tags.
     robots = page.locator('meta[name="robots"]')
-    assert "noindex" in (robots.get_attribute("content") or "")
+    assert robots.count() == 0 or "noindex" not in (robots.get_attribute("content") or "")
+    assert "PreConsult" in page.title()
+    assert page.locator('meta[property="og:image"]').count() == 1
 
 
 def test_spa_has_no_localstorage_phi(page, backend):
-    page.goto(f"{backend}/next/", wait_until="networkidle")
+    page.goto(f"{backend}/", wait_until="networkidle")
     # Zero-PHI: no localStorage/sessionStorage keys should be created.
     ls = page.evaluate("() => Object.keys(window.localStorage)")
     ss = page.evaluate("() => Object.keys(window.sessionStorage)")
@@ -60,7 +63,7 @@ def test_spa_has_no_localstorage_phi(page, backend):
 
 def test_spa_wizard_flow(page, backend):
     _mock_api(page)
-    page.goto(f"{backend}/next/?lang=en", wait_until="networkidle")
+    page.goto(f"{backend}/?lang=en", wait_until="networkidle")
 
     page.get_by_role("button", name="Start Preparing").click()
     page.get_by_role("button", name="26-35").click()

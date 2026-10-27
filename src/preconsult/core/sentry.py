@@ -6,9 +6,8 @@ request bodies, ``include_local_variables=True`` attaches stack-frame locals),
 and ``send_default_pii=False`` does not cover either of them -- both are locked
 down explicitly below.
 
-NOTE: this module is currently only wired into the dev entrypoint
-(``preconsult.main``). Production serves ``reflex_app.preconsult.preconsult:api``
-and does not initialise Sentry.
+NOTE: this module is wired into the served entrypoint (``preconsult.main``) and
+initialises only when ``SENTRY_DSN`` is set; production does not set it today.
 """
 
 import logging

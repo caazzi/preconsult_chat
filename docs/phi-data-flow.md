@@ -14,7 +14,7 @@ allergies, family history, lifestyle answers, and the Q&A pairs.
 | LLM call (`LLM_PROVIDER`: Vertex Gemini by default, Bedrock Claude Haiku when selected) | Chief complaint + structured form | request-scoped | The patient's free-text **answers never return to the LLM** (PRD §3.4). Provider not retained/trained per its enterprise terms. |
 | Server logs (`core/observability.py`) | **No** | — | metadata only (event, request id, lang, counts, durations); free-text values never serialized, only `len(...)` |
 | Error responses (`core/errors.py`) | **No** | — | generic localized detail + stable `code`; never exception internals or user values |
-| Browser client store (SPA) | Yes (in memory) | tab session | **No** `localStorage`/`sessionStorage` persistence (`TestP9` guard) |
+| Browser client store (SPA) | Yes (in memory) | tab session | **No** `localStorage`/`sessionStorage` persistence (`TestP9` guard), and the language is mirrored into `?lang=` only (no cookie written) |
 | Session cookie (`preconsult_session`) | **No** | session (dropped on close) | signed **opaque session id** only; HttpOnly, Secure, SameSite=Strict, no Max-Age |
 | PDF report | Yes | client-only | built in memory (ReportLab) and streamed to the browser; never written to disk |
 | Analytics counters (Redis) | **No** | 30 days | anonymous event-key increments only |
@@ -43,8 +43,10 @@ allergies, family history, lifestyle answers, and the Q&A pairs.
 
 ## Sources of truth
 
-- Policy copy: `web/legal/*.html` (served by `src/preconsult/site/legal.py`),
+- Policy copy: `web/legal/*.html` (`privacy.{en,pt}.html`, `terms.{en,pt}.html`)
+  served by `src/preconsult/site/legal.py`, and the UI copy in
   `src/preconsult/core/i18n.py`.
 - Enforcement: `core/observability.py`, `core/errors.py`, `core/session_auth.py`,
-  `services/session_service.py`.
+  `services/session_service.py`, `site/middleware.py` (bot gate) and
+  `site/request_id.py` (PHI-safe request logging/counters).
 - Product spec: `docs/PRD.md` §3 (principles) and §3.4 (single LLM call).

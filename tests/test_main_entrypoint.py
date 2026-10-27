@@ -1,10 +1,8 @@
-"""Regression tests for the local dev entrypoint (``preconsult.main``).
+"""Regression tests for the served entrypoint (``preconsult.main``).
 
-``main.py`` used to import ``_BotGateMiddleware`` and then call
-``app.add_exception_handler(...)`` on it, which raised ``AttributeError`` at
-import time -- so ``uvicorn preconsult.main:app`` could never boot. The
-handlers already live on the FastAPI sub-app mounted by
-``reflex_app.preconsult.preconsult``; the entrypoint must only re-export it.
+The entrypoint only initialises Sentry and re-exports ``preconsult.host.app`` so
+ASGI servers have a stable target. It used to re-export the Reflex host; that
+host no longer exists.
 """
 
 import importlib
@@ -15,13 +13,13 @@ from unittest.mock import patch
 from preconsult.core.sentry import init_sentry
 
 
-def test_main_entrypoint_imports_and_exports_reflex_api():
+def test_main_entrypoint_exports_the_host_app():
     assert not os.environ.get("SENTRY_DSN"), "test env must not carry a real DSN"
 
     main = importlib.import_module("preconsult.main")
-    reflex_app = importlib.import_module("reflex_app.preconsult.preconsult")
+    host = importlib.import_module("preconsult.host")
 
-    assert main.app is reflex_app.api
+    assert main.app is host.app
 
 
 def test_init_sentry_locks_down_phi_capture():

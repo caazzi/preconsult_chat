@@ -70,12 +70,11 @@ else
     # CMD: --workers 1 --threads 4). The earlier "2 Uvicorn workers x 4 threads need
     # 2Gi" note was stale; with one async worker, 0.5 vCPU and 1Gi still clear the
     # streaming LLM/PDF session headroom (in-memory PDF + 512-session shim).
-    # min-instances 1 is a CORRECTNESS requirement (not a latency nice-to-have):
-    # the single-worker Engine.IO session store is in-memory, so a scale-to-zero
-    # recycle would strand a browser's connected socket and its next state event
-    # would be dropped. Keep one warm instance so the session survives idle and
-    # --session-affinity keeps the client pinned. Mirrors the CI cost_optimized
-    # profile.
+    # min-instances 1 + --session-affinity keep one warm instance. That is a
+    # deliberate, unchanged choice for now (mirrors the CI cost_optimized profile),
+    # not a correctness requirement: the only genuinely in-memory state is the
+    # per-worker Redis-outage fallback (session + rate-limit shims), which is a
+    # resilience shim rather than a store of truth. Pending a load measurement.
     # concurrency must be 1 to pair with cpu=0.5 (Cloud Run rejects cpu < 1 when
     # concurrency > 1). This is a portfolio app with serial usage, so one in-flight
     # request per instance is the intended, deliberate tradeoff.
@@ -91,7 +90,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --session-affinity \
     $PROFILE_FLAGS \
     --timeout 300s \
-    --set-env-vars="API_BASE_URL=https://pre-consult.org,BEDROCK_REGION=us-east-1,LLM_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0" \
+    --set-env-vars="API_BASE_URL=https://pre-consult.org,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,VERTEX_AI_REGION=us-central1,LLM_PROVIDER=vertex,LLM_MODEL=gemini-2.5-flash" \
     --update-secrets="PRECONSULT_API_KEY=${API_KEY_SECRET}:${SECRET_VERSION},REDIS_URL=${REDIS_URL_SECRET}:${SECRET_VERSION},SESSION_SECRET=${SESSION_SECRET_SECRET}:${SECRET_VERSION}"
 
 echo "✅ Backend Deployment Finished!"

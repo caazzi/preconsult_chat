@@ -20,19 +20,22 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   1. Commit + push to `main` (CI auto-deploys on merge), **or** trigger
      **GitHub Actions → PreConsult CI/CD → *Run workflow*** (workflow_dispatch).
   2. Confirm the deployed revision passes a smoke test (e.g. `GET /health` → 200) before marking done.
-- **The `cost_optimized` profile (the default) runs `--min-instances 1`.** This is a CORRECTNESS
-  requirement, not a latency choice: the app runs a **single** gunicorn worker with no Redis token
-  manager, so the whole Engine.IO session store lives in one worker's in-memory. With scale-to-zero
-  (`min-instances 0`) the instance is recycled at idle, and a browser that was connected then comes
-  back POSTs its next state event ("Start Preparing") to a fresh instance with no session — the
-  server 400s it and reflex's client silently drops the event ("nothing happens"). Holding one warm
-  instance keeps the socket alive; `--session-affinity` keeps the client pinned to it. This sustains
-  an idle 24/7 **0.5 vCPU / 1Gi** allocation (the `cost_optimized` profile runs `--cpu 0.5`) as the
-  deliberate, bounded cost of reliable state delivery. Note `--concurrency` must be `1` to pair with
-  `cpu=0.5` — Cloud Run rejects `cpu < 1` when `concurrency > 1` — which suits this portfolio app's
-  serial usage. Do
-  NOT drop this back to `min-instances 0` unless the single-worker in-memory session design is also
-  reworked. (`high_performance` intentionally keeps `min=2` for latency, but is opt-in only.)
+- **The `cost_optimized` profile (the default) keeps `--min-instances 1`, `--session-affinity` and a
+  single worker on purpose, but none of them is a correctness requirement any more.** They were
+  introduced for Reflex's in-memory Engine.IO session store, which no longer exists: the wizard runs
+  in the browser and the session of record is in Redis, so an instance recycle does not lose a
+  user's next event. What is still per-worker is only the **best-effort** Redis-outage fallback
+  (the `_memory_sessions` shim in `services/session_service.py`) and the rate-limit fallback
+  (`MemoryRateLimitStore`) — resilience shims, not stores of truth, so a user landing on a worker
+  without its fallback copy degrades to an error rather than to silent data loss. **What would prove
+  multi-worker / scale-to-zero safe** is a measured load test showing those shims are never the path
+  a real user depends on (as long as Redis is healthy, sessions live in Redis and any worker can
+  serve them). Until that measurement lands, do NOT loosen the flags, and do not describe the
+  current choice as required for correctness. The profile stays a 24/7 **0.5 vCPU / 1Gi** warm
+  instance (a warm instance also removes cold-start latency for a portfolio app with idle gaps).
+  `--concurrency 1` MUST stay paired with `cpu=0.5`: Cloud Run rejects `cpu < 1` when
+  `concurrency > 1` ("Total cpu < 1 is not supported with concurrency > 1"). (`high_performance`
+  intentionally keeps `min=2` and `concurrency=40` for latency, but is opt-in only.)
 - If you must deploy an already-built CI image without rebuilding, use
   `scripts/deploy_backend.sh cost_optimized [image_ref]`. This script never runs `--source`.
 
@@ -44,48 +47,56 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   uv run python -m pytest tests/ -v --cov --cov-report=term-missing --cov-fail-under=80
   ```
   Do not run `pytest` without `--cov` — the suite is considered "not done" if overall branch
-  coverage drops below 80% (measured over `src/preconsult` + `reflex_app/preconsult`, omitting the
-  generated Reflex page tree in `reflex_app/preconsult/preconsult.py`).
+  coverage drops below 80%. Coverage is measured over **`src/preconsult` only** (`pyproject.toml`
+  `[tool.coverage.run]`); `web/` is covered by its own Vitest suite, not by the Python gate.
+- Frontend changes: `cd web && npm run lint && npm run test && npm run build`. CI installs with
+  `uv sync --locked` and `npm ci`, so **a stale `uv.lock` must fail the build, not silently
+  re-resolve** — re-lock locally and commit the lockfile with the dependency change.
+- Browser E2E (only when you touch the SPA or the host): `scripts/run_e2e_spa.sh`.
 - For deploy-affecting changes, the task is NOT done until the CI/CD-built revision serves `200`.
 
-## Testing the Reflex frontend (state.py) — hard-won constraints
+## Serving topology: one app, one process
 
-These are reflex-specific rules that WILL bite if ignored:
-
-- `State()` can only be instantiated when running under pytest's test environment
-  (`is_testing_env()` is true); it raises `ReflexRuntimeError` otherwise. Keep state tests inside
-  `tests/` and never `python -c`-instantiate reflex state ad hoc.
-- **Never `await` a chained background `@rx.event(background=True)` handler directly.** Reflex wraps
-  background handlers so calling `await self.some_background_handler()` raises
-  `RuntimeError: Cannot directly call background task ... use yield/return`. `init_session` chains
-  into `get_interview_questions` this way, which is WHY the payload construction was factored out
-  into the pure `build_session_init_payload()` function. To test a background handler, call its raw
-  body via `State.<handler>.fn(state)` (the `.fn` attribute holds the unwrapped coroutine), and to
-  test a handler that chains into another background handler, patch the nested handler to a no-op.
-- Setting `state.router` for `detect_lang` tests fails because `router` is a reflex
-  inherited var; use `object.__setattr__(state, "router", fake)` instead.
-- `state._api_url()` prefixes `/api`; if `API_BASE_URL` already ends in `/api` the request path
-  becomes `/api/api/...`. In tests, mock the HTTP layer by matching on `request.url.path.endswith(...)`
-  (or ignoring the path) rather than exact-match on `/api/...`.
-- Question/emergency parsing lives in `src/preconsult/core/parsing.py` (`split_questions`,
-  `is_emergency_trigger`) and is shared by the backend and `state.py`. Update the parser there and
-  `tests/test_question_parsing.py` — do NOT re-inline the regex in `state.py`.
-- `/health` probes are TTL-throttled; tests that mock `check_redis_health` /
-  `probe_event_channel` must clear the cache with `_reset_health_probe_cache_unlocked()`
-  (or rely on the conftest fixture) or a warm cache will mask the mock. The handlers and the cache
-  live in `src/preconsult/site/health.py`, and the interactive probe is a **per-app parameter**
-  (`register_health_routes(app, event_channel_probe=...)`), not a module global — pass it when
-  building the app (`build_asgi_app(event_channel_probe=...)`). Without it `/health` reports
-  `event_channel: "not_configured"`, which is what the Reflex-free app does today.
-- `src/preconsult/host.py` is the Reflex-free ASGI app: `/api`, health, crawler/legal documents and
-  the SPA mounted **last**, wrapped as `BotGate -> RequestID -> Starlette/GZip`. It is the cutover
-  target; `reflex_app/preconsult/preconsult.py` still serves production until the cutover lands.
-  `tests/test_host_app.py` pins the composition (registration order, middleware order, and the
-  root-mount rule that a stale `/_event` probe or a scanner must never receive the SPA shell).
-- The served `api` object is wrapped by `BotGateMiddleware`
-  (`src/preconsult/site/middleware.py`). Tests POSTing to
-  `/api/*` use httpx's default UA (passes the gate); don't set scanner-like UAs
+- `src/preconsult/host.py` (`preconsult.host:app`) is the **only** served app — there is no second
+  frontend host and no state socket. It is a Starlette app wrapping
+  **`BotGateMiddleware -> RequestIDMiddleware -> Starlette/GZip`**, mounting `/api` (FastAPI
+  sub-app) first, then health, crawler documents (`/robots.txt`, `/sitemap.xml`, `/llms.txt`), legal
+  pages (`/privacy`, `/terms`) and the React SPA at `/` **last**.
+- That registration order is the contract (Starlette matches first-registered-wins; the SPA mount is
+  a catch-all). `tests/test_host_app.py` pins the composition (registration order, middleware order,
+  and the root-mount rule that a scanner probe or a deleted backend prefix must never receive the
+  SPA shell).
+- `site/static.py::SPAStaticFiles` owns the document contract: the shell is `no-store`, real files
+  under `/assets` are content-hashed + immutable, an unknown *navigation* falls back to the shell,
+  and a missing *file* stays a 404. Keep the explicit scanner-probe / backend-prefix 404s — a path
+  the router does not know must not be answered with HTML.
+- The app resolves the bundle from `WEB_DIST_DIR`, then `./web/dist`, then `../web/dist`; a missing
+  bundle is logged as a packaging error (path only, PHI-free) instead of becoming a silent root 404.
+- **The frontend holds no API key.** The SPA authenticates with the HttpOnly session cookie minted
+  by `POST /api/session/init`, which is why `ALLOW_PUBLIC_INIT=true` in the deployed environment is
+  load-bearing. Keep the bootstrap guarded by the per-IP limits, the bot gate and the
+  `SessionInitRequest` bounds (see `docs/authz-matrix.md`).
+- The served `api` object sits behind `BotGateMiddleware` (`src/preconsult/site/middleware.py`).
+  Tests POSTing to `/api/*` use httpx's default UA (passes the gate); don't set scanner-like UAs
   (e.g. `curl`) in API tests or the 403 gate will intercept before the endpoint.
+
+## Testing the React frontend (`web/`)
+
+- The SPA is React 18 + Vite + TypeScript, tested with **Vitest** (`cd web && npm run test`) and
+  built with `npm run build` (`tsc -b && vite build`) into `web/dist`, which the host mounts at `/`.
+- **Do not hand-copy i18n strings or parsing behaviour into the SPA.** `src/preconsult/core/i18n.py`
+  and `core/parsing.py` are the sources of truth; `scripts/export_contracts.py` generates
+  `contracts/*.json` and `cd web && npm run sync:contracts` copies them into
+  `web/src/contracts/generated/`. CI regenerates and fails on any drift, so a Python-side copy change
+  must ship with the regenerated artifacts. Never edit `web/src/contracts/generated/*` by hand.
+- The wizard is entirely client-side (landing → 4 form steps → Q&A → summary/PDF, plus the
+  emergency dialog). Language comes from `?lang=` then `navigator.language`, and is mirrored back
+  into the URL — **no cookie and no `localStorage`/`sessionStorage` is written**
+  (`site/legal.py` still reads a legacy `preconsult_lang` cookie if an old browser sends one).
+- The browser E2E job (`tests/e2e_spa`, driven by `scripts/run_e2e_spa.sh`) boots the real
+  `preconsult.host:app`, serves the built SPA at `/`, and mocks `/api` at the browser route layer —
+  no live LLM provider or serverless Redis. It asserts the SPA boots, walks the wizard, and writes
+  no client storage.
 
 ## Observability & the zero-PHI rule
 
@@ -100,40 +111,30 @@ These are reflex-specific rules that WILL bite if ignored:
   the patient-supplied chief complaint / detail BEFORE any model call; a hit short-circuits to a
   localized emergency SSE event (`stream.initial.emergency_input` / `stream.interview.emergency_input`,
   metadata-only, `trigger_side=input`) and the LLM is never invoked. Keep the input gate in front of
-  the output-side `is_emergency_trigger` client check.
+  the output-side `is_emergency_trigger` client check (`web/src/contracts/parsing.ts`).
 - The intake draft is NOT persisted to `localStorage` (or any client store): it would outlive tab
   close and contradict the zero-retention promise. Do not reintroduce client-side PHI persistence;
-  `tests/test_security.py::TestP9_NoPHIDraftPersistence` guards this.
-- `_RequestIDMiddleware` (in `preconsult.py`) tracks per-request outcome counters and the
-  failure-tell-tale events `socket.handshake_rejected` (`/_event` 400) and `static.asset_404`
-  (`/assets` 404) — the signature of a stale-`index.html` shell. They are exposed read-only via
+  `tests/test_security.py::TestP9_NoPHIDraftPersistence` and the Playwright no-storage check guard
+  this.
+- `site/request_id.py::RequestIDMiddleware` stamps `x-request-id`, emits a PHI-safe `http.request`
+  log line (method + path only, no query string) and counts outcomes as `http.status.<code>`. A 404
+  under `/assets` is counted and logged as **`static.asset_404`** — the tell that a cached document
+  references chunks the current build does not have. Both are exposed read-only via
   `GET /health/metrics` (in-memory, per-worker, PHI-free, never Redis). Keep these PHI-safe: only
   path/status/event-name keys, never user content.
-- Every error response carries a stable machine-readable `code` (`auth_failed`, `rate_limited`,
-  `session_expired`, `validation_failed`, `redis_unavailable`, `llm_unavailable`,
-  `ai_upstream_error`, `service_unavailable`, `internal_error`). Do not rename/remove codes casually —
-  `tests/test_error_handlers.py` and `tests/test_api_integration.py` assert them, and CI/alerts key
-  on them. Responses must stay generic (never leak exception internals or user values).
-- Stale Engine.IO sessions ("Start Preparing does nothing") surface as a `500` on `/_event` (counters
-  `socket.session_invalid` + `http.status.500`), surfacing in the UI as "Cannot connect to server:
-  xhr post error". The recovery **must live in a Starlette user middleware registered on `app._api`
-  via `add_middleware` (`_StaleSocketSessionMiddleware`), i.e. INSIDE `ServerErrorMiddleware`**. It
-  must NOT be attempted in `_RequestIDMiddleware` (which wraps `app._api` and is OUTSIDE reflex's
-  `ServerErrorMiddleware`) — by the time an exception reaches that outer layer Starlette has already
-  emitted the `500`, so `send()`ing a clean `400` there double-sends and raises
-  `RuntimeError: ... after response already completed` (older tests wrapped `_RequestIDMiddleware`
-  directly and missed this). `/health/metrics` must show `socket.session_invalid` paired with
-  `http.status.400` (never 500). Keep `socket.handshake_rejected` separate: a recoverable stale
-  session is `session_invalid`, not a protocol mismatch.
-- The server-side 400 recovery alone does NOT restore a dropped event: reflex's client
-  (`socket.emit`, `reconnection:false`, no `error`-handler on an already-connected socket) silently
-  drops a state event whose POST returns `400 "Invalid session"`. A **tracked client patch** fixes
-  this: `reflex_app/web_utils/state.js` re-queues the most recent `reflex___state*` event once on a
-  socket `error` and forces a fresh handshake (replay). `.web/` and `.venv/` are gitignored and
-  re-materialized on each clean build, so the patch MUST be applied to the installed reflex-base
-  template before `reflex export` — the Dockerfile and `scripts/run_e2e.sh` both `cp` the tracked
-  file over the root reflex-base template (`reflex_base/.templates/web/utils/state.js`). On any
-  reflex upgrade, re-port the patch against the new template (it is pinned to `reflex==0.9.8.post1`).
+- Every error response carries a stable machine-readable `code` (`auth_failed`, `bot_blocked`,
+  `rate_limited`, `session_expired`, `validation_failed`, `redis_unavailable`,
+  `redis_quota_exceeded`, `llm_unavailable`, `ai_upstream_error`, `service_unavailable`,
+  `internal_error`). Do not rename/remove codes casually — `tests/test_error_handlers.py`,
+  `tests/test_api_integration.py` and `web/src/api/client.ts` assert them, and CI/alerts key on
+  them. Responses must stay generic (never leak exception internals or user values).
+- `/health` probes are TTL-throttled; tests that mock `check_redis_health` /
+  `check_redis_status` must clear the cache with `_reset_health_probe_cache_unlocked()`
+  (or rely on the conftest fixture) or a warm cache will mask the mock. The handlers and the cache
+  live in `src/preconsult/site/health.py`, and the interactive probe is a **per-app parameter**
+  (`register_health_routes(app, event_channel_probe=...)`), not a module global — pass it when
+  building the app (`build_asgi_app(event_channel_probe=...)`). Nothing sets it today, so `/health`
+  reports `event_channel: "not_configured"`; that is expected, not a broken probe.
 
 ## Redis is reserved for real users (free tier)
 
@@ -141,33 +142,24 @@ The app runs on a **free-tier serverless Redis (Upstash)** with a finite daily
 request quota. Non-user traffic burned the quota (and caused `session_expired`
 outages), so Redis must be reserved for actual patient sessions:
 
-- **NEVER set `redis_url` in `reflex_app/rxconfig.py`.** Pointing Reflex at Redis
-  spins up its `RedisTokenManager` (continuous keyspace/pubsub + per-socket token
-  ops on every `/_event` connect), which exhausts the quota. Reflex state stays
-  in-memory per instance (Cloud Run `--session-affinity`); the app's own
-  `session_service` owns real sessions.
-- **Gunicorn MUST run exactly `--workers 1`** (`Dockerfile` CMD). Reflex's
-  Socket.IO/Engine.IO session store is in-memory **per worker** (AsyncServer with
-  no shared client_manager; no `redis_url`). With >1 workers, a browser's
-  long-poll requests round-robin across workers that each own a different
-  in-memory session, so a poll landing on the "wrong" worker is rejected with
-  `400 "Invalid session <sid>"` and the UI fails to advance ("Cannot connect to
-  server: xhr post error"). Cloud Run `--session-affinity` + a single worker per
-  instance keeps a client's whole session on one worker; vertical scaling is
-  via instances, not workers.
-- **`/health` + `/health/ready` throttle their Redis/socket probes** (~1/min) via
-  `_throttled_probe` in `preconsult.py`. Don't reintroduce a per-request Redis
-  ping — CI/scanners/readiness polling would drain the quota.
-- **The deployed CI smoke test is liveness/socket-only.** Full session/stream/
-  rate-limit/SSE coverage runs in the `test` job against a local `redis:alpine`.
-  Don't add session-create/stream stages to the deployed smoke test.
-- **`State.log_analytics_event` is a no-op until a real session exists**
-  (`session_id` set) — bots that never start the flow must not reach the
-  analytics Redis write path. Keep that gate when touching analytics.
+- **Nothing may open a Redis connection at import/startup or per health poll.** The app's own
+  `session_service` owns real sessions; there is no framework session/token manager left to feed.
+  A new background task, pub/sub subscription or per-connection ping is a quota regression even when
+  it looks like infrastructure.
+- **`/health` + `/health/ready` throttle their Redis probes** (~1/min) via `_throttled_probe` in
+  `src/preconsult/site/health.py`. Don't reintroduce a per-request Redis ping — CI/scanners/readiness
+  polling would drain the quota.
+- **The deployed CI smoke test is document/health-only (stages 1–5: health, `/` document + head
+  contract, asset graph, served revision, legal pages).** Full session/stream/rate-limit/SSE
+  coverage runs in the `test` job against a local `redis:alpine`. Don't add session-create/stream
+  stages to the deployed smoke test.
+- **Analytics are gated on a real session** — `logEvent` in `web/src/api/analytics.ts` is a no-op
+  without a `session_id`, so bots that never start the flow cannot reach the analytics Redis write
+  path. Keep that gate when touching analytics.
 - **A conservative bot gate** (`BotGateMiddleware` in `src/preconsult/site/middleware.py`) blocks
-  scanner/CLI user-agents on Redis-backed `/api/*` paths with a fast `403` before
-  storage. Browsers pass through; `/_event` no longer touches Redis, so it stays
-  ungated.
+  scanner/CLI user-agents on the Redis-backed `/api/*` paths with a fast `403` before storage.
+  Browsers pass through; the gate deliberately covers `/api/*` only (the SPA document and static
+  assets are ungated and never touch Redis).
 
 ## Session errors: redis_unavailable vs session_expired vs redis_quota_exceeded
 
@@ -202,12 +194,12 @@ outages), so Redis must be reserved for actual patient sessions:
   **appends** the real client to `X-Forwarded-For` and does **not** strip what the caller sent
   (`X-Forwarded-For: 1.2.3.4` arrives as `1.2.3.4,187.15.85.23`). `cf-connecting-ip` passes through
   untouched. Consequence: `TRUST_PROXY_HEADERS` must be `true` in the deployed container, and
-  `get_client_ip()` takes the **last** X-Forwarded-For hop, validated with `ipaddress`, falling back
-  to the transport address. Trusting the leftmost hop or `cf-connecting-ip` would let a client rotate
-  IPs and bypass the per-IP rate limits / 20-a-day session quota; trusting the transport peer alone
-  makes those limits **global** (one shared bucket for all users). Caveat: `TRUST_CF_CONNECTING_IP`
-  stays `false` unless `pre-consult.org` is moved behind Cloudflare's proxy. Tests in
-  `tests/test_client_ip.py` lock this policy.
+  `get_client_ip()` (`src/preconsult/api/endpoints.py`) takes the **last** X-Forwarded-For hop,
+  validated with `ipaddress`, falling back to the transport address. Trusting the leftmost hop or
+  `cf-connecting-ip` would let a client rotate IPs and bypass the per-IP rate limits / 20-a-day
+  session quota; trusting the transport peer alone makes those limits **global** (one shared bucket
+  for all users). Caveat: `TRUST_CF_CONNECTING_IP` stays `false` unless `pre-consult.org` is moved
+  behind Cloudflare's proxy. Tests in `tests/test_client_ip.py` lock this policy.
 - Setting `TRUST_PROXY_HEADERS` without the right hop was a live bug, not a hardening nicety: with it
   off, every production user shared `169.254.169.126` in the quota key.
 
@@ -218,20 +210,36 @@ outages), so Redis must be reserved for actual patient sessions:
   path, so **purging the "Cloudflare cache" has no effect** on what users receive. Cache invalidation
   for the served document must target Google Frontend/Cloud CDN + a browser hard-refresh.
 - The served **`index.html` shell is `no-store`** and its JS/CSS chunks are content-hashed +
-  immutable. A stale `index.html` (cached before `no-store` shipped) references old chunk URLs that
-  404 on the current revision, the app JS fails to load, and the browser falls back to an old socket
-  client — producing the engine-io **"unsupported version of the Socket.IO or Engine.IO protocols"**
-  400 on `/_event`. If that error recurs, first **hard-purge the document** (it is a stale-shell
-  symptom, **not** a server protocol bug). Do not "fix" it by changing Engine.IO versions.
-- The CI smoke test asserts the `no-store` document contract + the full `index.html` asset graph
-  resolves (Stages 6 & 7). A deploy that regresses document caching or ships an incomplete bundle
-  fails loudly.
+  immutable (`site/static.py`). A stale `index.html` references chunk URLs that 404 on the current
+  revision; the app JS never loads and the user gets a blank page, with `static.asset_404`
+  counters/logs on the server as the signature. If that recurs, first **hard-purge the document**
+  (it is a stale-shell symptom) — do not "fix" it by touching asset caching or the bundle layout.
+- The CI smoke test asserts the `no-store` document contract, the document head (title, `og:image`,
+  and no `noindex`) and that the full `index.html` asset graph resolves 200 (stages 2 & 3). A deploy
+  that regresses document caching or ships an incomplete bundle fails loudly.
+
+## Legal, SEO & i18n
+
+- `web/legal/*.html` (`privacy.{en,pt}.html`, `terms.{en,pt}.html`) is now the **only** copy of the
+  policy text. It is read at request time by `src/preconsult/site/legal.py`, which serves `/privacy`
+  and `/terms` at the same URLs the SPA links to. The CI smoke test asserts every page in both
+  languages against the deployed revision — a missing file is a compliance failure, not cosmetics.
+- Legal pages pick their language from `?lang=`, then a legacy `preconsult_lang` cookie, then
+  English (`resolve_lang`). The SPA keeps its language in the URL only, so the cookie is read for
+  old browsers; do not add a new cookie for language.
+- UI copy and the shared parsers have one source of truth: `src/preconsult/core/i18n.py` and
+  `core/parsing.py`, exported to `contracts/*.json` and copied into `web/src/contracts/generated/`.
+  Change the Python side, regenerate, and commit both.
+- Crawler documents live in `src/preconsult/site/seo.py` and are wired by `site/routes.py`
+  (`/robots.txt`, `/sitemap.xml` with `pre-consult.org` URLs, `/llms.txt`). Keep them out of the
+  OpenAPI schema.
 
 ## Secrets & environment
 
 - `.env` is secret and must not be read or edited for value changes without care; secrets live in
-  Google Secret Manager (`SECUREMED_API_KEY`, `REDIS_URL`) and are wired as secret references, not
-  plaintext env vars, in every deploy.
+  Google Secret Manager (`SECUREMED_API_KEY`, `REDIS_URL`, `SESSION_SECRET`) and are wired as secret
+  references, not plaintext env vars, in every deploy. `SESSION_SECRET` signs the session cookie and
+  is required at startup outside `BUILD_MODE`.
 - **The active LLM provider is selected by `LLM_PROVIDER`, and the default is `vertex`
   (Google Vertex AI / Gemini), not Bedrock.** `core/llm.py` builds a `ChatVertexAI` client from
   `LLM_MODEL` + `VERTEX_REGION` + `PROJECT_ID`, or a `ChatBedrockConverse` client from
@@ -241,14 +249,16 @@ outages), so Redis must be reserved for actual patient sessions:
   breaking every question request. Bedrock is the planned next step, kept working behind the switch —
   do not delete either path.
   **Switching providers is a PHI decision, not a config tweak.** It changes which third party receives
-  clinical text, so the privacy copy in `reflex_app/preconsult/preconsult.py` (and `web/legal/*.html`
-  once the SPA serves those) must change in the same commit, along with the deploy's `secrets:` block
-  (add `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`), the `LLM_MODEL` default, and the IAM policy scope
+  clinical text, so the privacy copy in `web/legal/privacy.en.html` and `web/legal/privacy.pt.html`
+  (the only copies left) and the matching `src/preconsult/core/i18n.py` strings must change in the
+  same commit, along with the deploy's `secrets:` block (add
+  `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`), the `LLM_MODEL` default, and the IAM policy scope
   (`bedrock:InvokeModelWithResponseStream` on the single Haiku model).
   Upstream failures map to the existing stable codes via `google_api_handler` /
   `bedrock_api_handler` (throttling → `503 llm_unavailable`, everything else → `502
   ai_upstream_error`); keep those codes unchanged. Regions are fixed and must not be routed by UI
   language (language ≠ data residency).
 - Deploy-affecting changes include anything the container runs: error-response shape (codes),
-  health routes, config flags (e.g. `TRUST_PROXY_HEADERS`), Sentry init. Such a change is only
-  "done" after the CI/CD-built revision serves `200` — local commits alone are NOT deployment.
+  health routes, config flags (e.g. `TRUST_PROXY_HEADERS`, `ALLOW_PUBLIC_INIT`), the served document
+  and its cache headers, Sentry init. Such a change is only "done" after the CI/CD-built revision
+  serves `200` — local commits alone are NOT deployment.

@@ -21,31 +21,3 @@ def test_i18n_missing_pt_key_falls_back():
 def test_i18n_gender_opts_includes_prefer_not():
     assert "Prefer not to say" in translations["en"]["gender_opts"]
     assert "Prefiro não informar" in translations["pt"]["gender_opts"]
-
-
-def test_get_localized_value_unknown_category_returns_key():
-    from reflex_app.preconsult.state import State
-    state = State()
-    state.lang = "en"
-    result = state.get_localized_value("nonexistent", "some_key")
-    assert result == "some_key"
-
-
-def test_get_localized_value_empty_key_returns_empty():
-    from reflex_app.preconsult.state import State
-    state = State()
-    result = state.get_localized_value("duration", "")
-    assert result == ""
-
-
-def test_state_set_lang():
-    from reflex_app.preconsult.state import State
-    state = State()
-    state.set_lang("pt")
-    assert state.lang == "pt"
-    state.set_lang("en")
-    assert state.lang == "en"
-    # Invalid lang should be ignored
-    state.set_lang("fr")
-    assert state.lang == "en"
-

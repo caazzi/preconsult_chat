@@ -15,13 +15,13 @@ OpenAPI 3.1 cannot encode but that a client must honour.
 
 ## 1. Transport & auth
 
-- Base URL resolution (`reflex_app/preconsult/analytics.py::_api_url` /
-  `state.py::_api_url`):
-  - If `API_BASE_URL` is an absolute `http(s)://` origin, call
-    `<origin>/api<path>`.
-  - Else call the same-origin `/api<path>` (dev / same-image serving).
-  - **Never** append `/api` again when `API_BASE_URL` already ends in `/api`
-    (would produce `/api/api/...`).
+- Base URL resolution (`web/src/api/client.ts`: `API_BASE` + `apiUrl()`):
+  - The SPA is served from the same origin as the API, so it calls `/api<path>`.
+  - A build can point at another origin with `VITE_API_BASE_URL`; the value is
+    used verbatim as the prefix, so it must **not** already end in `/api`
+    (that would produce `/api/api/...`).
+  - Requests always send `credentials: "include"` so the session cookie rides
+    along; the SPA holds no API key (`web/src/api/client.ts`).
 - Every `/api/**` request must authenticate with the signed session cookie **or**
   the `X-API-KEY` header (see `docs/authz-matrix.md`). A missing/invalid
   credential returns `403` with a stable `auth_failed` code (gated by the bot gate
@@ -29,7 +29,7 @@ OpenAPI 3.1 cannot encode but that a client must honour.
 - **Bootstrap exception:** `POST /api/session/init` issues the cookie, so it
   cannot require one. The code default is `ALLOW_PUBLIC_INIT=false` (behaves like
   every other route), and the **deployed environment sets it to `true`** because
-  the SPA at `/next` is cookie-only and holds no API key. Guards: the per-IP
+  the SPA at `/` is cookie-only and holds no API key. Guards: the per-IP
   limits, the bot gate and bounded payloads. Request bodies are bounded
   (`SessionInitRequest`), and an oversized/invalid body returns `422
   validation_failed` without echoing the submitted values.
@@ -86,7 +86,8 @@ respond `content-type: text/event-stream`. Wire contract pins:
 - Client stream consumer responsibilities:
   - Accumulate chunks into a local buffer.
   - Re-parse the buffer on each chunk after `is_emergency_trigger` gate (a
-    red-flag token aborts into the emergency dialog).
+    red-flag token aborts into the emergency dialog). The SPA port lives in
+    `web/src/api/sse.ts` + `web/src/contracts/parsing.ts`.
   - Re-run `split_questions(buffer)` to derive the live question list (see
     `docs/parsing-port-spec.md`).
 
@@ -103,11 +104,12 @@ Tests that pin this contract: `tests/test_sse_contract.py`,
 | `POST /api/*-questions-stream` | 5/min per IP |
 
 - Exceeding returns `429 rate_limited` (or `redis_quota_exceeded` for the daily
-  Upstash quota). `get_client_ip()` reads proxy headers only when
-  `TRUST_PROXY_HEADERS=true`, and then takes the last `x-forwarded-for` hop (the
-  one Cloud Run appended) — see `src/preconsult/core/config.py` and the
-  measurement recorded in `AGENTS.md`. The deployed container sets it to `true`;
-  without it every client shares one bucket (`169.254.169.126`).
+  Upstash quota). `get_client_ip()` (`src/preconsult/api/endpoints.py`) reads proxy
+  headers only when `TRUST_PROXY_HEADERS=true` (parsed in
+  `src/preconsult/core/config.py`), and then takes the last `x-forwarded-for` hop
+  (the one Cloud Run appended) — see the measurement recorded in `AGENTS.md`. The
+  deployed container sets it to `true`; without it every client shares one bucket
+  (`169.254.169.126`).
 
 ---
 
@@ -124,11 +126,13 @@ Tests that pin this contract: `tests/test_sse_contract.py`,
 
 - Request/response schemas & route list: `GET /api/openapi.json`
 - Endpoint implementations: `src/preconsult/api/endpoints.py`
+- `/api` app assembly (handler registration order): `src/preconsult/api/app.py`
 - Error codes & handlers: `src/preconsult/core/errors.py`
+- Browser client (base URL, cookie auth, typed error codes): `web/src/api/client.ts`
 - SSE/pin tests: `tests/test_sse_contract.py`, `tests/test_api_integration.py`
 - Error-handler/privacy-contract tests: `tests/test_error_handlers.py`
-- Client IP / proxy policy: `src/preconsult/core/config.py`,
-  `tests/test_client_ip.py`
+- Client IP / proxy policy: `src/preconsult/api/endpoints.py::get_client_ip`,
+  `src/preconsult/core/config.py`, `tests/test_client_ip.py`
 
 > This document is intentionally scoped to behavioral gaps. When in doubt,
 > prefer the generated OpenAPI schema; if a rule has no representation in

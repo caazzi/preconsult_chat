@@ -1,8 +1,8 @@
 """
-E2E fixtures for the shadow SPA (web/) served at /next.
+E2E fixtures for the SPA (web/) served at ``/``.
 
 Reuses the same real-backend approach as tests/e2e: one gunicorn worker serving
-both the Reflex app (/) and the SPA (/next) plus /api. The SPA talks only to
+the SPA at ``/`` plus ``/api``. The SPA talks only to
 /api over plain HTTP with the session cookie, so these specs exercise that path
 hermetically — no live Bedrock/Redis. API endpoints the SPA calls are
 intercepted at the browser route layer so no real session/LLM/Redis is needed.
@@ -22,7 +22,7 @@ E2E_HOST = os.environ.get("E2E_HOST", "127.0.0.1")
 E2E_PORT = int(os.environ.get("E2E_PORT", "8000"))
 E2E_BASE = f"http://{E2E_HOST}:{E2E_PORT}"
 E2E_WORKERS = os.environ.get("E2E_WORKERS", "1")
-_APP_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "reflex_app")
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 _WEB_DIST = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "web", "dist")
 )
@@ -52,14 +52,11 @@ def backend() -> str:
     try:
         gunicorn = os.environ.get("E2E_GUNICORN")
         if not gunicorn:
-            project_root = os.path.abspath(
-                os.path.join(os.path.dirname(__file__), "..", "..")
-            )
-            candidate = os.path.join(project_root, ".venv", "bin", "gunicorn")
+            candidate = os.path.join(_PROJECT_ROOT, ".venv", "bin", "gunicorn")
             gunicorn = candidate if os.path.exists(candidate) else "gunicorn"
         cmd = [
             gunicorn,
-            "preconsult.preconsult:api",
+            "preconsult.main:app",
             "--bind",
             f"{E2E_HOST}:{E2E_PORT}",
             "--worker-class",
@@ -77,7 +74,7 @@ def backend() -> str:
         env.pop("REDIS_URL", None)
         proc = subprocess.Popen(
             cmd,
-            cwd=_APP_DIR,
+            cwd=_PROJECT_ROOT,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=env,

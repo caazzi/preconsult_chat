@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -29,9 +30,19 @@ function initialLang(): Lang {
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(initialLang);
 
+  // The document ships as lang="en"; correct it on mount for auto-detected
+  // languages and keep it in sync afterwards (a11y + correct pronunciation).
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  // Mirror the language into ?lang= so a share/bookmark keeps it. URL only —
+  // no cookie and no localStorage, to honour the zero-persistence posture.
   const setLang = useCallback((next: Lang) => {
     setLangState(next);
-    document.documentElement.lang = next;
+    const url = new URL(window.location.href);
+    url.searchParams.set("lang", next);
+    window.history.replaceState(window.history.state, "", url);
   }, []);
 
   const value = useMemo<I18nContextValue>(

@@ -29,8 +29,7 @@ def _candidate_dirs() -> list[Path]:
     directory. The remaining candidates cover the three ways this module is
     imported: from the source tree, from an installed wheel in ``.venv``
     (while the process runs at the repo root), and inside the container where
-    the code lives at ``/app/src`` and the process runs from
-    ``/app/reflex_app``.
+    the code lives at ``/app/src`` and the process runs from ``/app``.
     """
     candidates: list[Path] = []
     override = os.environ.get("LEGAL_DIR", "").strip()

@@ -11,3 +11,46 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     sans-serif;
 }
+
+/* Ported from the Reflex host's `style` dict (reflex_app/preconsult/
+   preconsult.py) so the SPA keeps the same motion and input affordances. */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0.3;
+  }
+}
+
+/* Respect the OS reduced-motion preference: effectively disable animation
+   without removing the end state. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Reflex used var(--gray-8); slate-500 is the closest match in this palette. */
+::placeholder {
+  color: #64748b;
+}

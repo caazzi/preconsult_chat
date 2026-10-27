@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy_profile:
-        description: 'Deployment Profile (cost_optimized = 0.5 CPU/1Gi/min=1/concurrency=1/throttling [keeps one warm instance so the in-memory Engine.IO socket session survives, default], high_performance = 2 CPU/2Gi/min=2/concurrency=40/no-throttle)'
+        description: 'Deployment Profile (cost_optimized = 0.5 CPU/1Gi/min-instances=1/concurrency=1/throttling [keeps one warm instance, default], high_performance = 2 CPU/2Gi/min-instances=2/concurrency=40/no-throttle)'
         required: true
         default: 'cost_optimized'
         type: choice
@@ -57,9 +57,9 @@ jobs:
     # `--locked` (not just a plain sync): CI must install exactly the lockfile
     # that ships in the image, and fail loudly if the lock has gone stale.
     # Without it uv silently re-resolves when the lock is out of date relative to
-    # pyproject.toml -- that is how a PR once tested 132 packages including
-    # reflex 0.9.13 while the image would have shipped the locked
-    # 0.9.8.post1, and the suite failed on an API the deployed build still has.
+    # pyproject.toml -- that is how a PR once tested 132 packages, including a
+    # newer release than the image would have shipped, and the suite failed on an
+    # API the deployed build did not have.
     - name: Install dependencies
       run: uv sync --locked --all-extras --dev
 
@@ -112,53 +112,12 @@ jobs:
       run: |
         uv run pytest tests/ -v --cov --cov-report=term-missing --cov-fail-under=80
 
-  e2e:
-    # Browser E2E — hermetic: real single-worker backend + Playwright against a
-    # frontend built for localhost. Covers the socket-session stability (the
-    # multi-worker `400 "Invalid session"` bug) and the landing→Step-1 wizard
-    # transition, which are purely client-side state over the Socket.IO channel,
-    # so no live Vertex AI or serverless Redis is needed. Runs on every push/PR
-    # so the fix can't silently regress.
-    name: Playwright E2E (socket-session + wizard)
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          python-version: "3.11"
-          enable-cache: true
-
-      - name: Install deps (with e2e extra)
-        run: uv sync --locked --extra e2e
-
-      - name: Install Playwright browser + system deps
-        run: uv run python -m playwright install --with-deps chromium
-
-      - name: Run E2E (single worker — the fixed configuration)
-        run: scripts/run_e2e.sh
-
-      # Flaky socket assertions are retried by Playwright/pytest; a genuine
-      # regression (e.g. >1 gunicorn workers) surfaces as a hard failure here.
-      - name: Upload Playwright artifacts on failure
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-test-results
-          path: test-results/
-          if-no-files-found: ignore
-          retention-days: 7
-
   e2e-spa:
-    # Hermetic Playwright E2E for the shadow SPA (web/) served at /next. Builds
-    # the Vite app and drives it against a real single-worker backend with the
-    # SPA's /api calls mocked at the browser layer (no live Bedrock/Redis).
-    name: Playwright E2E (shadow SPA /next)
+    # Browser E2E for the React SPA (web/), which is served at / by the Python
+    # host (`preconsult.host:app`). Builds the Vite app and drives it against a
+    # real single-worker backend, with the SPA's /api calls mocked at the
+    # browser layer (no live Vertex AI or serverless Redis).
+    name: Playwright E2E (SPA)
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -270,15 +229,6 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
-          build-args: |
-            API_URL=https://pre-consult.org
-            # TRIAL: WebSocket transport. We deploy with --no-use-http2 (HTTP/1.1),
-            # where a browser can upgrade to a WebSocket (the AGENTS.md 'cannot
-            # upgrade' warning was for HTTP/2). Long-polling over Cloud Run has been
-            # torn down between polls (endless engine.io re-handshake, no state
-            # delta); if GFE serves the WS upgrade this removes the entire socket
-            # instability. Revert to `polling` if GFE will not serve WS.
-            REFLEX_TRANSPORT=websocket
           cache-from: type=gha
           # Scope the write cache to this run's SHA so the shared `main` scope
           # does not accumulate unbounded buildx blobs run over run (each push
@@ -297,26 +247,19 @@ jobs:
           # request reset with 502 "Invalid HTTP request received". HTTP/1.1
           # (the `http1` port name, used by the verified-working revisions) is
           # what uvicorn serves cleanly.
-          # min-instances=1 on the default (cost_optimized) profile is a CORRECTNESS
-          # requirement, not a latency nice-to-have. The app runs a SINGLE gunicorn
-          # worker (see Dockerfile CMD: --workers 1) with no Redis token manager, so
-          # the whole Engine.IO session store lives in one worker's memory. With
-          # scale-to-zero (min=0) the instance is recycled at idle, so the browser's
-          # already-connected socket POSTs its next state event ("Start Preparing") to
-          # a fresh instance with no session, the server must 400 it, and reflex's
-          # client silently drops it — the wizard never advances. Holding one warm
-          # instance keeps the socket alive, and --session-affinity keeps the browser
-          # on it. Cost bounded to one idle instance.
+          # min-instances=1 + --session-affinity keep one warm instance on the
+          # default profile. That is a deliberate, UNCHANGED choice for now, not a
+          # correctness requirement: the only genuinely in-memory state is the
+          # per-worker Redis-outage fallback (session + rate-limit shims), which is
+          # a resilience shim rather than a store of truth. The flag choice is
+          # pending a load measurement; do not loosen it before that lands.
           # --cpu=0.5 / --memory=1Gi is right-sized: a single async uvicorn worker
           # (not "2 workers", which is a stale note) doesn't saturate 1 vCPU, and 1Gi
           # still clears the in-memory PDF + 512-session shim headroom.
           # --concurrency=1 is REQUIRED to pair with --cpu=0.5: Cloud Run rejects
           # cpu < 1 when concurrency > 1 ("Total cpu < 1 is not supported with
           # concurrency > 1"). This is a portfolio app with effectively serial use,
-          # so a single in-flight request per instance is correct; --min-instances 1
-          # + --session-affinity keep the single warm instance and its in-memory
-          # Engine.IO session intact, which is the correctness invariant that must
-          # never revert to min=0.
+          # so a single in-flight request per instance is acceptable.
           if [ "$PROFILE" = "high_performance" ]; then
             echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=10 --min-instances=2 --concurrency=40 --cpu=2 --memory=2Gi --no-cpu-throttling" >> "$GITHUB_OUTPUT"
           else
@@ -335,14 +278,6 @@ jobs:
           # invalid secret reference. That is what failed the main deploy on
           # 2026-10-26: "No secret version specified for # Per-session cookie
           # signing key...:latest". Keep explanations OUTSIDE these blocks.
-          #
-          # REFLEX_SOCKET_TIMEOUT: engine.io socket idle timeout (seconds), raised
-          # from the 120s default so an idle user's session is less likely to be
-          # closed server-side while the page is open; a late click then
-          # re-handshakes cleanly instead of hitting a stale-session failure.
-          # REFLEX_SOCKET_INTERVAL: shorten the engine.io server->client ping
-          # interval so the long-poll is refreshed often enough to outrun any
-          # proxy/idle keepalive between polls (default 25s).
           # Both strategies are `overwrite` so this file is the single source of
           # truth for the service environment. That is not cosmetic: the failed
           # deploys of 2026-10-26 merged AWS secret refs and comment-named env
@@ -350,7 +285,7 @@ jobs:
           # future revision - the AWS secrets do not exist, so each deploy would
           # keep failing on them even after they leave this file. Add the AWS_*
           # refs back here when Bedrock is switched on.
-          # ALLOW_PUBLIC_INIT=true is set below because the SPA at /next holds no
+          # ALLOW_PUBLIC_INIT=true is set below because the SPA at / holds no
           # API key (cookie-only), so the session bootstrap has to be reachable
           # anonymously for it to start at all. Guards: the bot gate, 2/min plus
           # 20/day per client IP (bucketing verified in production 2026-10-26)
@@ -365,8 +300,6 @@ jobs:
             LLM_PROVIDER=vertex
             LLM_MODEL=gemini-2.5-flash
             ALLOW_PUBLIC_INIT=true
-            REFLEX_SOCKET_TIMEOUT=600
-            REFLEX_SOCKET_INTERVAL=10
             TRUST_PROXY_HEADERS=true
           # SESSION_SECRET: per-session cookie signing key (openssl rand -hex 32).
           secrets: |
@@ -482,10 +415,18 @@ jobs:
       - name: Run Multi-Stage Smoke Tests
         env:
           BASE_URL: ${{ steps.url.outputs.url }}
-          # Must match the deployed transport (WebSocket trial).
-          REFLEX_TRANSPORT: websocket
           EXPECTED_REVISION: ${{ needs.deploy.outputs.latest_ready_revision }}
         run: |
+          # NOTE: the Redis-backed session init + AI question stream are NOT
+          # exercised here against the deployed (serverless/Upstash) Redis. Each
+          # push used to create + read a real session, burning the free-tier
+          # Redis request quota for no coverage gain. The full session/stream/
+          # rate-limit/SSE coverage runs in the `test` job against a local
+          # redis:alpine service. This deployed smoke test focuses on whether
+          # the served container is up and the document, asset graph and legal
+          # pages of the SPA it serves are intact — the paths most prone to
+          # silent breakage.
+
           # 1. Warm-up and Liveness check
           echo "==== Stage 1: Liveness / Health Check ===="
           HEALTH_URL="${BASE_URL}/health"
@@ -506,232 +447,74 @@ jobs:
             exit 1
           fi
 
-          # 1c. Reflex event-channel assertion.
-          # Reflex drives all state mutations (e.g. the "Start Preparing" button)
-          # over the event channel. Historically only /health and the REST/SSE
-          # endpoints were exercised, so the WebSocket-vs-HTTP2 failure on Cloud
-          # Run shipped green. Probe the subscribed transport directly:
-          #   - polling: the engine.io handshake must return 200 (HTTP long-poll
-          #     over HTTP/2 works on Cloud Run).
-          #   - websocket: an HTTP/1.1 Upgrade must complete with 101.
-          # Any other result means interactive events are broken even though
-          # liveness/REST pass, so fail the deploy loudly.
-          echo "==== Stage 1c: Reflex Event-Channel Assertion ===="
-          TRANSPORT="${REFLEX_TRANSPORT:-polling}"
-          # Reflex mounts the Engine.IO socket at /_event/ (the browser's engine.io
-          # client resolves the EVENT url there), NOT /_event/socket.io/.
-          EVENT_CHANNEL="${BASE_URL}/_event/?EIO=4&transport=${TRANSPORT}"
-          if [ "$TRANSPORT" = "polling" ]; then
-            EVENT_STATUS=$(curl -s -o /tmp/event_handshake.txt -w "%{http_code}" \
-              "$EVENT_CHANNEL" --connect-timeout 15 --max-time 30 || echo "000")
-            echo "Event channel (polling) handshake HTTP Status: $EVENT_STATUS"
-            if [ "$EVENT_STATUS" != "200" ]; then
-              echo "::error::Reflex polling handshake failed with $EVENT_STATUS (expected 200). Interactive events are unavailable."
-              echo "Body: $(cat /tmp/event_handshake.txt)"
-              exit 1
-            fi
-            if ! head -c 60 /tmp/event_handshake.txt | grep -q '"sid"'; then
-              echo "::error::Polling handshake did not return an Engine.IO sid."
-              exit 1
-            fi
-          else
-            # websocket: validate the real WebSocket upgrade to /_event/ (the
-            # browser's engine.io client path). Google Frontend serves the upgrade
-            # to a genuine WebSocket client over HTTP/1.1 (we deploy
-            # --no-use-http2); a plain curl/raw-socket GET cannot complete the
-            # upgrade, so use Node's built-in WebSocket (present on the runner).
-            # First send an Engine.IO open packet and require a handshake reply,
-            # proving the state socket is reachable ahead of the SPA catch-all.
-            #
-            # The first upgrade after a cold start / instance warm-up can take
-            # much longer than a steady-state open (a warm HTTP /health returns
-            # in <1s while the instance's first WS upgrade can stall several
-            # seconds behind the Google Frontend). A single 12s attempt has
-            # proven flaky in CI even though the WS genuinely opens (the server
-            # logs a 101) — so retry the upgrade across several fresh
-            # connections and only fail when all attempts time out or error.
-            node - <<'NJS'
-          const url = process.env.BASE_URL + "/_event/?EIO=4&transport=websocket";
-          const MAX_ATTEMPTS = 5;
-          const ATTEMPT_TIMEOUT_MS = 15000;
-          let attempt = 0;
-          let settled = false;
-          function tryConnect() {
-            if (settled) return;
-            attempt++;
-            let ws;
-            try { ws = new WebSocket(url); } catch (e) { return retry("new failed: " + e.message); }
-            const timer = setTimeout(() => {
-              if (settled) return;
-              console.log("websocket attempt " + attempt + ": open timed out (" + ATTEMPT_TIMEOUT_MS + "ms)");
-              try { ws.close(); } catch (_) {}
-              retry("open timed out");
-            }, ATTEMPT_TIMEOUT_MS);
-            ws.onopen = () => {
-              if (settled) return;
-              console.log("websocket attempt " + attempt + ": OPEN");
-              // Prove the state socket speaks Engine.IO v4: expect the open
-              // packet `0{"sid":...}`; sending 40/ completes the socket.io (not
-              // engine.io) negotiation so a `40{...}` reply confirms it further.
-              ws.send("40/");
-            };
-            ws.onmessage = (e) => {
-              if (settled) return;
-              clearTimeout(timer);
-              const m = String(e.data);
-              console.log("websocket message:", m.slice(0, 80));
-              // Require at least one Engine.IO packet back (the `0{"sid"}` open
-              // packet or a `40{...}` after the 40/ we sent).
-              if (/^0\{"sid"/.test(m) || m.startsWith("40")) { settled = true; console.log("websocket state socket OK"); process.exit(0); }
-            };
-            ws.onerror = (e) => {
-              if (settled) return;
-              clearTimeout(timer);
-              console.log("websocket attempt " + attempt + ": ERROR " + ((e && e.message) || "WS error"));
-              retry("error");
-            };
-            ws.onclose = () => {
-              if (settled) return;
-              clearTimeout(timer);
-              retry("closed before handshake");
-            };
-          }
-          function retry(reason) {
-            if (settled) return;
-            if (attempt < MAX_ATTEMPTS) { console.log("retrying (" + reason + "), attempt " + attempt + " of " + MAX_ATTEMPTS); setTimeout(tryConnect, 1000); }
-            else { settled = true; fail(reason); }
-          }
-          function fail(reason) { console.error("::error::Reflex websocket upgrade failed after " + MAX_ATTEMPTS + " attempts (" + reason + ")"); process.exit(1); }
-          tryConnect();
-          NJS
-          fi
-          echo "Event channel (${TRANSPORT}) OK"
-
-          # Protocol-version guard: the deployed server must speak Engine.IO v4
-          # (EIO=4). A v3 client probe must be rejected with 400 "unsupported
-          # version" — if the server instead accepts EIO=3, the runtime and the
-          # built client bundle are skewed (e.g. a locally re-synced reflex that
-          # disagreed with the CI-`--frozen` build) and interactive state will
-          # 400 in real browsers. Pin the v4 contract so the regression can't
-          # deploy green. (For websocket, the Stage 1c Node upgrade already
-          # returned an Engine.IO v4 handshake, so v4 is proven there.)
-          if [ "$TRANSPORT" = "polling" ]; then
-            EIO3_STATUS=$(curl -s -o /tmp/event_eio3.txt -w "%{http_code}" \
-              "${BASE_URL}/_event/?EIO=3&transport=polling" \
-              --connect-timeout 15 --max-time 30 || echo "000")
-            echo "Engine.IO v3 client probe HTTP Status: $EIO3_STATUS"
-            if [ "$EIO3_STATUS" != "400" ] || ! grep -q "unsupported version" /tmp/event_eio3.txt; then
-              echo "::error::Server did not reject Engine.IO v3 client with the expected 400 'unsupported version'. Protocol skew detected."
-              echo "Body: $(cat /tmp/event_eio3.txt)"
-              exit 1
-            fi
-            echo "Engine.IO protocol v4 contract OK (v3 client correctly rejected)"
-          else
-            echo "Engine.IO protocol v4 contract OK (v4 handshake returned via websocket; v3 rejection is a polling concern)"
-          fi
-
-          # NOTE: the Redis-backed session init + AI question stream are NOT
-          # exercised here against the deployed (serverless/Upstash) Redis. Each
-          # push used to create + read a real session, burning the free-tier
-          # Redis request quota for no coverage gain. The full session/stream/
-          # rate-limit/SSE coverage runs in the `test` job against a local
-          # redis:alpine service. This deployed smoke test focuses on whether
-          # the served container is up and the interactive (socket) channel
-          # works — the paths most prone to silent breakage.
-
-          # 5. Reflex State-Socket Connectivity Test
+          # 2. SPA document cache-control + head contract
           #
-          # The connection the browser uses for all interactive state changes.
-          # For polling: the bare /_event endpoint answers an Engine.IO handshake
-          # JSON (`0{"sid"`). For websocket: the raw-socket upgrade in Stage 1c on
-          # /_event/ already validated the 101 upgrade, so here we just confirm the
-          # served path resolves (not swallowed by the SPA fallback). A regression
-          # here (e.g. an SPA fallback swallowing /_event) surfaces as a green
-          # deploy while the UI is broken, so it MUST be asserted explicitly.
-          echo "==== Stage 5: Reflex State-Socket (/_event) Connectivity ===="
-          if [ "$TRANSPORT" != "websocket" ]; then
-            EVENT_RESPONSE=$(curl -s -L -w "\nHTTP_STATUS:%{http_code}" \
-              "${BASE_URL}/_event?EIO=4&transport=polling" \
-              --connect-timeout 15 --max-time 45 || echo -e "\nHTTP_STATUS:000")
-
-            EVENT_BODY=$(echo "$EVENT_RESPONSE" | sed '$d')
-            EVENT_STATUS=$(echo "$EVENT_RESPONSE" | tail -n 1 | cut -d':' -f2)
-
-            echo "Event HTTP Status: $EVENT_STATUS"
-            if [ "$EVENT_STATUS" != "200" ]; then
-              echo "::error::Reflex state-socket endpoint (/ _event) failed!"
-              echo "Response Body: $EVENT_BODY"
-              exit 1
-            fi
-
-            if [[ "$EVENT_BODY" != 0* || "$EVENT_BODY" != *'"sid"'* ]]; then
-              echo "::error::/_event did not return an Engine.IO handshake. "
-              echo "Response Body: ${EVENT_BODY}"
-              exit 1
-            fi
-            echo "State-socket handshake OK: ${EVENT_BODY}" | head -c 120
-            echo ""
-          else
-            # websocket: the authoritative socket check is Stage 1c's raw-socket
-            # WebSocket 101 upgrade on /_event/; that already guarantees the state
-            # socket is reachable ahead of the SPA catch-all. Nothing further to
-            # probe here.
-            echo "State-socket (websocket) OK (validated by Stage 1c upgrade)"
-          fi
-
-          # 6. Index.html cache-control guard
+          # The document served at / MUST be uncacheable (no-store). It references
+          # content-hashed chunks; if a stale document is cached (at the Google
+          # Frontend edge or in a browser) while the build advances, the browser
+          # resolves old chunk URLs that 404 on the new revision and the app JS
+          # never loads. Assert the no-store contract on the origin so a future
+          # deploy can't silently re-whitelist document caching.
           #
-          # The served HTML shell MUST be uncacheable (no-store). It references
-          # content-hashed chunks; if a stale shell is cached (at the Google
-          # Frontend edge or browser) while the build advances, the browser
-          # resolves old chunk URLs that 404 on the new revision, fails to load
-          # the app JS and falls back to an old socket client — surfacing as the
-          # production "unsupported version of the Socket.IO or Engine.IO
-          # protocols" error on /_event. Assert the no-store contract on the
-          # origin so a future deploy can't silently re-whitelist document
-          # caching.
-          echo "==== Stage 6: index.html must be uncacheable ===="
-          curl -s -D /tmp/idx_headers.txt -o /dev/null "${BASE_URL}/" \
+          # The head assertions are the crawler/share contract for the public
+          # root document: a <title> naming PreConsult, an og:image for link
+          # previews, and no `noindex` (which would de-index the site).
+          echo "==== Stage 2: SPA document at / is uncacheable and crawlable ===="
+          curl -s -D /tmp/idx_headers.txt -o /tmp/idx.html "${BASE_URL}/" \
             --connect-timeout 15 --max-time 30
           DOC_CTRL=$(tr -d '\r' < /tmp/idx_headers.txt | grep -i -m1 '^cache-control:' | sed -e 's/^[Cc]ache-[Cc]ontrol:[[:space:]]*//')
           echo "index.html cache-control: '${DOC_CTRL}'"
           if [ -z "$DOC_CTRL" ] || ! echo "$DOC_CTRL" | grep -qi "no-store"; then
-            echo "::error::index.html is cacheable (cache-control: '${DOC_CTRL}'). A stale shell can 404 its chunks and break the socket."
+            echo "::error::The document at / is cacheable (cache-control: '${DOC_CTRL}'). A stale shell can 404 its chunks and break the app."
             exit 1
           fi
           echo "index.html no-store contract OK"
 
-          # 7. Asset-graph integrity
+          if ! grep -qi '<title>[^<]*PreConsult' /tmp/idx.html; then
+            echo "::error::The document at / has no <title> mentioning PreConsult."
+            exit 1
+          fi
+          if ! grep -qi 'og:image' /tmp/idx.html; then
+            echo "::error::The document at / has no og:image meta tag."
+            exit 1
+          fi
+          if grep -qi 'noindex' /tmp/idx.html; then
+            echo "::error::The document at / is marked noindex; the public site must stay indexable."
+            exit 1
+          fi
+          echo "Document head OK (<title> PreConsult, og:image, indexable)"
+
+          # 3. Asset-graph integrity
           #
-          # Every /assets/* reference in the served index.html must resolve to
+          # Every /assets/* reference in the served document must resolve to
           # 200. This is the direct guard against the stale-shell failure mode:
           # if the shell names chunks that don't exist (or a build left the
           # bundle internally inconsistent), the app JS never loads for users.
-          echo "==== Stage 7: Served index.html asset graph is resolvable ===="
+          echo "==== Stage 3: Served document asset graph is resolvable ===="
           DOC_HTML=$(curl -s "${BASE_URL}/" --connect-timeout 15 --max-time 30)
           FAILED=0
           for asset in $(echo "$DOC_HTML" | grep -oE '(src|href)="/[^"]+"' | sed -E 's/(src|href)="([^"]+)"/\2/' | grep -E '\.(js|css)$'); do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}${asset}" --connect-timeout 15 --max-time 30 || echo "000")
             echo "  $CODE  $asset"
             if [ "$CODE" != "200" ]; then
-              echo "::error::index.html references missing asset: $asset (HTTP $CODE)"
+              echo "::error::The served document references a missing asset: $asset (HTTP $CODE)"
               FAILED=1
             fi
           done
           if [ "$FAILED" = "1" ]; then
-            echo "::error::index.html asset graph is incomplete; a cached/stale shell would break the socket."
+            echo "::error::The asset graph is incomplete; the app JS would fail to load."
             exit 1
           fi
-          echo "Asset graph OK: all index.html-referenced chunks resolve 200"
+          echo "Asset graph OK: all document-referenced chunks resolve 200"
 
-          # 8. Served-bundle revision guard
+          # 4. Served-bundle revision guard
           #
           # Cross-check the serving instance reports the revision that was just
           # promoted. If user traffic is still landing on an old revision (or a
           # cached document references an earlier build), the served bundle and
           # the deployed revision diverge and the stale-shell failure returns.
           # /health/metrics exposes the worker's K_REVISION read-only and PHI-free.
-          echo "==== Stage 8: Served instance matches deployed revision ===="
+          echo "==== Stage 4: Served instance matches deployed revision ===="
           SERVED_REV=$(curl -s "${BASE_URL}/health/metrics" --connect-timeout 15 --max-time 30 \
             | sed -n 's/.*"revision":"\([^"]*\)".*/\1/p')
           echo "Served /health/metrics revision: '${SERVED_REV}'"
@@ -744,7 +527,7 @@ jobs:
           fi
           echo "Served revision matches deployed revision"
 
-          # 9. Legal documents load from the packaged files
+          # 5. Legal documents load from the packaged files
           #
           # /privacy and /terms are read from web/legal/*.html at runtime
           # (preconsult.site.legal). If those files are missing from the image -
@@ -752,7 +535,7 @@ jobs:
           # against the wrong working directory - the request 500s instead of
           # serving the policy. That is a compliance surface, not cosmetics, so
           # assert every page and both languages against the deployed revision.
-          echo "==== Stage 9: Legal documents served from packaged files ===="
+          echo "==== Stage 5: Legal documents served from packaged files ===="
           for page in privacy terms; do
             for lang in en pt; do
               BODY=$(curl -sS "${BASE_URL}/${page}?lang=${lang}" --connect-timeout 15 --max-time 30)
@@ -761,46 +544,5 @@ jobs:
             done
             echo "/${page}: en + pt served"
           done
-
-          # 10. Shadow SPA (/next) availability + document/asset contract
-          #
-          # The React rewrite is served from the same image at /next during the
-          # shadow period. This is a liveness/document-contract check only (no
-          # session/stream, per the deployed-smoke scope): the /next shell must
-          # answer 200, be no-store, and every /next/assets/* chunk it
-          # references must resolve 200 — the same stale-shell guard as Stage 7,
-          # so a broken or cached SPA cannot deploy green.
-          echo "==== Stage 10: Shadow SPA (/next) document + asset graph ===="
-          NEXT_STATUS=$(curl -s -o /tmp/next.html -w "%{http_code}" "${BASE_URL}/next/" \
-            --connect-timeout 15 --max-time 30 || echo "000")
-          echo "/next/ HTTP Status: ${NEXT_STATUS}"
-          if [ "$NEXT_STATUS" != "200" ]; then
-            echo "::error::/next/ did not return 200 (got ${NEXT_STATUS}). The shadow SPA is not being served."
-            exit 1
-          fi
-
-          curl -s -D /tmp/next_headers.txt -o /dev/null "${BASE_URL}/next/" \
-            --connect-timeout 15 --max-time 30
-          NEXT_CTRL=$(tr -d '\r' < /tmp/next_headers.txt | grep -i -m1 '^cache-control:' | sed -e 's/^[Cc]ache-[Cc]ontrol:[[:space:]]*//')
-          echo "/next/ cache-control: '${NEXT_CTRL}'"
-          if [ -z "$NEXT_CTRL" ] || ! echo "$NEXT_CTRL" | grep -qi "no-store"; then
-            echo "::error::/next/ document is cacheable (cache-control: '${NEXT_CTRL}'). A stale shell can 404 its chunks."
-            exit 1
-          fi
-
-          NEXT_FAILED=0
-          for asset in $(grep -oE '(src|href)="/next/[^"]+"' /tmp/next.html | sed -E 's/(src|href)="([^"]+)"/\2/' | grep -E '\.(js|css)$'); do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}${asset}" --connect-timeout 15 --max-time 30 || echo "000")
-            echo "  $CODE  $asset"
-            if [ "$CODE" != "200" ]; then
-              echo "::error::/next shell references missing asset: $asset (HTTP $CODE)"
-              NEXT_FAILED=1
-            fi
-          done
-          if [ "$NEXT_FAILED" = "1" ]; then
-            echo "::error::/next asset graph is incomplete."
-            exit 1
-          fi
-          echo "Shadow SPA /next OK (200, no-store document, asset graph resolves)"
 
           echo "==== Smoke Test Passed Successfully! ===="

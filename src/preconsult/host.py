@@ -33,8 +33,8 @@ def resolve_spa_dist() -> Path | None:
     """Locate the built SPA without depending on the container's WORKDIR.
 
     ``WEB_DIST_DIR`` wins. Otherwise the working directory and its parent are
-    both checked, which covers every layout in play: ``/app`` (the post-cutover
-    WORKDIR), ``/app/reflex_app`` (the current one) and the repo root in tests.
+    both checked, which covers the container (``/app``) and a repo checkout
+    (root or a subdirectory) without depending on one fixed layout.
     """
     override = os.environ.get("WEB_DIST_DIR", "").strip()
     if override:

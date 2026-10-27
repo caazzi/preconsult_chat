@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
@@ -17,7 +17,6 @@ import {
 } from "./wizard/WizardProvider";
 import { Stepper } from "./components/Stepper";
 import { Landing } from "./pages/Landing";
-import { PrivacyPage } from "./pages/PrivacyPage";
 import {
   StepDemographics,
   StepComplaint,
@@ -69,6 +68,14 @@ function Home() {
   );
 }
 
+function RedirectHome() {
+  // Unknown paths (including stale /next/... bookmarks) render the landing
+  // instead of an empty <main>. The query string is preserved so a shared
+  // ?lang= link keeps its language.
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: "/", search }} replace />;
+}
+
 function Shell() {
   const { lang } = useI18n();
   return (
@@ -77,8 +84,11 @@ function Shell() {
         <Header />
         <main className="flex w-full flex-1 justify-center pt-4">
           <Routes>
+            {/* /privacy and /terms are served as static HTML by the Python
+                backend (they negotiate ?lang=), so the SPA must not claim
+                them. */}
             <Route path="/" element={<Home />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="*" element={<RedirectHome />} />
           </Routes>
         </main>
         <Footer />
@@ -91,7 +101,6 @@ export function App() {
   return (
     <I18nProvider>
       <BrowserRouter
-        basename="/next"
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Shell />

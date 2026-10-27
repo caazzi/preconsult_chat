@@ -1,7 +1,7 @@
 # --- Stage 1: Build Frontend ---
 FROM python:3.11-slim-bookworm AS builder
 
-# Install Node.js for Reflex frontend compilation
+# Node.js builds the SPA in web/ (see the frontend stage below)
 RUN apt-get update && apt-get install -y curl && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs unzip && \
@@ -36,26 +36,7 @@ RUN node scripts/sync-contracts.mjs && npm run build
 # web/dist is needed at runtime, and COPY --from=builder copies all of /app.
 RUN rm -rf /app/web/node_modules /app/web/src /app/web/scripts
 
-# Apply the tracked reflex-client socket-replay patch onto the reflex-base web
-# template so `reflex export` compiles it into the frontend bundle. Without
-# this, a fresh .web (re-materialized from the installed reflex package on each
-# clean build) would drop the dead-session event-replay fix. Keep state.js in
-# sync with the reflex-base template for the pinned reflex version (0.9.8.post1).
-RUN cp /app/reflex_app/web_utils/state.js \
-       /app/.venv/lib/python3.11/site-packages/reflex_base/.templates/web/utils/state.js
-
-# Build Reflex frontend
-WORKDIR /app/reflex_app
-ARG API_URL="https://pre-consult.org"
-ENV API_URL=$API_URL
-# Baked into the client's env.json (TRANSPORT) during export. Must match the
-# server-side config.transport at runtime (see final stage). Defaults to
-# `polling` for Cloud Run (see rxconfig.py), overridable via REFLEX_TRANSPORT.
-ARG REFLEX_TRANSPORT="polling"
-ENV REFLEX_TRANSPORT=$REFLEX_TRANSPORT
-RUN npm install -g bun && \
-    BUILD_MODE=true uv run reflex export --frontend-only --no-zip
-
+# The only frontend build is web/ (above); there is no second frontend host.
 # --- Stage 2: Final Production Image ---
 FROM python:3.11-slim-bookworm
 
@@ -71,31 +52,22 @@ COPY --from=builder /app /app
 # Set up environment.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH="/app/src" \
-    REFLEX_TRANSPORT="websocket"
+    PYTHONPATH="/app/src"
 
-# Expose ports (Reflex default is 8000 for backend, 3000 for frontend, 
-# but in prod it's consolidated or served differently)
-# We will run reflex in prod mode which binds to 8080 (Cloud Run default)
+# Cloud Run routes to $PORT (8080 by default).
 EXPOSE 8080
 # Set up non-root user for security
 RUN groupadd -r preconsult && useradd -r -g preconsult -m preconsult && \
     chown -R preconsult:preconsult /app
 
 USER preconsult
-WORKDIR /app/reflex_app
+WORKDIR /app
 
-# Run production backend using Gunicorn with a SINGLE Uvicorn worker per
-# instance. Reflex's Socket.IO/Engine.IO session store is in-memory per worker
-# (no `redis_url` — see rxconfig.py, which keeps the free-tier serverless Redis
-# quota for real-user sessions). With >1 workers, long-polling requests for one
-# browser round-robin across workers, each with its own in-memory session, so a
-# poll hitting the "wrong" worker is rejected with `400 "Invalid session <sid>"`
-# and the UI fails to advance ("Cannot connect to server: xhr post error").
-# Cloud Run `--session-affinity` pins a client to one instance, so a single
-# worker per instance reliably owns the whole socket session; horizontal
-# scaling happens at the instance level (uvicorn's asyncio loop serves many
-# concurrent connections).
+# A SINGLE Uvicorn worker per instance, deliberately, for now. Sessions live in
+# Redis; the only per-worker state is the best-effort Redis-outage fallback and
+# the rate-limit fallback, so this is a resilience/latency choice rather than a
+# correctness requirement. Raising the worker count is a separate, measured
+# change (see AGENTS.md) — do not bump it here.
 #
 # IMPORTANT: invoke gunicorn DIRECTLY from the baked venv (/app/.venv/bin) —
 # NOT via `uv run`. Running `uv run gunicorn` (with or without UV_NO_SYNC) makes
@@ -105,4 +77,4 @@ WORKDIR /app/reflex_app
 # `uv sync --frozen` in the builder bakes the project + venv, so startup stays
 # fast (seconds) with no runtime rebuild. 'exec' ensures signals (like SIGTERM
 # for scale-down) correctly reach gunicorn.
-CMD ["sh", "-c", "exec /app/.venv/bin/gunicorn preconsult.preconsult:api --bind 0.0.0.0:${PORT:-8080} --worker-class uvicorn.workers.UvicornWorker --workers 1 --threads 4"]
+CMD ["sh", "-c", "exec /app/.venv/bin/gunicorn preconsult.main:app --bind 0.0.0.0:${PORT:-8080} --worker-class uvicorn.workers.UvicornWorker --workers 1 --threads 4"]

@@ -40,8 +40,7 @@ TRUST_CF_CONNECTING_IP = os.environ.get("TRUST_CF_CONNECTING_IP") == "true"
 # service has credentials for; "bedrock" (Anthropic Claude on AWS) is the opt-in
 # path kept for the later AWS migration. This is a PHI data-flow decision, not a
 # tuning knob: switching it changes which third party receives clinical text, so
-# the privacy copy in reflex_app/preconsult/preconsult.py (and web/legal/ once
-# the SPA serves those pages) must be updated in the same change.
+# the privacy copy in web/legal/*.html must be updated in the same change.
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "vertex").strip().lower()
 
 VERTEX_REGION = os.environ.get("VERTEX_AI_REGION", "us-central1")

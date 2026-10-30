@@ -44,12 +44,35 @@ def _mock_api(page):
 def test_spa_boots_at_root(page, backend):
     page.goto(f"{backend}/", wait_until="networkidle")
     # Landing hero is rendered by the SPA.
-    assert page.get_by_role("button", name="Start Preparing").is_visible()
+    hero = page.get_by_test_id("landing-hero")
+    assert hero.get_by_role("button", name="Start Preparing").is_visible()
     # The document is the canonical one now: indexable, with real social tags.
     robots = page.locator('meta[name="robots"]')
     assert robots.count() == 0 or "noindex" not in (robots.get_attribute("content") or "")
     assert "PreConsult" in page.title()
     assert page.locator('meta[property="og:image"]').count() == 1
+
+
+def test_faq_is_below_the_hero(page, backend):
+    """Regression guard for the row-flex bug that put the FAQ beside the hero."""
+    for width, height in ((1280, 900), (375, 667)):
+        page.set_viewport_size({"width": width, "height": height})
+        page.goto(f"{backend}/", wait_until="networkidle")
+
+        hero = page.get_by_test_id("landing-hero")
+        faq = page.get_by_test_id("faq")
+        hero_box = hero.bounding_box()
+        faq_box = faq.bounding_box()
+        assert hero_box and faq_box
+
+        assert faq_box["y"] >= hero_box["y"] + hero_box["height"] - 1
+        assert (
+            abs(
+                (faq_box["x"] + faq_box["width"] / 2)
+                - (hero_box["x"] + hero_box["width"] / 2)
+            )
+            < 2
+        )
 
 
 def test_landing_is_crawlable_without_javascript(browser, backend):
@@ -66,6 +89,10 @@ def test_landing_is_crawlable_without_javascript(browser, backend):
         assert "Prepare for your doctor" in page.get_by_role(
             "heading", level=1
         ).inner_text()
+        assert page.get_by_role(
+            "heading", name="Frequently Asked Questions"
+        ).is_visible()
+        assert page.get_by_text("What is PreConsult?", exact=True).is_visible()
         assert page.locator("html").get_attribute("lang") == "en"
 
         # The pt URL is a real crawler document, not the English shell with a
@@ -90,7 +117,9 @@ def test_spa_wizard_flow(page, backend):
     _mock_api(page)
     page.goto(f"{backend}/?lang=en", wait_until="networkidle")
 
-    page.get_by_role("button", name="Start Preparing").click()
+    page.get_by_test_id("landing-hero").get_by_role(
+        "button", name="Start Preparing"
+    ).click()
     page.get_by_role("button", name="26-35").click()
     page.get_by_label("Select your gender").select_option("Female")
     page.get_by_role("button", name="Continue").click()

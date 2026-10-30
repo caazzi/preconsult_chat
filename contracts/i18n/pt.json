@@ -88,8 +88,10 @@
   "generate_qs_btn": "Gerar Minhas Perguntas",
   "hero_subtitle": "Organize seus sintomas em um relatório estruturado e legível para seu médico.",
   "hero_title": "Prepare-se para sua consulta médica em 3 minutos",
+  "how_title": "Como funciona",
   "intake": "Triagem do Paciente",
   "intake_desc": "Fale-nos sobre você. Nós o ajudaremos a organizar seus pensamentos.",
+  "landing_meta": "Cerca de 3 minutos · Sem cadastro · Gratuito",
   "lang": "Preferência de Idioma",
   "lang_opts": [
     "en",
@@ -111,7 +113,7 @@
   "regenerate_questions": "Gerar outras perguntas",
   "remove": "Remover",
   "seo_description": "Responda a uma entrevista clínica guiada antes da consulta e leve ao médico um resumo estruturado. Sem cadastro e sem armazenar dados de saúde.",
-  "seo_title": "PreConsult — Prepare-se para a consulta médica em 3 minutos",
+  "seo_title": "PreConsult: Prepare-se para a consulta médica em 3 minutos",
   "smoking_label": "Tabagismo",
   "smoking_opts": [
     "Nunca fumei",

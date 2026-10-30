@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -32,7 +32,11 @@ function mockApi(streamBody?: string) {
 }
 
 async function startIntake(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: /start preparing/i }));
+  await user.click(
+    within(screen.getByTestId("landing-hero")).getByRole("button", {
+      name: /start preparing/i,
+    }),
+  );
 }
 
 /** Steps 1-2, leaving the wizard on Step 3 (medical history). */
@@ -171,7 +175,11 @@ describe("wizard flow (mocked backend)", () => {
     window.dispatchEvent(onLanding);
     expect(onLanding.defaultPrevented).toBe(false);
 
-    await user.click(screen.getByRole("button", { name: /start preparing/i }));
+    await user.click(
+      within(screen.getByTestId("landing-hero")).getByRole("button", {
+        name: /start preparing/i,
+      }),
+    );
 
     const inFlow = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(inFlow);

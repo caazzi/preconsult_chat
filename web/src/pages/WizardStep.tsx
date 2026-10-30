@@ -79,7 +79,6 @@ export function WizardStep() {
           </div>
         </div>
         <div className="flex items-center justify-center gap-2 rounded-lg border border-green-500/20 bg-green-500/5 p-2 text-sm text-green-400">
-          <span aria-hidden>🛡</span>
           {t.privacy_badge}
         </div>
       </div>

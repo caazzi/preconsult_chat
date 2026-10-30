@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, beforeEach } from "vitest";
 
@@ -7,6 +7,10 @@ import { App } from "./App";
 function renderApp(search = "") {
   window.history.pushState({}, "", `/${search}`);
   return render(<App />);
+}
+
+function hero() {
+  return within(screen.getByTestId("landing-hero"));
 }
 
 describe("SPA shell", () => {
@@ -20,23 +24,29 @@ describe("SPA shell", () => {
       screen.getByText(/Prepare for your doctor's appointment/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /start preparing/i }),
+      hero().getByRole("button", { name: /start preparing/i }),
     ).toBeInTheDocument();
   });
 
   it("renders Portuguese when ?lang=pt", () => {
     renderApp("?lang=pt");
     expect(
-      screen.getByRole("button", { name: /Começar/i }),
+      hero().getByRole("button", { name: /Começar/i }),
     ).toBeInTheDocument();
+  });
+
+  it("places the FAQ below the hero, not beside it", () => {
+    renderApp("?lang=en");
+    const heroSection = screen.getByTestId("landing-hero");
+    const faq = screen.getByTestId("faq");
+
+    expect(heroSection.nextElementSibling).toBe(faq);
   });
 
   it("advances from landing to the first wizard step", async () => {
     const user = userEvent.setup();
     renderApp("?lang=en");
-    await user.click(
-      screen.getByRole("button", { name: /start preparing/i }),
-    );
+    await user.click(hero().getByRole("button", { name: /start preparing/i }));
     // Stepper appears once the wizard has started.
     expect(
       screen.getByRole("progressbar", { name: /intake progress/i }),
@@ -46,7 +56,7 @@ describe("SPA shell", () => {
   it("renders the landing for an unknown path (stale /next bookmark)", () => {
     renderApp("next/some-old-page?lang=pt");
     expect(
-      screen.getByRole("button", { name: /Começar/i }),
+      hero().getByRole("button", { name: /Começar/i }),
     ).toBeInTheDocument();
     // The catch-all redirects to the root and keeps the language query.
     expect(window.location.pathname).toBe("/");

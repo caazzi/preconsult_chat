@@ -151,6 +151,37 @@ describe("wizard flow (mocked backend)", () => {
     ).toBeInTheDocument();
   });
 
+  it("returns focus to the landing heading after starting a new session", async () => {
+    mockApi();
+    const user = userEvent.setup();
+    window.history.pushState({}, "", "/?lang=en");
+    render(<App />);
+
+    await advanceToQuestions(user);
+    for (const button of screen.getAllByRole("button", {
+      name: /^i don't know$/i,
+    })) {
+      await user.click(button);
+    }
+    await user.click(
+      screen.getByRole("button", { name: /generate my summary/i }),
+    );
+    expect(
+      screen.getByRole("heading", { name: /report ready/i }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /start new session/i }),
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: /prepare for your doctor's appointment/i,
+      }),
+    ).toHaveFocus();
+  });
+
   it("still asks for an answer when a question is left blank", async () => {
     mockApi();
     const user = userEvent.setup();

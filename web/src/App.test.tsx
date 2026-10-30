@@ -35,7 +35,7 @@ describe("SPA shell", () => {
     ).toBeInTheDocument();
   });
 
-  it("places the FAQ below the hero, not beside it", () => {
+  it("keeps the FAQ after the hero in DOM order", () => {
     renderApp("?lang=en");
     const heroSection = screen.getByTestId("landing-hero");
     const faq = screen.getByTestId("faq");

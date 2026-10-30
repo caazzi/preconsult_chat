@@ -48,7 +48,9 @@ def test_spa_boots_at_root(page, backend):
     assert hero.get_by_role("button", name="Start Preparing").is_visible()
     # The document is the canonical one now: indexable, with real social tags.
     robots = page.locator('meta[name="robots"]')
-    assert robots.count() == 0 or "noindex" not in (robots.get_attribute("content") or "")
+    assert robots.count() == 0 or "noindex" not in (
+        robots.get_attribute("content") or ""
+    )
     assert "PreConsult" in page.title()
     assert page.locator('meta[property="og:image"]').count() == 1
 
@@ -86,9 +88,10 @@ def test_landing_is_crawlable_without_javascript(browser, backend):
     page = context.new_page()
     try:
         page.goto(f"{backend}/", wait_until="domcontentloaded")
-        assert "Prepare for your doctor" in page.get_by_role(
-            "heading", level=1
-        ).inner_text()
+        assert (
+            "Prepare for your doctor"
+            in page.get_by_role("heading", level=1).inner_text()
+        )
         assert page.get_by_role(
             "heading", name="Frequently Asked Questions"
         ).is_visible()
@@ -99,6 +102,8 @@ def test_landing_is_crawlable_without_javascript(browser, backend):
         # client-side language switch.
         page.goto(f"{backend}/?lang=pt", wait_until="domcontentloaded")
         assert "Prepare-se" in page.get_by_role("heading", level=1).inner_text()
+        assert page.get_by_role("heading", name="Perguntas Frequentes").is_visible()
+        assert page.get_by_text("O que é o PreConsult?", exact=True).is_visible()
         assert page.locator("html").get_attribute("lang") == "pt"
     finally:
         context.close()

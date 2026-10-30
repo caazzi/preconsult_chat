@@ -47,7 +47,7 @@ const STYLE = `<style id="static-landing-style">
       #static-landing .badge{display:inline-block;margin:0 0 1.5rem;padding:.25rem .75rem;border-radius:9999px;background:rgba(34,197,94,.1);color:#4ade80;font-size:.75rem}
       #static-landing h1{margin:0 0 .5rem;font-size:1.75rem;line-height:1.2;color:#f8fafc}
       #static-landing .sub{margin:0;color:#94a3b8;font-size:.9375rem;line-height:1.6}
-      #static-landing .meta{margin:.75rem 0 0;color:#64748b;font-size:.75rem}
+      #static-landing .meta{margin:.75rem 0 0;color:#94a3b8;font-size:.75rem}
       #static-landing .cta{display:inline-block;margin-top:1.5rem;padding:.875rem 1.5rem;border-radius:.5rem;background:#06b6d4;color:#020617;font-weight:600}
       #static-landing .how,#static-landing .faq{margin-top:3rem;text-align:left}
       #static-landing h2{margin:0 0 1rem;color:#cbd5e1;font-size:.8125rem;letter-spacing:.08em;text-transform:uppercase}
@@ -55,7 +55,7 @@ const STYLE = `<style id="static-landing-style">
       #static-landing ol li{display:flex;gap:1rem}
       #static-landing .num{flex:none;display:flex;align-items:center;justify-content:center;width:2rem;height:2rem;border:1px solid rgba(34,211,238,.3);border-radius:9999px;background:rgba(34,211,238,.1);color:#a5f3fc;font-size:.75rem;font-weight:700}
       #static-landing ol strong{display:block;color:#f1f5f9}
-      #static-landing ol span{display:block;margin-top:.25rem;color:#94a3b8;font-size:.875rem;line-height:1.5}
+      #static-landing ol li div span{display:block;margin-top:.25rem;color:#94a3b8;font-size:.875rem;line-height:1.5}
       #static-landing .faq h2{color:#f8fafc;font-size:1.25rem;letter-spacing:0;text-transform:none}
       #static-landing details{border:1px solid rgba(255,255,255,.1);border-radius:.75rem;margin-top:.5rem;padding:.75rem 1rem;background:rgba(15,23,42,.4)}
       #static-landing summary{cursor:pointer;color:#f1f5f9;font-size:.875rem;font-weight:700}
@@ -69,6 +69,15 @@ const esc = (value) =>
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+
+/** Read a required translation; a renamed key fails the build loudly. */
+function copy(t, key) {
+  const value = t[key];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`prerender: missing translation ${key}`);
+  }
+  return value;
+}
 
 /** Replace a whole match; throws when the built document lacks it. */
 function replaceOnce(html, pattern, value, label) {
@@ -105,44 +114,45 @@ function insertAfter(html, pattern, snippet, label) {
 
 function landing(t) {
   const steps = [
-    ["01", t.step_how_1, t.step_sub_1],
-    ["02", t.step_how_2, t.step_sub_2],
-    ["03", t.step_how_3, t.step_sub_3],
+    ["01", copy(t, "step_how_1"), copy(t, "step_sub_1")],
+    ["02", copy(t, "step_how_2"), copy(t, "step_sub_2")],
+    ["03", copy(t, "step_how_3"), copy(t, "step_sub_3")],
   ]
     .map(
-      ([number, title, sub]) => `<li><span class="num">${number}</span><div><strong>${esc(
-        title,
-      )}</strong><span>${esc(sub)}</span></div></li>`,
+      ([number, title, sub]) =>
+        `<li><span class="num" aria-hidden="true">${number}</span><div><strong>${esc(
+          title,
+        )}</strong><span>${esc(sub)}</span></div></li>`,
     )
     .join("\n          ");
 
   const faq = FAQ.map(
     ([question, answer], index) =>
       `<details${index === 0 ? " open" : ""}><summary>${esc(
-        t[question],
-      )}</summary><p>${esc(t[answer])}</p></details>`,
+        copy(t, question),
+      )}</summary><p>${esc(copy(t, answer))}</p></details>`,
   ).join("\n        ");
 
   return `<main id="static-landing">
-        <p class="badge">${esc(t.privacy_badge_landing)}</p>
-        <h1>${esc(t.hero_title)}</h1>
-        <p class="sub">${esc(t.hero_subtitle)}</p>
-        <p class="meta">${esc(t.landing_meta)}</p>
-        <p class="cta">${esc(t.start_cta)}</p>
+        <p class="badge">${esc(copy(t, "privacy_badge_landing"))}</p>
+        <h1>${esc(copy(t, "hero_title"))}</h1>
+        <p class="sub">${esc(copy(t, "hero_subtitle"))}</p>
+        <p class="meta">${esc(copy(t, "landing_meta"))}</p>
+        <p class="cta">${esc(copy(t, "start_cta"))}</p>
 
         <section class="how">
-          <h2>${esc(t.how_title)}</h2>
+          <h2>${esc(copy(t, "how_title"))}</h2>
           <ol>
           ${steps}
           </ol>
         </section>
 
         <section class="faq">
-          <h2>${esc(t.faq_title)}</h2>
+          <h2>${esc(copy(t, "faq_title"))}</h2>
           ${faq}
         </section>
 
-        <p class="cta closing">${esc(t.start_cta)}</p>
+        <p class="cta closing">${esc(copy(t, "start_cta"))}</p>
       </main>`;
 }
 
@@ -163,25 +173,25 @@ for (const { code, file, path } of LANGS) {
   html = replaceOnce(
     html,
     /<title>[^<]*<\/title>/,
-    `<title>${esc(t.seo_title)}</title>`,
+    `<title>${esc(copy(t, "seo_title"))}</title>`,
     "<title>",
   );
   html = replaceBetween(
     html,
     /(<meta\s+name="description"\s+content=")([^"]*)("\s*\/?>)/,
-    t.seo_description,
+    copy(t, "seo_description"),
     "meta description",
   );
   html = replaceBetween(
     html,
     /(<meta property="og:title" content=")([^"]*)("\s*\/?>)/,
-    t.seo_title,
+    copy(t, "seo_title"),
     "og:title",
   );
   html = replaceBetween(
     html,
     /(<meta\s+property="og:description"\s+content=")([^"]*)("\s*\/?>)/,
-    t.seo_description,
+    copy(t, "seo_description"),
     "og:description",
   );
   html = replaceBetween(

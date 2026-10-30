@@ -35,7 +35,8 @@ dependencies = [
 # credentials, so boto3/botocore (~34 MB) stay out of the default image. A
 # Bedrock deployment installs the extra:
 #   uv sync --locked --extra bedrock
-# CI installs --all-extras, so the Bedrock path keeps its tests.
+# CI installs the bedrock extra in the test job, so the Bedrock path keeps its
+# tests without pulling the Playwright/e2e extra into that job.
 bedrock = [
     "langchain-aws==1.9.1",
 ]

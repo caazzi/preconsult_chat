@@ -26,6 +26,13 @@ env:
   DEPLOY_PROFILE: ${{ inputs.deploy_profile || 'cost_optimized' }}
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+# Cancel superseded PR runs only: a new commit should not queue behind the
+# previous run's runner setup/teardown (the 10-14m outliers in the run
+# history). Never cancel a main deploy.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: Run Unit Tests & Linting
@@ -60,8 +67,13 @@ jobs:
     # pyproject.toml -- that is how a PR once tested 132 packages, including a
     # newer release than the image would have shipped, and the suite failed on an
     # API the deployed build did not have.
+    #
+    # `--extra test --extra bedrock` is deliberate: `--all-extras` also pulled
+    # the e2e/Playwright extra into the Python job, which never runs it (the
+    # pytest config excludes the e2e marker). Bedrock stays because the
+    # provider tests exercise that path.
     - name: Install dependencies
-      run: uv sync --locked --all-extras --dev
+      run: uv sync --locked --extra test --extra bedrock --dev
 
     - name: Run linting
       run: uv run ruff check .
@@ -118,8 +130,12 @@ jobs:
     # host (`preconsult.host:app`). Builds the Vite app and drives it against a
     # real single-worker backend, with the SPA's /api calls mocked at the
     # browser layer (no live Vertex AI or serverless Redis).
+    #
+    # No `needs: test`: the E2E job shares no artifacts with the Python suite,
+    # so waiting for it only serialises PR feedback. A failing Python test now
+    # leaves the E2E running as an independent signal instead of skipping it.
+    # The deploy gate is unchanged (it still needs `test` only).
     name: Playwright E2E (SPA)
-    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -142,6 +158,17 @@ jobs:
 
       - name: Install deps (with e2e extra)
         run: uv sync --locked --extra e2e
+
+      # The browser download is the slow part of a cold E2E job (the 9-13m
+      # outliers in the run history). uv.lock pins the Playwright version, so
+      # the cache key follows it; --with-deps still installs the OS libraries.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
 
       - name: Install Playwright browser + system deps
         run: uv run python -m playwright install --with-deps chromium

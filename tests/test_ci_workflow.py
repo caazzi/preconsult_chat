@@ -18,6 +18,10 @@ The preflight step is pinned too. It is the thing that turns "the build
 succeeded, then gcloud failed on a secret nobody created" into a five-second
 named failure, and it is only useful if it covers every secret the deploy
 actually references.
+
+The PR-feedback topology is pinned as well: superseded PR runs are cancelled,
+the E2E job runs in parallel with the unit tests, and the Playwright browser
+cache follows the lockfile so a cold E2E run does not redownload it.
 """
 
 import re
@@ -86,6 +90,45 @@ def test_both_profiles_probe_readiness_over_http_not_tcp():
 def test_manual_deploy_script_uses_the_same_startup_probe():
     """The manual image-only path must not reintroduce the TCP probe."""
     assert STARTUP_PROBE in DEPLOY_SCRIPT.read_text()
+
+
+# ---------------------------------------------------------------------------
+# PR-feedback topology
+# ---------------------------------------------------------------------------
+def test_pr_runs_cancel_superseded_runs():
+    concurrency = _workflow()["concurrency"]
+
+    assert concurrency["group"].startswith("ci-")
+    # Only PRs are cancellable; a new main commit must not kill an in-flight
+    # deploy + smoke test.
+    assert "pull_request" in concurrency["cancel-in-progress"]
+
+
+def test_e2e_runs_in_parallel_with_the_unit_tests():
+    jobs = _workflow()["jobs"]
+
+    assert "needs" not in jobs["e2e-spa"], (
+        "the E2E job shares no artifacts with `test`; waiting for it only "
+        "serialises PR feedback"
+    )
+    # Deliberately unchanged: the deploy gate still waits for `test` only.
+    assert jobs["deploy"]["needs"] == "test"
+
+
+def test_e2e_caches_the_playwright_browser_download():
+    steps = _workflow()["jobs"]["e2e-spa"]["steps"]
+    cache = next(s for s in steps if "actions/cache" in str(s.get("uses", "")))
+
+    assert cache["with"]["path"] == "~/.cache/ms-playwright"
+    assert "uv.lock" in cache["with"]["key"]
+
+
+def test_test_job_does_not_install_the_playwright_extra():
+    steps = _workflow()["jobs"]["test"]["steps"]
+    install = next(s for s in steps if s.get("name") == "Install dependencies")
+
+    assert "--all-extras" not in install["run"]
+    assert "--extra bedrock" in install["run"]
 
 
 @pytest.mark.parametrize(

@@ -24,15 +24,16 @@ DASHES = {
 }
 
 
-def _strings(value: Any) -> Iterator[str]:
+def _strings(value: Any, path: str = "") -> Iterator[tuple[str, str]]:
     if isinstance(value, str):
-        yield value
+        yield path, value
     elif isinstance(value, dict):
-        for item in value.values():
-            yield from _strings(item)
+        for key, item in value.items():
+            child = f"{path}.{key}" if path else str(key)
+            yield from _strings(item, child)
     elif isinstance(value, (list, tuple)):
-        for item in value:
-            yield from _strings(item)
+        for index, item in enumerate(value):
+            yield from _strings(item, f"{path}[{index}]")
 
 
 def _offenders(label: str, text: str) -> list[str]:
@@ -43,8 +44,8 @@ def test_translations_use_no_long_dashes():
     offenders = [
         offender
         for lang, values in translations.items()
-        for text in _strings(values)
-        for offender in _offenders(f"i18n[{lang}]", text)
+        for path, text in _strings(values)
+        for offender in _offenders(f"i18n[{lang}].{path}", text)
     ]
 
     assert offenders == []
@@ -74,8 +75,8 @@ def test_generated_contracts_use_no_long_dashes(lang):
     payload = json.loads(path.read_text())
     offenders = [
         offender
-        for text in _strings(payload)
-        for offender in _offenders(str(path.relative_to(ROOT)), text)
+        for key, text in _strings(payload)
+        for offender in _offenders(f"{path.relative_to(ROOT)}.{key}", text)
     ]
 
     assert offenders == []

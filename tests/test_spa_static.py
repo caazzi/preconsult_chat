@@ -19,6 +19,7 @@ import logging
 import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from preconsult.site.static import SPAStaticFiles
 
@@ -88,7 +89,7 @@ def test_portuguese_document_is_never_cached_immutable(root_client):
 
 
 def test_unknown_navigation_keeps_the_requested_language(root_client):
-    response = root_client.get("/next/old?lang=pt")
+    response = root_client.get("/next/old?lang=pt", headers={"accept": "text/html"})
 
     assert "shell-pt" in response.text
 
@@ -97,7 +98,9 @@ def test_missing_portuguese_document_falls_back_to_english(tmp_path):
     app = Starlette()
     app.mount(
         "/",
-        SPAStaticFiles(directory=str(_build_dist(tmp_path, portuguese=False)), html=True),
+        SPAStaticFiles(
+            directory=str(_build_dist(tmp_path, portuguese=False)), html=True
+        ),
     )
     with TestClient(app) as client:
         response = client.get("/?lang=pt")
@@ -108,7 +111,7 @@ def test_missing_portuguese_document_falls_back_to_english(tmp_path):
 
 
 def test_unknown_navigation_route_falls_back_to_shell(client):
-    response = client.get("/next/privacy")
+    response = client.get("/next/privacy", headers={"accept": "text/html"})
 
     assert response.status_code == 200
     assert "shell" in response.text
@@ -161,6 +164,84 @@ def test_scanner_probes_are_plain_text_404_on_root_mount(root_client, path):
     assert "shell" not in response.text
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/.ssh/id_rsa",
+        "/.git/HEAD",
+        "/.svn/wc.db",
+        "/actuator/heapdump",
+        "/wp-json/",
+        "/zzcanary-0123456789",
+    ],
+)
+def test_scanner_canaries_are_plain_text_404_without_html_accept(root_client, path):
+    response = root_client.get(path, headers={"accept": "*/*"})
+
+    # A canary is how a scanner detects a catch-all 200. The shell fallback is
+    # navigation-only, so a non-HTML client must get the same plain 404 as the
+    # explicit scanner guards.
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "shell" not in response.text
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/.ssh/id_rsa", "/.git/HEAD", "/.svn/wc.db", "/actuator/heapdump", "/wp-json/"],
+)
+def test_sensitive_prefixes_are_404_even_with_html_accept(root_client, path):
+    response = root_client.get(path, headers={"accept": "text/html"})
+
+    # These are never client-side routes, so even a browser-shaped request
+    # must not receive the shell.
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "shell" not in response.text
+
+
+def test_unknown_path_without_html_accept_is_404(root_client):
+    response = root_client.get("/some/deep/link", headers={"accept": "*/*"})
+
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "shell" not in response.text
+
+
+def test_missing_asset_stays_404_for_a_navigation_accept(root_client):
+    response = root_client.get("/assets/missing.js", headers={"accept": "text/html"})
+
+    # The navigation fallback must never resurrect a missing hashed asset.
+    assert response.status_code == 404
+    assert "shell" not in response.text
+
+
+def test_websocket_upgrade_is_closed_cleanly(root_client):
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with root_client.websocket_connect("/_event/"):
+            pass
+
+    # No StaticFiles assertion, no 500: a stale Reflex client gets a policy
+    # close (1008) instead of a traceback on every retry.
+    assert exc.value.code == 1008
+
+
+@pytest.mark.asyncio
+async def test_non_http_non_websocket_scope_is_ignored(tmp_path):
+    mount = SPAStaticFiles(directory=str(_build_dist(tmp_path)), html=True)
+    sent = []
+
+    async def receive():
+        return {"type": "lifespan.startup"}
+
+    async def send(message):
+        sent.append(message)
+
+    await mount({"type": "lifespan", "path": "/"}, receive, send)
+
+    assert sent == []
+
+
 @pytest.mark.parametrize("path", ["/_event", "/_event/", "/_upload/x"])
 def test_backend_prefixes_are_plain_text_404_on_root_mount(root_client, path):
     response = root_client.get(path)
@@ -173,7 +254,7 @@ def test_backend_prefixes_are_plain_text_404_on_root_mount(root_client, path):
 
 
 def test_unknown_navigation_on_root_mount_still_serves_shell(root_client):
-    response = root_client.get("/some/deep/link")
+    response = root_client.get("/some/deep/link", headers={"accept": "text/html"})
 
     # The guards must not swallow the client-side router's fallback.
     assert response.status_code == 200

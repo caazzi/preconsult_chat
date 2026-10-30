@@ -116,12 +116,22 @@ async def test_stale_socket_probe_never_receives_the_shell(dist):
 @pytest.mark.asyncio
 async def test_unknown_navigation_serves_the_shell_no_store(dist):
     async with _client(build_asgi_app(spa_dist=dist)) as client:
-        resp = await client.get("/some/deep/link")
+        resp = await client.get("/some/deep/link", headers={"accept": "text/html"})
 
     assert resp.status_code == 200
     assert SHELL in resp.text
     assert "no-store" in resp.headers["cache-control"]
     assert "immutable" not in resp.headers["cache-control"]
+
+
+@pytest.mark.asyncio
+async def test_scanner_canary_never_receives_the_shell(dist):
+    async with _client(build_asgi_app(spa_dist=dist)) as client:
+        for path in ("/.ssh/id_rsa", "/.git/HEAD", "/actuator/heapdump", "/wp-json/"):
+            resp = await client.get(path, headers={"accept": "*/*"})
+            assert resp.status_code == 404, path
+            assert resp.headers["content-type"].startswith("text/plain"), path
+            assert SHELL not in resp.text, path
 
 
 @pytest.mark.asyncio

@@ -19,7 +19,7 @@ translations = {
         # Head copy for the prerendered document (what a crawler and a social
         # card see before any JavaScript runs). Kept here so there is still one
         # source of truth for every string.
-        "seo_title": "PreConsult — Prepare for your doctor's appointment in 3 minutes",
+        "seo_title": "PreConsult: Prepare for your doctor's appointment in 3 minutes",
         "seo_description": "Answer a guided clinical interview before your appointment and bring your doctor a structured summary. No sign-up, and no health data stored.",
         "step_how_1": "Tell your symptoms",
         "step_how_2": "AI asks questions",
@@ -146,7 +146,7 @@ translations = {
         "back_btn": "Voltar",
         "hero_title": "Prepare-se para sua consulta médica em 3 minutos",
         "hero_subtitle": "Organize seus sintomas em um relatório estruturado e legível para seu médico.",
-        "seo_title": "PreConsult — Prepare-se para a consulta médica em 3 minutos",
+        "seo_title": "PreConsult: Prepare-se para a consulta médica em 3 minutos",
         "seo_description": "Responda a uma entrevista clínica guiada antes da consulta e leve ao médico um resumo estruturado. Sem cadastro e sem armazenar dados de saúde.",
         "step_how_1": "Conte seus sintomas",
         "step_how_2": "IA faz perguntas",

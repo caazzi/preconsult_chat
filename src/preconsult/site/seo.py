@@ -24,7 +24,7 @@ ROBOTS_TXT = (
 )
 
 LLMS_TXT = (
-    "# PreConsult — AI Medical Intake Assistant\n\n"
+    "# PreConsult: AI Medical Intake Assistant\n\n"
     "> Privacy-first guided AI interview helper for patient intake. "
     "Zero data persistence. No account required.\n\n"
     "PreConsult helps patients organize symptoms and prepare for "

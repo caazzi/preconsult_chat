@@ -20,7 +20,7 @@ describe("index.html head", () => {
 
   it("has the document title and description", () => {
     expect(head).toContain(
-      "<title>PreConsult — Privacy-First Medical Intake Assistant</title>",
+      "<title>PreConsult: Privacy-First Medical Intake Assistant</title>",
     );
     expect(head).toContain(
       'name="description" content="Guided AI interview helper for patient intake with zero data persistence."',
@@ -37,7 +37,7 @@ describe("index.html head", () => {
     expect(head).toContain('property="og:image:width" content="1200"');
     expect(head).toContain('property="og:image:height" content="630"');
     expect(head).toContain(
-      'property="og:title" content="PreConsult — Privacy-First Medical Intake Assistant"',
+      'property="og:title" content="PreConsult: Privacy-First Medical Intake Assistant"',
     );
     expect(head).toContain(
       'property="og:description" content="Guided AI interview helper for patient intake with zero data persistence."',

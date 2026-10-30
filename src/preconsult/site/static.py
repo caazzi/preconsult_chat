@@ -11,6 +11,11 @@ every path the router does not know lands here, so scanner probes (``.php``,
 answered explicitly instead of being handed the SPA shell — that is why the
 guards below live in this module rather than in the old Reflex host.
 
+The shell fallback is **navigation-only**: a request must accept HTML, which
+keeps a canary probe (``Accept: */*``) from turning an arbitrary path into a
+200. Non-HTTP scopes are rejected before ``StaticFiles``' HTTP-only assertion,
+because a stale ``/_event`` WebSocket retry used to surface as a 500 traceback.
+
 It is Reflex-free; the host imports it for the ``/next`` mount today and will
 mount it at ``/`` after the cutover.
 """
@@ -44,6 +49,24 @@ class SPAStaticFiles(StaticFiles):
         "_all_routes",
     )
 
+    # Paths that are never client-side routes. A scanner appends canaries to
+    # these (``/.git/zzcanary-...``) to detect a catch-all 200; the shell must
+    # not answer them even when the client claims to accept HTML.
+    _SCANNER_PREFIXES = (
+        ".ssh",
+        ".git",
+        ".svn",
+        ".hg",
+        ".aws",
+        ".docker",
+        ".vscode",
+        "actuator",
+        "wp-json",
+        "cgi-bin",
+        "server-status",
+        "server-info",
+    )
+
     # Prerendered per-language documents (see web/scripts/prerender.mjs). Both
     # are documents, never immutable assets; the Portuguese one is selected by
     # the `?lang=` the SPA mirrors into the URL (there is no cookie).
@@ -74,19 +97,60 @@ class SPAStaticFiles(StaticFiles):
             return False
         return query.get("lang") == ["pt"]
 
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            # This mount is the root catch-all, so it also sees WebSocket
+            # upgrades (a stale Reflex client retrying /_event). StaticFiles
+            # asserts scope["type"] == "http"; close the handshake cleanly
+            # instead of turning every retry into a 500 + traceback.
+            if scope["type"] == "websocket":
+                log_event(
+                    logging.WARNING,
+                    "static.non_http_rejected",
+                    request_id=new_request_id(),
+                    path=str(scope.get("path", ""))[:200],
+                    scope_type="websocket",
+                )
+                await send({"type": "websocket.close", "code": 1008})
+            return
+        await super().__call__(scope, receive, send)
+
+    @staticmethod
+    def _accepts_html(scope) -> bool:
+        """Whether the client is asking for a document, not a file/probe.
+
+        Browser navigations send ``Accept: text/html,...``; scanners and CLI
+        clients send ``*/*`` or omit it. Only the former may receive the SPA
+        shell, so a canary probe to a random path cannot turn into a 200.
+        """
+        for name, value in scope.get("headers", []):
+            if name.lower() != b"accept":
+                continue
+            accept = value.decode("latin-1").lower()
+            if "text/html" in accept or "application/xhtml+xml" in accept:
+                return True
+        return False
+
     async def get_response(self, path: str, scope) -> Response:
         path_lower = path.lower()
 
         # Scanner probes are never app routes. Answer them with a cheap plain
         # 404 before touching the filesystem or the shell fallback.
-        if any(
-            path_lower.endswith(ext)
-            for ext in (".php", ".asp", ".aspx", ".jsp", ".cgi")
-        ) or (
-            "wp-admin" in path_lower
-            or "wp-content" in path_lower
-            or ".env" in path_lower
-            or "phpmyadmin" in path_lower
+        if (
+            any(
+                path_lower.endswith(ext)
+                for ext in (".php", ".asp", ".aspx", ".jsp", ".cgi")
+            )
+            or (
+                "wp-admin" in path_lower
+                or "wp-content" in path_lower
+                or ".env" in path_lower
+                or "phpmyadmin" in path_lower
+            )
+            or any(
+                path_lower == prefix or path_lower.startswith(prefix + "/")
+                for prefix in self._SCANNER_PREFIXES
+            )
         ):
             return Response("Not Found", status_code=404, media_type="text/plain")
 
@@ -127,9 +191,13 @@ class SPAStaticFiles(StaticFiles):
             # into "Unexpected token '<'" and a poisoned browser/CDN cache.
             if getattr(exc, "status_code", None) != 404 or is_file:
                 raise
-            response = await super().get_response(
-                self._document_for(scope), scope
-            )
+            # Only a real navigation may fall back to the shell. A scanner,
+            # canary probe or CLI client asking for a random path does not
+            # accept HTML, so answer with the same plain 404 as the guards
+            # above instead of a 200 shell.
+            if not self._accepts_html(scope):
+                return Response("Not Found", status_code=404, media_type="text/plain")
+            response = await super().get_response(self._document_for(scope), scope)
             self._apply_cache_headers(response, immutable=False)
             return response
         self._apply_cache_headers(response, immutable=is_file)

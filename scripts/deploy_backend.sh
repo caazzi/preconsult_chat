@@ -63,8 +63,15 @@ if ! gcloud artifacts docker images describe "$IMAGE_REF" --project="$PROJECT_ID
     exit 1
 fi
 
+# Wait for the app, not just the listening socket. gunicorn binds :8080 in the
+# master before the uvicorn worker finishes importing the app, so the default
+# TCP probe marks the instance ready ~50-70s early and routes the first request
+# into a half-booted worker. /health/live is dependency-free (no Redis) and
+# only answers once the ASGI app is up; keep this aligned with app.boot.
+STARTUP_PROBE="--startup-probe=httpGet.path=/health/live,httpGet.port=8080,periodSeconds=10,timeoutSeconds=2,failureThreshold=10"
+
 if [ "$PROFILE" = "high_performance" ]; then
-    PROFILE_FLAGS="--min-instances 2 --max-instances 10 --concurrency 40 --cpu 2 --memory 2Gi --no-cpu-throttling"
+    PROFILE_FLAGS="--min-instances 2 --max-instances 10 --concurrency 40 --cpu 2 --memory 2Gi --no-cpu-throttling $STARTUP_PROBE"
 else
     # Right-sized for the SINGLE gunicorn/uvicorn worker the image runs (Dockerfile
     # CMD: --workers 1 --threads 4). The earlier "2 Uvicorn workers x 4 threads need
@@ -78,7 +85,7 @@ else
     # concurrency must be 1 to pair with cpu=0.5 (Cloud Run rejects cpu < 1 when
     # concurrency > 1). This is a portfolio app with serial usage, so one in-flight
     # request per instance is the intended, deliberate tradeoff.
-    PROFILE_FLAGS="--min-instances 1 --max-instances 5 --concurrency 1 --cpu 0.5 --memory 1Gi --cpu-throttling"
+    PROFILE_FLAGS="--min-instances 1 --max-instances 5 --concurrency 1 --cpu 0.5 --memory 1Gi --cpu-throttling $STARTUP_PROBE"
 fi
 
 echo "🐳 Deploying image to Cloud Run ($SERVICE_NAME in $PROJECT_ID)..."

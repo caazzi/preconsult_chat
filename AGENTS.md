@@ -70,8 +70,18 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   SPA shell).
 - `site/static.py::SPAStaticFiles` owns the document contract: the shell is `no-store`, real files
   under `/assets` are content-hashed + immutable, an unknown *navigation* falls back to the shell,
-  and a missing *file* stays a 404. Keep the explicit scanner-probe / backend-prefix 404s — a path
-  the router does not know must not be answered with HTML.
+  and a missing *file* stays a 404. The fallback is **navigation-only**: it requires
+  `Accept: text/html` (or `application/xhtml+xml`), so scanner canaries (`.ssh`, `.git`, `actuator`,
+  `wp-json`, random paths) get a plain 404 instead of a catch-all 200. Non-HTTP scopes (a stale
+  `/_event` WebSocket retry) are closed cleanly with code 1008, never an `AssertionError`/500. Keep
+  the explicit scanner-probe / backend-prefix 404s — a path the router does not know must not be
+  answered with HTML.
+- The Cloud Run **startup probe is HTTP `GET /health/live`**, not a TCP socket probe. gunicorn binds
+  `:8080` before the uvicorn worker finishes importing the app, so a TCP probe marks the instance
+  ready tens of seconds early and routes the first request into a half-booted worker.
+  `/health/live` is dependency-free (no Redis) and only answers once the ASGI app is up; keep it in
+  both deploy profiles and in `scripts/deploy_backend.sh`. `preconsult.main` emits
+  `event=app.boot duration_ms=...` so the import cost stays attributable.
 - `web/scripts/prerender.mjs` (part of `npm run build`) writes the landing copy into `#root` of
   **two** documents: `index.html` (en, served at `/`) and `index.pt.html` (pt, served at
   `/?lang=pt`). The copy comes from the generated i18n contracts, and `main.tsx` removes the block

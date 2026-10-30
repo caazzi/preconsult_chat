@@ -51,6 +51,43 @@ def _deploy_inputs() -> dict:
     return step["with"]
 
 
+DEPLOY_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "deploy_backend.sh"
+STARTUP_PROBE = (
+    "--startup-probe=httpGet.path=/health/live,httpGet.port=8080,"
+    "periodSeconds=10,timeoutSeconds=2,failureThreshold=10"
+)
+
+
+def _profile_flags_script() -> str:
+    step = next(
+        s
+        for s in _deploy_steps()
+        if s.get("name") == "Set Deployment Flags for Profile"
+    )
+    return step["run"]
+
+
+def test_both_profiles_probe_readiness_over_http_not_tcp():
+    """gunicorn binds :8080 before the worker finishes importing the app.
+
+    A TCP probe therefore marks the instance ready while the app is still
+    importing, and the first request is routed into the half-booted worker.
+    /health/live is dependency-free and only answers once the ASGI app is up.
+    """
+    script = _profile_flags_script()
+
+    assert STARTUP_PROBE in script
+    assert script.count("$STARTUP_PROBE") == 2, (
+        "both deploy profiles must append the HTTP startup probe"
+    )
+    assert "tcpSocket" not in script
+
+
+def test_manual_deploy_script_uses_the_same_startup_probe():
+    """The manual image-only path must not reintroduce the TCP probe."""
+    assert STARTUP_PROBE in DEPLOY_SCRIPT.read_text()
+
+
 @pytest.mark.parametrize(
     ("key", "pattern"), [("env_vars", ENV_LINE), ("secrets", SECRET_LINE)]
 )
@@ -146,6 +183,7 @@ def test_drift_check_is_scheduled_and_compares_against_main():
         "the check must compare against the checked-out main commit"
     )
 
+
 def _drift_step(name: str) -> dict:
     workflow = _workflow(DRIFT_WORKFLOW)
     return next(s for s in workflow["jobs"]["drift"]["steps"] if s.get("name") == name)
@@ -162,9 +200,13 @@ def test_drift_check_reads_the_serving_revision_not_the_service_label():
     read_script = _drift_step("Read the serving revision")["run"]
     fail_script = _drift_step("Fail when production is not running main")["run"]
 
-    assert "run revisions describe" in read_script, "the commit must come from the serving revision"
+    assert "run revisions describe" in read_script, (
+        "the commit must come from the serving revision"
+    )
     assert "template_commit" in read_script
-    assert "revision_ready" in fail_script, "an unready serving revision must fail the check"
+    assert "revision_ready" in fail_script, (
+        "an unready serving revision must fail the check"
+    )
 
 
 def test_drift_parsers_tolerate_control_characters_in_gcloud_json():

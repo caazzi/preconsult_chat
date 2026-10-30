@@ -261,10 +261,19 @@ jobs:
           # cpu < 1 when concurrency > 1 ("Total cpu < 1 is not supported with
           # concurrency > 1"). This is a portfolio app with effectively serial use,
           # so a single in-flight request per instance is acceptable.
+          #
+          # The startup probe MUST be an HTTP check on /health/live, not the
+          # default TCP probe. gunicorn binds :8080 in the master before the
+          # uvicorn worker finishes importing the app, so a TCP probe marks the
+          # instance ready ~50-70s early and routes the first request into a
+          # half-booted worker. /health/live is dependency-free (no Redis) and
+          # only answers once the ASGI app is up. The 10x(10s+2s) budget covers
+          # the measured ~70s cold import; keep it aligned with app.boot.
+          STARTUP_PROBE="--startup-probe=httpGet.path=/health/live,httpGet.port=8080,periodSeconds=10,timeoutSeconds=2,failureThreshold=10"
           if [ "$PROFILE" = "high_performance" ]; then
-            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=10 --min-instances=2 --concurrency=40 --cpu=2 --memory=2Gi --no-cpu-throttling" >> "$GITHUB_OUTPUT"
+            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=10 --min-instances=2 --concurrency=40 --cpu=2 --memory=2Gi --no-cpu-throttling $STARTUP_PROBE" >> "$GITHUB_OUTPUT"
           else
-            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=5 --min-instances=1 --concurrency=1 --cpu=0.5 --memory=1Gi --cpu-throttling" >> "$GITHUB_OUTPUT"
+            echo "flags=--allow-unauthenticated --session-affinity --no-use-http2 --max-instances=5 --min-instances=1 --concurrency=1 --cpu=0.5 --memory=1Gi --cpu-throttling $STARTUP_PROBE" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy to Cloud Run

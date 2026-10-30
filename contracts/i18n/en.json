@@ -88,8 +88,10 @@
   "generate_qs_btn": "Generate My Questions",
   "hero_subtitle": "Organize your symptoms into a structured medical report for your doctor.",
   "hero_title": "Prepare for your doctor's appointment in 3 minutes",
+  "how_title": "How it works",
   "intake": "Patient Intake",
   "intake_desc": "Tell us about yourself. We'll help you organize your thoughts.",
+  "landing_meta": "About 3 minutes · No account · Free",
   "lang": "Language Preference",
   "lang_opts": [
     "en",

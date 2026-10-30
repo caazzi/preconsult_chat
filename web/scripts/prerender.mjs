@@ -32,18 +32,35 @@ const LANGS = [
   { code: "pt", file: "index.pt.html", path: "/?lang=pt" },
 ];
 
+const FAQ = [
+  ["faq_q1", "faq_a1"],
+  ["faq_q2", "faq_a2"],
+  ["faq_q3", "faq_a3"],
+  ["faq_q4", "faq_a4"],
+  ["faq_q5", "faq_a5"],
+];
+
 // Self-contained so the prerendered page does not depend on which Tailwind
 // classes happen to be in the bundle (it is built before this script runs).
 const STYLE = `<style id="static-landing-style">
       #static-landing{min-height:100vh;box-sizing:border-box;max-width:48rem;margin:0 auto;padding:3rem 1.5rem;background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;text-align:center}
       #static-landing .badge{display:inline-block;margin:0 0 1.5rem;padding:.25rem .75rem;border-radius:9999px;background:rgba(34,197,94,.1);color:#4ade80;font-size:.75rem}
-      #static-landing h1{margin:0 0 .5rem;font-size:1.5rem;line-height:1.25;color:#f8fafc}
-      #static-landing .sub{margin:0;color:#94a3b8;font-size:.875rem}
-      #static-landing ul{list-style:none;margin:2rem 0;padding:0;display:grid;gap:.75rem}
-      #static-landing li{border:1px solid rgba(255,255,255,.1);border-radius:.75rem;padding:1rem}
-      #static-landing li strong{display:block;color:#f1f5f9}
-      #static-landing li span{display:block;margin-top:.25rem;color:#94a3b8;font-size:.8125rem}
-      #static-landing .cta{display:inline-block;margin-top:1rem;padding:.875rem 1.25rem;border-radius:.5rem;background:#06b6d4;color:#020617;font-weight:600}
+      #static-landing h1{margin:0 0 .5rem;font-size:1.75rem;line-height:1.2;color:#f8fafc}
+      #static-landing .sub{margin:0;color:#94a3b8;font-size:.9375rem;line-height:1.6}
+      #static-landing .meta{margin:.75rem 0 0;color:#64748b;font-size:.75rem}
+      #static-landing .cta{display:inline-block;margin-top:1.5rem;padding:.875rem 1.5rem;border-radius:.5rem;background:#06b6d4;color:#020617;font-weight:600}
+      #static-landing .how,#static-landing .faq{margin-top:3rem;text-align:left}
+      #static-landing h2{margin:0 0 1rem;color:#cbd5e1;font-size:.8125rem;letter-spacing:.08em;text-transform:uppercase}
+      #static-landing ol{list-style:none;margin:0;padding:0;display:grid;gap:1.25rem}
+      #static-landing ol li{display:flex;gap:1rem}
+      #static-landing .num{flex:none;display:flex;align-items:center;justify-content:center;width:2rem;height:2rem;border:1px solid rgba(34,211,238,.3);border-radius:9999px;background:rgba(34,211,238,.1);color:#a5f3fc;font-size:.75rem;font-weight:700}
+      #static-landing ol strong{display:block;color:#f1f5f9}
+      #static-landing ol span{display:block;margin-top:.25rem;color:#94a3b8;font-size:.875rem;line-height:1.5}
+      #static-landing .faq h2{color:#f8fafc;font-size:1.25rem;letter-spacing:0;text-transform:none}
+      #static-landing details{border:1px solid rgba(255,255,255,.1);border-radius:.75rem;margin-top:.5rem;padding:.75rem 1rem;background:rgba(15,23,42,.4)}
+      #static-landing summary{cursor:pointer;color:#f1f5f9;font-size:.875rem;font-weight:700}
+      #static-landing details p{margin:.5rem 0 0;color:#94a3b8;font-size:.875rem;line-height:1.6}
+      #static-landing .closing{margin-top:2rem}
     </style>`;
 
 const esc = (value) =>
@@ -87,16 +104,45 @@ function insertAfter(html, pattern, snippet, label) {
 }
 
 function landing(t) {
+  const steps = [
+    ["01", t.step_how_1, t.step_sub_1],
+    ["02", t.step_how_2, t.step_sub_2],
+    ["03", t.step_how_3, t.step_sub_3],
+  ]
+    .map(
+      ([number, title, sub]) => `<li><span class="num">${number}</span><div><strong>${esc(
+        title,
+      )}</strong><span>${esc(sub)}</span></div></li>`,
+    )
+    .join("\n          ");
+
+  const faq = FAQ.map(
+    ([question, answer], index) =>
+      `<details${index === 0 ? " open" : ""}><summary>${esc(
+        t[question],
+      )}</summary><p>${esc(t[answer])}</p></details>`,
+  ).join("\n        ");
+
   return `<main id="static-landing">
         <p class="badge">${esc(t.privacy_badge_landing)}</p>
         <h1>${esc(t.hero_title)}</h1>
         <p class="sub">${esc(t.hero_subtitle)}</p>
-        <ul>
-          <li><strong>${esc(t.step_how_1)}</strong><span>${esc(t.step_sub_1)}</span></li>
-          <li><strong>${esc(t.step_how_2)}</strong><span>${esc(t.step_sub_2)}</span></li>
-          <li><strong>${esc(t.step_how_3)}</strong><span>${esc(t.step_sub_3)}</span></li>
-        </ul>
+        <p class="meta">${esc(t.landing_meta)}</p>
         <p class="cta">${esc(t.start_cta)}</p>
+
+        <section class="how">
+          <h2>${esc(t.how_title)}</h2>
+          <ol>
+          ${steps}
+          </ol>
+        </section>
+
+        <section class="faq">
+          <h2>${esc(t.faq_title)}</h2>
+          ${faq}
+        </section>
+
+        <p class="cta closing">${esc(t.start_cta)}</p>
       </main>`;
 }
 

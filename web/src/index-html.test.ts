@@ -27,6 +27,10 @@ describe("index.html head", () => {
     );
   });
 
+  it("uses punctuation, not long dashes, in the head", () => {
+    expect(head).not.toMatch(/[\u2014\u2013]/);
+  });
+
   it("declares the canonical URL and the social preview tags", () => {
     expect(head).toContain(
       '<link rel="canonical" href="https://pre-consult.org/" />',

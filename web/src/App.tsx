@@ -29,8 +29,6 @@ import { WizardStep } from "./pages/WizardStep";
 function CurrentStep() {
   const { step } = useWizard();
   switch (step) {
-    case STEP_LANDING:
-      return <Landing />;
     case STEP_DEMOGRAPHICS:
       return <StepDemographics />;
     case STEP_COMPLAINT:
@@ -43,7 +41,7 @@ function CurrentStep() {
     case STEP_SUMMARY:
       return <WizardStep />;
     default:
-      return <Landing />;
+      return null;
   }
 }
 
@@ -71,13 +69,19 @@ function Home() {
     stepRegionRef.current?.focus();
   }, [step]);
 
-  return (
-    <>
-      <div ref={stepRegionRef} tabIndex={-1} className="w-full outline-none">
-        <WizardShell />
+  if (step === STEP_LANDING) {
+    return (
+      <div className="w-full">
+        <Landing />
+        <FaqSection />
       </div>
-      {step === STEP_LANDING && <FaqSection />}
-    </>
+    );
+  }
+
+  return (
+    <div ref={stepRegionRef} tabIndex={-1} className="w-full outline-none">
+      <WizardShell />
+    </div>
   );
 }
 
@@ -95,7 +99,7 @@ function Shell() {
     <WizardProvider lang={lang}>
       <div className="flex min-h-screen w-full flex-col items-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
         <Header />
-        <main className="flex w-full flex-1 justify-center pt-4">
+        <main className="flex w-full flex-1 flex-col items-center pt-4">
           {/* /privacy and /terms are served as static HTML by the Python
               backend (they negotiate ?lang=), so the SPA must not claim them. */}
           <Home />

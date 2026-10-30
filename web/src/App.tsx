@@ -60,19 +60,28 @@ function WizardShell() {
 function Home() {
   const { step } = useWizard();
   const stepRegionRef = useRef<HTMLDivElement>(null);
+  const landingHeadingRef = useRef<HTMLHeadingElement>(null);
+  const previousStep = useRef(step);
 
-  // After a step change the "Continue" button that had focus is gone, so focus
-  // falls back to <body> and a screen reader never announces the new step.
-  // Move focus to the step region instead.
+  // After a step change the control that had focus is gone, so focus falls
+  // back to <body> and a screen reader never announces the new screen. Move
+  // focus to the step region, or back to the landing heading when the wizard
+  // is reset. The first mount is intentionally left alone.
   useEffect(() => {
-    if (step === STEP_LANDING) return;
-    stepRegionRef.current?.focus();
+    if (step === STEP_LANDING) {
+      if (previousStep.current !== STEP_LANDING) {
+        landingHeadingRef.current?.focus();
+      }
+    } else {
+      stepRegionRef.current?.focus();
+    }
+    previousStep.current = step;
   }, [step]);
 
   if (step === STEP_LANDING) {
     return (
       <div className="w-full">
-        <Landing />
+        <Landing headingRef={landingHeadingRef} />
         <FaqSection />
       </div>
     );

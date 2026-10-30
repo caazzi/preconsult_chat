@@ -1,3 +1,5 @@
+import type { RefObject } from "react";
+
 import { useI18n } from "../i18n/I18nProvider";
 import { StartButton } from "../components/StartButton";
 
@@ -7,7 +9,11 @@ const HOW = [
   ["03", "step_how_3", "step_sub_3"],
 ] as const;
 
-export function Landing() {
+type LandingProps = {
+  headingRef?: RefObject<HTMLHeadingElement>;
+};
+
+export function Landing({ headingRef }: LandingProps) {
   const { t } = useI18n();
 
   return (
@@ -22,7 +28,11 @@ export function Landing() {
               {t.privacy_badge_landing}
             </span>
 
-            <h1 className="mt-5 text-balance text-3xl font-bold leading-tight tracking-tight text-slate-50 sm:text-4xl">
+            <h1
+              ref={headingRef}
+              tabIndex={-1}
+              className="mt-5 text-balance text-3xl font-bold leading-tight tracking-tight text-slate-50 outline-none sm:text-4xl"
+            >
               {t.hero_title}
             </h1>
             <p className="mt-3 max-w-xl text-pretty text-base leading-relaxed text-slate-400">
@@ -30,7 +40,7 @@ export function Landing() {
             </p>
 
             <StartButton className="mt-6 w-full sm:w-auto" />
-            <p className="mt-3 text-xs text-slate-500">{t.landing_meta}</p>
+            <p className="mt-3 text-xs text-slate-400">{t.landing_meta}</p>
           </div>
 
           <div className="lg:pl-2">

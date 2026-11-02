@@ -13,13 +13,18 @@ initialises only when ``SENTRY_DSN`` is set; production does not set it today.
 import logging
 import os
 
-import sentry_sdk
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.logging import LoggingIntegration
-
 
 def init_sentry(dsn: str) -> None:
     """Initialise the Sentry SDK for the given DSN."""
+    # Imported here, not at module scope: ``preconsult.main`` imports this module
+    # on every boot, and the SDK plus its FastAPI integration cost ~0.5 s of
+    # import time even when no DSN is configured (the deployed default). Import
+    # caching makes a second call a dict lookup, and a boot without a DSN never
+    # reaches this line at all.
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
     sentry_sdk.init(
         dsn=dsn,
         integrations=[

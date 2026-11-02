@@ -15,14 +15,23 @@ understand text can ignore the terminal event.
 When no tool call arrives (or its arguments are malformed) the service falls
 back to parsing the accumulated numbered text, so a provider that only manages
 prose still produces a usable list.
+
+``langchain_core`` is imported inside ``get_interview_chain()``, not at module
+scope: ``preconsult.api.endpoints`` imports this module on every boot, and the
+prompt machinery drags in the tracer/LangSmith stack (~0.75 s) that only a
+request which actually asks a question needs.
 """
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
-from typing import AsyncGenerator, Literal, Union
-from langchain_core.prompts import ChatPromptTemplate
+from typing import TYPE_CHECKING, AsyncGenerator, Literal, Union
 
 from preconsult.core.llm import LLMClient, LLMDelta, get_llm
 from preconsult.core.llm_stream import questions_from_text, questions_from_tool_calls
+
+if TYPE_CHECKING:
+    from langchain_core.prompts import ChatPromptTemplate
 
 
 # Structured-output tool the model must call to return the final questions.
@@ -117,6 +126,11 @@ _interview_chain: InterviewChain | None = None
 
 def get_interview_chain() -> InterviewChain:
     """Single interview chain. Receives full form context, generates up to 5 targeted questions."""
+    # Deferred import: see the module docstring. The prompt machinery (and the
+    # tracer/LangSmith stack behind it) is only paid for on the first question
+    # request, never on app import.
+    from langchain_core.prompts import ChatPromptTemplate
+
     global _interview_chain
     if _interview_chain is None:
         logging.info("Building interview chain...")

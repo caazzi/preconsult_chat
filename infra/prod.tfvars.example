@@ -1,0 +1,36 @@
+# Example variable values for a prod-style apply.
+#
+# Copy to prod.tfvars and replace the placeholders. Do NOT put secret values in
+# this file: the app reads REDIS_URL, PRECONSULT_API_KEY and SESSION_SECRET from
+# SSM SecureString parameters, referenced here by name only.
+
+aws_region   = "us-east-1"
+project_name = "preconsult"
+environment  = "prod"
+
+# Required. Full reference to an image built with the `bedrock` extra, e.g.
+# REPLACE_WITH_ECR_REPOSITORY_URL:<git-sha>
+image = "REPLACE_WITH_ECR_REPOSITORY_URL:REPLACE_WITH_TAG"
+
+# SSM SecureString parameter names (values created out of band, never here).
+redis_url_param_name          = "/preconsult/prod/REDIS_URL"
+preconsult_api_key_param_name = "/preconsult/prod/PRECONSULT_API_KEY"
+session_secret_param_name     = "/preconsult/prod/SESSION_SECRET"
+
+# Edge. Leave certificate_arn empty for HTTP-only; set it to the ACM ARN to add
+# the HTTPS listener (port 80 then redirects to 443).
+# certificate_arn = "REPLACE_WITH_ACM_CERTIFICATE_ARN"
+
+# Alarms. Empty SNS ARN means the alarms exist but notify no one.
+# alarm_sns_topic_arn = "REPLACE_WITH_SNS_TOPIC_ARN"
+
+# Optional tuning (defaults shown).
+# llm_provider             = "bedrock"
+# llm_model                = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+# llm_foundation_model_id  = "anthropic.claude-haiku-4-5-20251001-v1:0"
+# llm_region               = "us-east-1"
+# cpu                      = 512
+# memory                   = 1024
+# min_capacity             = 1
+# max_capacity             = 5
+# log_retention_days       = 14

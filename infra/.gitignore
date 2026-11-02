@@ -1,0 +1,11 @@
+# Terraform working directory and local state (never committed)
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+crash.log
+
+# Real variable files may contain account ids or ARNs, and are where someone
+# could be tempted to put a secret. Only the example is tracked.
+*.tfvars
+!*.tfvars.example

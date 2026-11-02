@@ -31,7 +31,7 @@ from preconsult.core.config import (
 )
 from preconsult.core.analytics import ANONYMOUS_FUNNEL_EVENTS, FUNNEL_EVENTS
 from preconsult.core.errors import LLM_UNAVAILABLE_KINDS, LLMUpstreamError
-from preconsult.core.llm import LLMDelta
+from preconsult.core.llm import StreamMeta, observe_stream
 from preconsult.core.observability import (
     new_request_id,
     log_event,
@@ -482,38 +482,6 @@ def _llm_identity(chain: object) -> tuple[str, str]:
     return provider, model
 
 
-@dataclass
-class _LLMStreamMeta:
-    """Metadata carried on the neutral deltas, collected for one stream."""
-
-    usage: dict | None = None
-    finish_reason: str | None = None
-
-
-class _TelemetryChain:
-    """Pass-through chain wrapper that records usage/finish_reason.
-
-    ``stream_interview_questions`` intentionally only understands text and
-    questions. The neutral metadata rides on the final ``LLMDelta``, so the
-    endpoint observes it here instead of widening the service's typed event
-    contract. Deltas are yielded unchanged; nothing is buffered or reordered.
-    """
-
-    def __init__(self, chain: InterviewChain, meta: _LLMStreamMeta) -> None:
-        self._chain = chain
-        self._meta = meta
-
-    async def astream(self, input_dict: dict) -> AsyncIterator[LLMDelta]:
-        async for delta in self._chain.astream(input_dict):
-            usage = getattr(delta, "usage", None)
-            if isinstance(usage, dict) and usage:
-                self._meta.usage = usage
-            reason = getattr(delta, "finish_reason", None)
-            if isinstance(reason, str) and reason:
-                self._meta.finish_reason = reason
-            yield delta
-
-
 def _question_stream(
     ctx: _StreamSession, chain: InterviewChain, *, topic: str
 ) -> StreamingResponse:
@@ -533,7 +501,7 @@ def _question_stream(
     async def event_generator() -> AsyncIterator[str]:
         started = time.monotonic()
         provider, model = _llm_identity(chain)
-        meta = _LLMStreamMeta()
+        meta = StreamMeta()
         ttft_ms: int | None = None
         chunks = 0
         structured = False
@@ -542,7 +510,7 @@ def _question_stream(
 
         try:
             async for event in stream_interview_questions(
-                ctx.session_data, ctx.lang, _TelemetryChain(chain, meta)
+                ctx.session_data, ctx.lang, observe_stream(chain, meta)
             ):
                 if event.kind == "questions":
                     structured = True

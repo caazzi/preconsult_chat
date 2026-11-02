@@ -62,6 +62,52 @@ class LLMClient(Protocol):
     ) -> AsyncIterator[LLMDelta]: ...
 
 
+@dataclass
+class StreamMeta:
+    """Provider-reported metadata observed from one stream."""
+
+    usage: dict | None = None
+    finish_reason: str | None = None
+
+
+class DeltaStream(Protocol):
+    """Anything that streams neutral deltas for one prompt input."""
+
+    def astream(self, input_dict: dict) -> AsyncIterator[LLMDelta]: ...
+
+
+class _ObservedStream:
+    """Pass-through stream that records usage/finish_reason into ``StreamMeta``.
+
+    Deltas are yielded unchanged; nothing is buffered or reordered, so a
+    consumer's rendering and timing are unaffected.
+    """
+
+    def __init__(self, chain: DeltaStream, meta: StreamMeta) -> None:
+        self._chain = chain
+        self._meta = meta
+
+    async def astream(self, input_dict: dict) -> AsyncIterator[LLMDelta]:
+        async for delta in self._chain.astream(input_dict):
+            usage = getattr(delta, "usage", None)
+            if isinstance(usage, dict) and usage:
+                self._meta.usage = usage
+            reason = getattr(delta, "finish_reason", None)
+            if isinstance(reason, str) and reason:
+                self._meta.finish_reason = reason
+            yield delta
+
+
+def observe_stream(chain: DeltaStream, meta: StreamMeta) -> DeltaStream:
+    """Wrap ``chain`` so its metadata is collected in one place.
+
+    The service layer supplies ``input_dict`` when it calls ``astream``, so the
+    wrapper stays chain-shaped instead of binding a prompt at wrap time. This is
+    the single observer used by both the API telemetry and the benchmark.
+    """
+    return _ObservedStream(chain, meta)
+
+
 @dataclass(frozen=True)
 class LLMConfig:
     provider: str

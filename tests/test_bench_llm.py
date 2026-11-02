@@ -9,7 +9,25 @@ from pathlib import Path
 
 import pytest
 
+from preconsult.core.llm import LLMDelta
 from scripts import bench_llm
+
+FIXTURE = bench_llm._load_fixtures(bench_llm.DEFAULT_FIXTURES)[0]
+
+
+class _StubLLM:
+    """Minimal provider that drives ``_run_one`` through the real seam."""
+
+    provider = "fake"
+    model = "gemini-2.5-flash"
+
+    def __init__(self, usage: dict | None) -> None:
+        self._usage = usage
+
+    async def astream(self, messages, tools=None):
+        yield LLMDelta(text="1. When did it start?\n2. Does it spread?")
+        if self._usage is not None:
+            yield LLMDelta(usage=dict(self._usage))
 
 
 async def test_call_cap_aborts_before_an_extra_call():
@@ -69,11 +87,58 @@ async def test_fake_llm_is_deterministic_for_every_shape(model):
 
     assert first == second
     assert "When did it start?" in "".join(delta.text for delta in first)
+    assert first[-1].usage == bench_llm.FAKE_USAGE
     if model == "fake-text-only":
         assert not any(delta.tool_calls for delta in first)
     else:
         emitted = [call for delta in first for call in delta.tool_calls]
         assert emitted[0]["args"]["questions"] == questions
+
+
+async def test_provider_usage_drives_tokens_and_cost():
+    spec = bench_llm.CallSpec("vertex", "gemini-2.5-flash", FIXTURE, 0)
+    client = _StubLLM(
+        {"input_tokens": 1_000_000, "output_tokens": 1_000_000, "cache_read": 250}
+    )
+
+    result = await bench_llm._run_one(spec, client, include_questions=False)
+
+    assert result.ok
+    assert result.tokens_source == "exact"
+    assert result.prompt_tokens == 1_000_000
+    assert result.output_tokens == 1_000_000
+    assert result.cache_read_tokens == 250
+    # gemini-2.5-flash list price: $0.30 input + $2.50 output per million.
+    # A character estimate would be orders of magnitude below this.
+    assert result.cost_usd == pytest.approx(2.80)
+
+
+async def test_missing_usage_falls_back_to_estimates_and_labels_them():
+    spec = bench_llm.CallSpec("vertex", "gemini-2.5-flash", FIXTURE, 0)
+
+    result = await bench_llm._run_one(spec, _StubLLM(None), include_questions=False)
+
+    assert result.ok
+    assert result.tokens_source == "estimated"
+    assert result.prompt_tokens > 0
+    assert result.output_tokens > 0
+    assert result.cache_read_tokens is None
+    assert result.cost_usd == pytest.approx(
+        bench_llm.estimate_cost_usd(
+            spec.model, result.prompt_tokens, result.output_tokens
+        )
+    )
+
+
+async def test_fake_provider_reports_exact_usage():
+    spec = bench_llm.CallSpec("fake", "fake-deterministic", FIXTURE, 0)
+
+    result = await bench_llm._run_one(spec, None, include_questions=False)
+
+    assert result.ok
+    assert result.tokens_source == "exact"
+    assert result.prompt_tokens == bench_llm.FAKE_USAGE["input_tokens"]
+    assert result.output_tokens == bench_llm.FAKE_USAGE["output_tokens"]
 
 
 def test_fixture_loader_refuses_non_synthetic_data(tmp_path: Path):

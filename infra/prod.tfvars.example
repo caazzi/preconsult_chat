@@ -17,8 +17,12 @@ log_retention_days     = 30
 # domain_name           = "pre-consult.org"
 # acm_certificate_arn   = "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>"
 
-# Optional alarm notifications (SNS topic ARN, no secrets).
+# Optional alarm notifications (no secrets).
 # alarm_sns_topic_arn = "arn:aws:sns:us-east-1:<account-id>:preconsult-alerts"
+#
+# Or let Terraform create a topic with an email subscription. The subscription
+# is created PENDING: confirm it from the inbox before relying on it.
+# alarm_email = "alarms@example.invalid"
 
 # Parameter NAMES, not values. Defaults live in variables.tf.
 # ssm_secret_names = {

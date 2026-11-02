@@ -124,7 +124,7 @@ With low real-user volume this keeps the free tier comfortably within budget.
 | AI | Google Vertex AI / Gemini by default, Anthropic Claude Haiku on AWS Bedrock behind `LLM_PROVIDER=bedrock` (needs `uv sync --locked --extra bedrock`; the default image ships Vertex only) |
 | PDF | ReportLab 5.1.0 (in-memory, deterministic, localized EN/PT) |
 | UI/UX | Glassmorphism, mobile-first, 48px touch targets, prefers-reduced-motion, EN/PT i18n |
-| Monitoring | Sentry SDK (2.73.0, PII-safe, env/release-tagged) + structured, PHI-safe request logging + stable error codes + `GET /health`, `/health/live`, `/health/ready`, `/health/metrics` |
+| Monitoring | Structured, PHI-safe request logging + stable error codes + `GET /health`, `/health/live`, `/health/ready`, `/health/metrics` |
 | Deployment | GCP Cloud Run, us-central1 (two profiles: `cost_optimized` [default, 0.5 vCPU/1Gi, `min=1`] / `high_performance` [2 vCPU/2Gi, `min=2`], selectable via CI/CD) |
 | CI/CD | GitHub Actions (Python tests + Vitest + a Playwright job + WIF auth + Cloud Run deploy) — **exclusive deploy path** (see Deployment section) |
 
@@ -188,9 +188,7 @@ VERTEX_AI_REGION=us-central1
 LLM_MODEL=gemini-2.5-flash       # defaults to the provider's model when unset
 BEDROCK_REGION=us-east-1        # only read when LLM_PROVIDER=bedrock
 REDIS_URL=redis://localhost:6379/0
-SENTRY_DSN=  # optional
-ENV=production             # Sentry environment tag
-GIT_SHA=                   # Sentry release tag + log revision tag (injected by CI)
+GIT_SHA=                   # log revision tag (injected by CI)
 TRUST_PROXY_HEADERS=false  # true on Cloud Run: the peer is the local proxy for every client
 TRUST_CF_CONNECTING_IP=false # true only if the domain sits behind Cloudflare's proxy
 ```
@@ -338,7 +336,7 @@ Because traffic reaches the service at **Google Frontend** (not through a Cloudf
 app-preconsult/
 ├── src/preconsult/             # Python package (the served app)
 │   ├── host.py                 # preconsult.host:app — Starlette host: /api, health, site, SPA at /
-│   ├── main.py                 # Dev re-export of the hosted app (+ Sentry init)
+│   ├── main.py                 # Dev re-export of the hosted app
 │   ├── api/
 │   │   ├── app.py              # /api FastAPI sub-app + exception-handler registration
 │   │   └── endpoints.py        # Routes, SSE streaming, PDF, analytics, get_client_ip
@@ -349,7 +347,6 @@ app-preconsult/
 │   │   ├── parsing.py          # Shared question/emergency parsing helpers
 │   │   ├── llm.py              # LLM client singleton (Vertex default, Bedrock opt-in)
 │   │   ├── observability.py    # PHI-safe structured logging & counters
-│   │   ├── sentry.py           # PII-safe Sentry init
 │   │   └── session_auth.py     # Signed session cookie (mint/verify)
 │   ├── services/
 │   │   ├── agent_service.py    # LangChain prompts + OPQRST streaming

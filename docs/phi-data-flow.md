@@ -39,7 +39,6 @@ allergies, family history, lifestyle answers, and the Q&A pairs.
 |---|---|---|
 | Google Vertex AI (default) / AWS Bedrock (opt-in) | chief complaint + structured form | not retained, not used for training |
 | Upstash Redis / in-memory | session PHI | 30-min TTL; in-memory fallback honored on outage |
-| Sentry | metadata only (`send_default_pii=False`) | release/env tagged, PHI-free |
 
 ## Sources of truth
 

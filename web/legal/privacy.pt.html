@@ -39,11 +39,11 @@
   </ul>
 
   <h2>2. Geração de Perguntas por IA e Processamento</h2>
-  <p>Para fornecer perguntas clínicas de acompanhamento relevantes, o PreConsult utiliza o Google Vertex AI (Gemini 2.5 Flash Lite):</p>
+  <p>Para fornecer perguntas clínicas de acompanhamento relevantes, o PreConsult utiliza o {{LLM_PROCESSOR}}:</p>
   <ul>
-    <li>As informações clínicas inseridas são transmitidas via conexão criptografada HTTPS para os endpoints corporativos do Google Vertex AI exclusivamente para gerar perguntas de acompanhamento contextuais.</li>
+    <li>As informações clínicas inseridas são transmitidas via conexão criptografada HTTPS para {{LLM_ENDPOINT}} exclusivamente para gerar perguntas de acompanhamento contextuais.</li>
     <li>Nenhum identificador pessoal (nomes, endereços, documentos) é enviado ao serviço de IA.</li>
-    <li>Os dados processados via Google Vertex AI não são retidos pelo Google nem utilizados para treinar modelos públicos de aprendizado de máquina.</li>
+    <li>{{LLM_TRAINING}}</li>
   </ul>
 
   <h2>3. Cookies e Métricas Locais</h2>

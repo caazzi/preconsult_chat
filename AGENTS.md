@@ -290,11 +290,17 @@ outages), so Redis must be reserved for actual patient sessions:
   breaking every question request. Bedrock is the planned next step, kept working behind the switch —
   do not delete either path.
   **Switching providers is a PHI decision, not a config tweak.** It changes which third party receives
-  clinical text, so the privacy copy in `web/legal/privacy.en.html` and `web/legal/privacy.pt.html`
-  (the only copies left) and the matching `src/preconsult/core/i18n.py` strings must change in the
-  same commit, along with the deploy's `secrets:` block (add
-  `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`), the `LLM_MODEL` default, and the IAM policy scope
-  (`bedrock:InvokeModelWithResponseStream` on the single Haiku model).
+  clinical text. The user-facing disclosure is rendered, not hand-written: `web/legal/privacy.en.html`
+  and `web/legal/privacy.pt.html` (the only copies of the policy) carry
+  `{{LLM_PROCESSOR}}`/`{{LLM_ENDPOINT}}`/`{{LLM_TRAINING}}` placeholders, and `site/seo.py` renders
+  `llms.txt` from the same source; both read `core/providers.py` for the configured
+  `LLM_PROVIDER`/`LLM_MODEL`. A provider switch therefore requires adding the model to
+  `MODEL_LABELS`, providing/updating the provider row in `PROVIDER_DISCLOSURE` in **both** languages
+  (an unlabelled model falls back to the raw id so it is visible, not silently wrong), and, for
+  Bedrock, the deploy's `secrets:` block (add `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`), the
+  `LLM_MODEL` default, and the IAM policy scope (`bedrock:InvokeModelWithResponseStream` on the single
+  Haiku model). Do not rewrite the served sentences by hand: the two privacy pages plus `llms.txt`
+  are the only copies, and they follow configuration.
   Upstream failures are normalized by the adapter into `LLMUpstreamError(kind)` and mapped by
   `llm_upstream_handler` (`throttled`/`timeout` → `503 llm_unavailable`, everything else → `502
   ai_upstream_error`); keep those codes unchanged. Adapters own the TTFT and inter-token idle

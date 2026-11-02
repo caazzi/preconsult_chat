@@ -39,8 +39,10 @@ TRUST_CF_CONNECTING_IP = os.environ.get("TRUST_CF_CONNECTING_IP") == "true"
 # / Gemini) is the deployed default because it is the provider the running
 # service has credentials for; "bedrock" (Anthropic Claude on AWS) is the opt-in
 # path kept for the later AWS migration. This is a PHI data-flow decision, not a
-# tuning knob: switching it changes which third party receives clinical text, so
-# the privacy copy in web/legal/*.html must be updated in the same change.
+# tuning knob: switching it changes which third party receives clinical text.
+# The served privacy pages and llms.txt follow this value through
+# core/providers.py, so the new provider needs a disclosure row and a
+# MODEL_LABELS entry there (in both languages) before switching.
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "vertex").strip().lower()
 
 VERTEX_REGION = os.environ.get("VERTEX_AI_REGION", "us-central1")

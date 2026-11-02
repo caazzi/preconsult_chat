@@ -11,15 +11,52 @@ that serves the same documents at the same URLs.
 
 from __future__ import annotations
 
+import html
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
+
+from preconsult.core.providers import active_disclosure
 
 LEGAL_PAGES = ("privacy", "terms")
 LEGAL_LANGUAGES = ("en", "pt")
 DEFAULT_LANG = "en"
 
 LANG_COOKIE = "preconsult_lang"
+
+# The provider/model disclosure is the only part of the policy that changes
+# with configuration. The documents carry these placeholders; everything else
+# is prose and stays in the files.
+_DISCLOSURE_FIELDS = {
+    "LLM_PROCESSOR": "processor",
+    "LLM_ENDPOINT": "endpoint",
+    "LLM_TRAINING": "training",
+}
+_DISCLOSURE_PLACEHOLDER = re.compile(r"\{\{(LLM_[A-Z_]+)\}\}")
+
+
+def _render_disclosure(document: str, lang: str) -> str:
+    """Fill provider placeholders in ``document``, escaping their values.
+
+    Plugging a value in without escaping would let a model id from configuration
+    inject markup. ``quote=False`` keeps apostrophes in "Anthropic's" literal
+    while still escaping ``<``, ``>`` and ``&`` for an HTML text node.
+
+    A document that never references a placeholder still renders: this is a
+    substitution, not a template engine. Unknown ``{{LLM_...}}`` tokens are left
+    in place so a typo is visible (and caught by tests) instead of silently
+    rendering nothing.
+    """
+    disclosure = active_disclosure(lang)
+
+    def substitute(match: re.Match[str]) -> str:
+        field = _DISCLOSURE_FIELDS.get(match.group(1))
+        if field is None:
+            return match.group(0)
+        return html.escape(disclosure[field], quote=False)
+
+    return _DISCLOSURE_PLACEHOLDER.sub(substitute, document)
 
 
 def _candidate_dirs() -> list[Path]:
@@ -85,12 +122,17 @@ def _read(path: str) -> str:
 
 
 def legal_html(page: str, lang: str) -> str:
-    """Return the HTML document for ``page`` in ``lang``."""
+    """Return the HTML document for ``page`` in ``lang``.
+
+    The cached file read is raw; the provider disclosure is substituted per
+    request so it follows ``LLM_PROVIDER``/``LLM_MODEL``.
+    """
     if page not in LEGAL_PAGES:
         raise ValueError(f"unknown legal page: {page}")
     if lang not in LEGAL_LANGUAGES:
         raise ValueError(f"unsupported legal language: {lang}")
-    return _read(str(legal_dir() / f"{page}.{lang}.html"))
+    document = _read(str(legal_dir() / f"{page}.{lang}.html"))
+    return _render_disclosure(document, lang)
 
 
 def legal_page_endpoint(page: str):

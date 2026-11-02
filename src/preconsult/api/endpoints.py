@@ -18,7 +18,6 @@ from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
 from fastapi.responses import StreamingResponse, Response, JSONResponse
 from pydantic import BaseModel, Field, StringConstraints, field_validator
-from langchain_core.runnables import Runnable
 
 from preconsult.core.config import (
     ALLOW_PUBLIC_INIT,
@@ -49,6 +48,7 @@ from preconsult.core.session_auth import (
     verify_session_cookie,
 )
 from preconsult.services.agent_service import (
+    InterviewChain,
     stream_interview_questions,
     get_interview_chain,
 )
@@ -499,7 +499,7 @@ class _TelemetryChain:
     contract. Deltas are yielded unchanged; nothing is buffered or reordered.
     """
 
-    def __init__(self, chain: Runnable, meta: _LLMStreamMeta) -> None:
+    def __init__(self, chain: InterviewChain, meta: _LLMStreamMeta) -> None:
         self._chain = chain
         self._meta = meta
 
@@ -515,7 +515,7 @@ class _TelemetryChain:
 
 
 def _question_stream(
-    ctx: _StreamSession, chain: Runnable, *, topic: str
+    ctx: _StreamSession, chain: InterviewChain, *, topic: str
 ) -> StreamingResponse:
     """SSE response streaming the interview questions for this session.
 
@@ -630,7 +630,7 @@ def _question_stream(
 async def get_initial_questions_streamed(
     request: InitialRequest,
     fastapi_req: Request,
-    chain: Runnable = Depends(get_interview_chain)
+    chain: InterviewChain = Depends(get_interview_chain)
 ):
     """Streams interview questions based on chief complaint."""
     ctx = await _open_stream(request.session_id, fastapi_req)
@@ -672,7 +672,7 @@ async def get_initial_questions_streamed(
 async def get_interview_questions_streamed(
     request: InterviewRequest,
     fastapi_req: Request,
-    chain: Runnable = Depends(get_interview_chain)
+    chain: InterviewChain = Depends(get_interview_chain)
 ):
     """Streams targeted interview questions based on full form context. Single LLM call."""
     ctx = await _open_stream(request.session_id, fastapi_req)

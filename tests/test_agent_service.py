@@ -69,7 +69,7 @@ async def test_interview_chain_pt(mock_get_llm):
 
 def test_interview_chain_prompt_contains_all_form_fields():
     chain = get_interview_chain()
-    prompt = chain.steps[0]
+    prompt = chain.prompt
     expected_vars = [
         "age_bracket", "sex", "specialist", "chief_complaint", "duration",
         "complaint_detail", "conditions", "medications", "allergies",
@@ -86,14 +86,14 @@ def test_interview_chain_binds_report_questions_tool():
 
 def test_interview_prompt_contains_emergency_rule():
     chain = get_interview_chain()
-    prompt = chain.steps[0]
+    prompt = chain.prompt
     system_msg = str(prompt.messages[0])
     assert "emergency" in system_msg.lower()
     assert "do not generate questions" in system_msg.lower()
 
 def test_interview_prompt_contains_xml_and_frameworks():
     chain = get_interview_chain()
-    prompt = chain.steps[0]
+    prompt = chain.prompt
     system_msg = str(prompt.messages[0])
     assert "<role>" in system_msg
     assert "<clinical_framework>" in system_msg

@@ -23,6 +23,27 @@ class LLMUnavailableError(Exception):
     pass
 
 
+class LLMUpstreamError(Exception):
+    """A provider-side LLM failure, normalized across vendors.
+
+    ``kind`` is the stable vocabulary the API maps to public codes. The
+    exception deliberately carries no vendor message: those can embed request
+    details, and this app must never echo them.
+    """
+
+    KINDS = frozenset(
+        {"throttled", "timeout", "auth", "invalid_request", "blocked", "malformed", "upstream"}
+    )
+    RETRYABLE_KINDS = frozenset({"throttled", "timeout"})
+
+    def __init__(self, kind: str = "upstream", *, provider: str = "") -> None:
+        normalized = kind if kind in self.KINDS else "upstream"
+        super().__init__(normalized)
+        self.kind = normalized
+        self.provider = provider
+        self.retryable = normalized in self.RETRYABLE_KINDS
+
+
 # Stable, machine-readable code per HTTP status for the generic errors raised
 # as HTTPException throughout the API. Clients can alert on these without
 # parsing localized detail text.
@@ -87,6 +108,38 @@ async def llm_unavailable_handler(request: Request, exc: LLMUnavailableError):
         content={
             "detail": "Servico de IA temporariamente indisponivel. Tente novamente.",
             "code": "llm_unavailable",
+        },
+    )
+
+
+LLM_UNAVAILABLE_KINDS = frozenset({"throttled", "timeout"})
+
+
+async def llm_upstream_handler(request: Request, exc: LLMUpstreamError):
+    """Map a normalized provider failure to the stable 502/503 codes.
+
+    Throttling and timeouts are retriable upstream conditions (503
+    ``llm_unavailable``); every other kind is a hard upstream failure (502
+    ``ai_upstream_error``). The response is generic and never repeats the
+    vendor exception.
+    """
+    unavailable = exc.kind in LLM_UNAVAILABLE_KINDS
+    status_code = 503 if unavailable else 502
+    logging.error(
+        "LLM upstream error: provider=%s kind=%s retryable=%s",
+        exc.provider or "unknown",
+        exc.kind,
+        exc.retryable,
+    )
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "detail": (
+                "Servico de IA temporariamente indisponivel. Tente novamente."
+                if unavailable
+                else "Erro no servico de IA. Tente novamente."
+            ),
+            "code": "llm_unavailable" if unavailable else "ai_upstream_error",
         },
     )
 
@@ -169,152 +222,6 @@ async def validation_handler(request: Request, exc: ValidationError):
             "errors": errors,
         },
     )
-
-
-async def bedrock_api_handler(request: Request, exc: Exception):
-    """Map a Bedrock/Anthropic upstream failure to a stable 502/503 code.
-
-    Throttling is a retriable upstream condition (503 ``llm_unavailable``);
-    every other Bedrock client/protocol error is an upstream failure (502
-    ``ai_upstream_error``). The response stays generic and never leaks the
-    exception message, which can embed request details.
-    """
-    throttled = _is_bedrock_throttling(exc)
-    logging.error("Bedrock upstream error (throttled=%s): %s", throttled, exc)
-    if throttled:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "detail": "Servico de IA temporariamente indisponivel. Tente novamente.",
-                "code": "llm_unavailable",
-            },
-        )
-    return JSONResponse(
-        status_code=502,
-        content={
-            "detail": "Erro no servico de IA. Tente novamente.",
-            "code": "ai_upstream_error",
-        },
-    )
-
-
-def _botocore_exceptions():
-    """``botocore.exceptions``, or ``None`` when the ``bedrock`` extra is absent.
-
-    ``botocore`` is optional, so it must not be imported at module scope: the
-    default Vertex-only image ships without it, and every API module imports
-    ``core.errors``.
-    """
-    try:
-        import botocore.exceptions as botocore_exceptions
-    except ImportError:  # pragma: no cover - the extras are installed in CI
-        return None
-    return botocore_exceptions
-
-
-def bedrock_exception_types() -> tuple[type[BaseException], ...]:
-    """Botocore's error types for handler registration, or ``()`` without the extra."""
-    botocore_exceptions = _botocore_exceptions()
-    if botocore_exceptions is None:
-        return ()
-    return (
-        botocore_exceptions.BotoCoreError,
-        botocore_exceptions.ClientError,
-    )
-
-
-def _is_bedrock_throttling(exc: Exception) -> bool:
-    """Whether a Bedrock error is a retriable throttling/quota condition."""
-    botocore_exceptions = _botocore_exceptions()
-    if botocore_exceptions is not None and isinstance(
-        exc, botocore_exceptions.ClientError
-    ):
-        code = exc.response.get("Error", {}).get("Code", "")
-        return code in (
-            "ThrottlingException",
-            "Throttling",
-            "TooManyRequestsException",
-            "ServiceQuotaExceededException",
-        )
-    message = str(exc).lower()
-    return "throttl" in message or "too many requests" in message
-
-
-def google_exception_types() -> tuple[type[BaseException], ...]:
-    """Google client error types available in this install.
-
-    The active Vertex client is ``langchain-google-genai``, which raises
-    ``google.genai.errors.APIError``. ``google-api-core`` is no longer a
-    dependency at all, so ``GoogleAPIError`` is only registered when some other
-    package happens to provide it — importing it unconditionally would break the
-    boot, exactly like ``botocore`` did when the Bedrock extra was split out.
-    """
-    types: list[type[BaseException]] = []
-    try:
-        from google.genai.errors import APIError
-
-        types.append(APIError)
-    except ImportError:  # pragma: no cover - google-genai is a hard dependency
-        pass
-    try:
-        from google.api_core.exceptions import GoogleAPIError
-
-        types.append(GoogleAPIError)
-    except ImportError:
-        pass
-    return tuple(types)
-
-
-async def google_api_handler(request: Request, exc: Exception):
-    """Map a Vertex/Gemini upstream failure to the stable 502/503 code.
-
-    Vertex throttling is retriable (503 ``llm_unavailable``); everything else is
-    an upstream failure (502 ``ai_upstream_error``). The response stays generic
-    and never echoes the exception, which can embed request details.
-    """
-    throttled = _is_google_throttling(exc)
-    logging.error("Vertex upstream error (throttled=%s): %s", throttled, exc)
-    if throttled:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "detail": "Servico de IA temporariamente indisponivel. Tente novamente.",
-                "code": "llm_unavailable",
-            },
-        )
-    return JSONResponse(
-        status_code=502,
-        content={
-            "detail": "Erro ao processar a solicitacao com a IA.",
-            "code": "ai_upstream_error",
-        },
-    )
-
-
-def _is_google_throttling(exc: Exception) -> bool:
-    """Whether a Vertex/Gemini error is a retriable throttling/quota condition.
-
-    ``google.genai.errors.APIError`` carries the HTTP code and the gRPC-style
-    status, so both are checked before falling back to the message.
-    """
-    if getattr(exc, "code", None) == 429:
-        return True
-    if str(getattr(exc, "status", "")).upper() in {
-        "RESOURCE_EXHAUSTED",
-        "TOO_MANY_REQUESTS",
-    }:
-        return True
-    try:
-        from google.api_core import exceptions as google_exceptions
-    except ImportError:  # pragma: no cover - api-core is not installed today
-        google_exceptions = None
-
-    if google_exceptions is not None and isinstance(
-        exc, (google_exceptions.ResourceExhausted, google_exceptions.TooManyRequests)
-    ):
-        return True
-    message = str(exc).lower()
-    return "429" in message or "resource exhausted" in message or "quota" in message
 
 
 async def generic_handler(request: Request, exc: Exception):

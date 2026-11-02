@@ -16,16 +16,15 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
 from preconsult.api.endpoints import public_router, router
-from preconsult.core.errors import bedrock_exception_types, google_exception_types
 from preconsult.core.errors import (
     LLMUnavailableError,
+    LLMUpstreamError,
     RedisQuotaExceededError,
     RedisUnavailableError,
-    bedrock_api_handler,
     generic_handler,
-    google_api_handler,
     http_exception_handler,
     llm_unavailable_handler,
+    llm_upstream_handler,
     redis_quota_exceeded_handler,
     redis_unavailable_handler,
     request_validation_handler,
@@ -80,13 +79,9 @@ def build_api_app() -> FastAPI:
     # request-body failures; without this the stable `validation_failed` code
     # never reached 422 responses. Handler strips submitted values (PHI).
     api.add_exception_handler(RequestValidationError, request_validation_handler)
-    # Both provider families are mapped so a misconfigured LLM_PROVIDER surfaces
-    # as the stable 502/503 codes instead of a generic 500.
-    for google_error in google_exception_types():
-        api.add_exception_handler(google_error, google_api_handler)
-    # Empty without the optional `bedrock` extra (the default image).
-    for bedrock_error in bedrock_exception_types():
-        api.add_exception_handler(bedrock_error, bedrock_api_handler)
+    # Providers translate their own vendor exceptions into LLMUpstreamError, so
+    # one handler covers every family and a new provider needs no change here.
+    api.add_exception_handler(LLMUpstreamError, llm_upstream_handler)
     api.add_exception_handler(Exception, generic_handler)
     api.include_router(router)
     api.include_router(public_router)

@@ -4,16 +4,16 @@ import httpx
 import asyncio
 import json
 from httpx import ASGITransport
-from botocore.exceptions import ClientError, BotoCoreError
+from botocore.exceptions import ClientError
 from preconsult.host import app
 from preconsult.core.errors import (
     RedisUnavailableError,
     LLMUnavailableError,
+    LLMUpstreamError,
     redis_unavailable_handler,
     llm_unavailable_handler,
+    llm_upstream_handler,
     validation_handler,
-    google_api_handler,
-    bedrock_api_handler,
     generic_handler,
 )
 from tests.fakes import session_payload
@@ -62,24 +62,27 @@ async def test_redis_unavailable_returns_503(mock_create, mock_rate, mock_quota)
 
 
 @pytest.mark.asyncio
-async def test_bedrock_api_error_during_startup_returns_502():
-    import preconsult.services.agent_service as agent_service
+async def test_provider_init_failure_is_normalized(monkeypatch):
+    """A credential failure at construction becomes 502/503, not a 500."""
     import preconsult.core.llm as llm_module
-    agent_service._interview_chain = None
-    llm_module._llm = None
-    from preconsult.core.llm import get_llm
 
     original_llm = llm_module._llm
     llm_module._llm = None
-    with patch("langchain_aws.ChatBedrockConverse") as mock_chat, patch.object(
-        llm_module, "LLM_PROVIDER", "bedrock"
-    ):
-        mock_chat.side_effect = ClientError(
-            {"Error": {"Code": "AccessDeniedException", "Message": "denied"}}, "InvokeModel"
-        )
-        with pytest.raises(ClientError):
-            get_llm()
-    llm_module._llm = original_llm
+    monkeypatch.setattr(llm_module, "LLM_PROVIDER", "bedrock")
+    monkeypatch.setattr(
+        llm_module, "LLM_MODEL", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    )
+    try:
+        with patch("langchain_aws.ChatBedrockConverse") as mock_chat:
+            mock_chat.side_effect = ClientError(
+                {"Error": {"Code": "AccessDeniedException", "Message": "denied"}},
+                "InvokeModel",
+            )
+            with pytest.raises(LLMUpstreamError) as exc_info:
+                llm_module.get_llm()
+        assert exc_info.value.kind == "auth"
+    finally:
+        llm_module._llm = original_llm
 
 
 @pytest.mark.asyncio
@@ -110,17 +113,26 @@ async def test_validation_error_long_answer_returns_422():
 
 
 @pytest.mark.asyncio
-async def test_get_llm_raises_on_init_failure():
+async def test_get_llm_normalizes_an_invalid_model_failure(monkeypatch):
     import preconsult.core.llm as llm_module
+
+    original_llm = llm_module._llm
     llm_module._llm = None
-    with patch("langchain_aws.ChatBedrockConverse") as mock_chat, patch.object(
-        llm_module, "LLM_PROVIDER", "bedrock"
-    ):
-        mock_chat.side_effect = ClientError(
-            {"Error": {"Code": "ValidationException", "Message": "bad model"}}, "InvokeModel"
-        )
-        with pytest.raises(ClientError):
-            llm_module.get_llm()
+    monkeypatch.setattr(llm_module, "LLM_PROVIDER", "bedrock")
+    monkeypatch.setattr(
+        llm_module, "LLM_MODEL", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    )
+    try:
+        with patch("langchain_aws.ChatBedrockConverse") as mock_chat:
+            mock_chat.side_effect = ClientError(
+                {"Error": {"Code": "ValidationException", "Message": "bad model"}},
+                "InvokeModel",
+            )
+            with pytest.raises(LLMUpstreamError) as exc_info:
+                llm_module.get_llm()
+        assert exc_info.value.kind == "invalid_request"
+    finally:
+        llm_module._llm = original_llm
 
 
 # ---------------------------------------------------------------------------
@@ -173,117 +185,74 @@ def test_validation_handler_maps_422_and_keeps_errors():
     assert body["errors"][0]["loc"][0] == "age"
 
 
-def test_bedrock_api_handler_returns_502_sanitized():
-    exc = ClientError(
-        {"Error": {"Code": "AccessDeniedException", "Message": "PERMISSION_DENIED: secret bucket"}},
-        "InvokeModel",
+@pytest.mark.parametrize(
+    "kind,expected_status,expected_code",
+    [
+        ("throttled", 503, "llm_unavailable"),
+        ("timeout", 503, "llm_unavailable"),
+        ("auth", 502, "ai_upstream_error"),
+        ("invalid_request", 502, "ai_upstream_error"),
+        ("blocked", 502, "ai_upstream_error"),
+        ("malformed", 502, "ai_upstream_error"),
+        ("upstream", 502, "ai_upstream_error"),
+    ],
+)
+def test_llm_upstream_handler_maps_kind_to_stable_code(
+    kind, expected_status, expected_code
+):
+    resp = _run_handler(
+        llm_upstream_handler, LLMUpstreamError(kind, provider="bedrock")
     )
-    resp = _run_handler(bedrock_api_handler, exc)
-    assert resp.status_code == 502
+    body = json.loads(resp.body)
+    assert resp.status_code == expected_status
+    assert body["code"] == expected_code
+
+
+def test_llm_upstream_handler_never_echoes_vendor_detail():
+    resp = _run_handler(llm_upstream_handler, LLMUpstreamError("auth", provider="bedrock"))
     body = resp.body.decode()
-    assert "ai_upstream_error" in body
-    assert "secret bucket" not in body
-    assert "PERMISSION_DENIED" not in body
+    assert "auth" not in body
+    assert "bedrock" not in body
 
 
-def test_bedrock_api_handler_maps_throttling_to_503():
+def test_unknown_kind_is_normalized_to_upstream():
+    assert LLMUpstreamError("something-new").kind == "upstream"
+
+
+def test_retryable_kinds_are_throttling_and_timeout():
+    assert LLMUpstreamError("throttled").retryable is True
+    assert LLMUpstreamError("timeout").retryable is True
+    assert LLMUpstreamError("auth").retryable is False
+
+
+def test_bedrock_throttling_is_classified_retriable():
+    from preconsult.core.llm import _classify_bedrock
+
     exc = ClientError(
         {"Error": {"Code": "ThrottlingException", "Message": "slow down"}}, "InvokeModel"
     )
-    resp = _run_handler(bedrock_api_handler, exc)
-    assert resp.status_code == 503
-    assert "llm_unavailable" in resp.body.decode()
+    assert _classify_bedrock(exc) == "throttled"
 
 
-def test_bedrock_exception_types_is_empty_without_the_extra(monkeypatch):
-    """The default image has no botocore; importing it must not be required."""
-    import sys
-
-    import preconsult.core.errors as errors
-
-    monkeypatch.setitem(sys.modules, "botocore", None)
-    assert errors.bedrock_exception_types() == ()
-
-
-def test_bedrock_api_handler_maps_botocore_error_to_502():
-    resp = _run_handler(bedrock_api_handler, BotoCoreError())
-    assert resp.status_code == 502
-    assert "ai_upstream_error" in resp.body.decode()
-
-
-def test_google_api_handler_returns_502_sanitized():
+def test_vertex_resource_exhausted_is_classified_retriable():
     from google.genai.errors import APIError
 
-    resp = _run_handler(
-        google_api_handler,
-        APIError(403, {"error": {"message": "PERMISSION_DENIED: secret bucket"}}),
-    )
-    assert resp.status_code == 502
-    body = resp.body.decode()
-    assert "ai_upstream_error" in body
-    assert "secret bucket" not in body
-    assert "PERMISSION_DENIED" not in body
-
-
-def test_google_api_handler_maps_throttling_to_503():
-    from google.genai.errors import APIError
+    from preconsult.core.llm import _classify_vertex
 
     exc = APIError(
-        429, {"error": {"message": "quota exceeded", "status": "RESOURCE_EXHAUSTED"}}
+        429, {"error": {"message": "quota", "status": "RESOURCE_EXHAUSTED"}}
     )
-    resp = _run_handler(google_api_handler, exc)
-    assert resp.status_code == 503
-    assert "llm_unavailable" in resp.body.decode()
+    assert _classify_vertex(exc) == "throttled"
 
 
-def test_google_api_handler_maps_generic_error_to_502():
-    from google.genai.errors import APIError
-
-    resp = _run_handler(
-        google_api_handler,
-        APIError(500, {"error": {"message": "upstream boom", "status": "INTERNAL"}}),
-    )
-    assert resp.status_code == 502
-    assert "ai_upstream_error" in resp.body.decode()
-    assert "upstream boom" not in resp.body.decode()
-
-
-def test_both_provider_error_handlers_are_registered():
-    """A provider swap must not leave one family of upstream errors unmapped."""
-    from botocore.exceptions import ClientError as BotocoreClientError
-    from google.genai.errors import APIError
-
+def test_llm_upstream_handler_is_registered():
+    """A provider swap must not leave upstream errors unmapped to 502/503."""
     from preconsult.host import build_starlette_app
 
     mount = next(
         r for r in build_starlette_app().routes if getattr(r, "path", None) == "/api"
     )
-    handlers = mount.app.exception_handlers
-
-    assert APIError in handlers
-    assert BotocoreClientError in handlers
-
-
-def test_google_exception_types_do_not_require_api_core():
-    """The Vertex client is google-genai; api-core is not installed at all."""
-    import sys
-
-    from google.genai.errors import APIError
-
-    import preconsult.core.errors as errors
-
-    assert APIError in errors.google_exception_types()
-    # Simulate the api-core branch being unavailable too: the tuple must still
-    # contain the type the active client raises.
-    original = sys.modules.get("google.api_core")
-    sys.modules["google.api_core"] = None
-    try:
-        assert APIError in errors.google_exception_types()
-    finally:
-        if original is None:
-            sys.modules.pop("google.api_core", None)
-        else:
-            sys.modules["google.api_core"] = original
+    assert LLMUpstreamError in mount.app.exception_handlers
 
 
 def test_generic_handler_returns_500_sanitized():

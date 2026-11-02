@@ -43,6 +43,9 @@ class TestP2_APIKeyEnforced:
             dotenv.load_dotenv = original_load_dotenv
             if saved is not None:
                 os.environ["PRECONSULT_API_KEY"] = saved
+            # The reload above left the module half-initialised; restore it so
+            # later tests import a config that still has the key.
+            importlib.reload(cfg)
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +100,7 @@ class TestP6_Sprint5Features:
     def test_emergency_rule_in_interview_prompt(self):
         from preconsult.services.agent_service import get_interview_chain
         chain = get_interview_chain()
-        prompt = chain.steps[0]
+        prompt = chain.prompt
         system_msg = str(prompt.messages[0])
         assert "emergency" in system_msg.lower()
         assert "do not generate questions" in system_msg.lower()
@@ -139,6 +142,10 @@ class TestP8_BuildMode:
                 os.environ["BUILD_MODE"] = saved_build
             else:
                 os.environ.pop("BUILD_MODE", None)
+            # Without this reload the live config keeps BUILD_MODE=True and
+            # PRECONSULT_API_KEY=None, which makes every later authenticated
+            # request 403 when this file runs on its own.
+            importlib.reload(cfg)
 
 
 class TestP10_SessionSecret:

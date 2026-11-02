@@ -20,14 +20,9 @@ import logging
 from dataclasses import dataclass
 from typing import AsyncGenerator, Literal, Union
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import Runnable
 
-from preconsult.core.llm import get_llm
-from preconsult.core.llm_stream import (
-    StreamAccumulator,
-    questions_from_text,
-    questions_from_tool_calls,
-)
+from preconsult.core.llm import LLMClient, LLMDelta, get_llm
+from preconsult.core.llm_stream import questions_from_text, questions_from_tool_calls
 
 
 # Structured-output tool the model must call to return the final questions.
@@ -83,10 +78,28 @@ def get_language_instructions(lang: str) -> dict:
         "not_mentioned": "Not mentioned"
     }
 
-# --- Sprint 1: Single Interview Chain ---
-_interview_chain: Runnable | None = None
+class InterviewChain:
+    """Renders the prompt and streams one provider-neutral answer.
 
-def get_interview_chain() -> Runnable:
+    Replaces the LangChain ``prompt | model`` pipeline. LCEL forwards whatever
+    chunk shape the vendor produced, which is how provider semantics used to
+    leak into this layer; ``LLMClient`` yields neutral deltas instead.
+    """
+
+    def __init__(self, prompt: ChatPromptTemplate, client: LLMClient) -> None:
+        self.prompt = prompt
+        self._client = client
+
+    async def astream(self, input_dict: dict) -> AsyncGenerator[LLMDelta, None]:
+        messages = self.prompt.format_messages(**input_dict)
+        async for delta in self._client.astream(messages, [REPORT_QUESTIONS_TOOL]):
+            yield delta
+
+
+# --- Sprint 1: Single Interview Chain ---
+_interview_chain: InterviewChain | None = None
+
+def get_interview_chain() -> InterviewChain:
     """Single interview chain. Receives full form context, generates up to 5 targeted questions."""
     global _interview_chain
     if _interview_chain is None:
@@ -140,14 +153,14 @@ def get_interview_chain() -> Runnable:
                 "Alcohol: {alcohol}"
             )),
         ])
-        _interview_chain = prompt | get_llm().bind_tools([REPORT_QUESTIONS_TOOL])
+        _interview_chain = InterviewChain(prompt, get_llm())
     return _interview_chain
 
 
 async def stream_interview_questions(
     session_data: dict,
     lang: str,
-    chain: Runnable
+    chain: InterviewChain
 ) -> AsyncGenerator[StreamEvent, None]:
     """Streams typed events: text deltas, then a terminal structured list.
 
@@ -177,21 +190,20 @@ async def stream_interview_questions(
         "language_instruction": lang_instructions["initial_q_instruction"],
     }
 
-    accumulator = StreamAccumulator()
-    async for msg in chain.astream(input_dict):
-        # Per-chunk text keeps progressive rendering working; the terminal
-        # question list is read from the accumulator, never from one chunk.
-        delta = accumulator.feed(msg)
-        if delta:
-            yield StreamEvent(kind="text", value=delta)
+    text_parts: list[str] = []
+    final_questions: list[str] | None = None
 
-    final_questions = None
-    if accumulator.tool_calls_complete:
-        final_questions = questions_from_tool_calls(
-            accumulator.tool_calls, REPORT_QUESTIONS_TOOL["name"]
-        )
+    async for delta in chain.astream(input_dict):
+        if delta.text:
+            text_parts.append(delta.text)
+            yield StreamEvent(kind="text", value=delta.text)
+        if delta.tool_calls:
+            final_questions = questions_from_tool_calls(
+                list(delta.tool_calls), REPORT_QUESTIONS_TOOL["name"]
+            )
+
     if final_questions is None:
-        final_questions = questions_from_text(accumulator.text)
+        final_questions = questions_from_text("".join(text_parts))
 
     if final_questions is not None:
         yield StreamEvent(kind="questions", value=final_questions)

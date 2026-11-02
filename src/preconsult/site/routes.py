@@ -10,7 +10,8 @@ from __future__ import annotations
 from starlette.responses import Response
 
 from preconsult.site.legal import legal_page_endpoint
-from preconsult.site.seo import LLMS_TXT, ROBOTS_TXT
+from preconsult.site.seo import ROBOTS_TXT
+from preconsult.site.seo import render_llms_txt
 from preconsult.site.seo import sitemap_xml as render_sitemap_xml
 
 
@@ -32,7 +33,7 @@ async def sitemap_xml(request):
 
 async def llms_txt(request):
     return Response(
-        content=LLMS_TXT,
+        content=render_llms_txt(),
         media_type="text/markdown",
         headers={"Cache-Control": "public, max-age=3600"},
     )

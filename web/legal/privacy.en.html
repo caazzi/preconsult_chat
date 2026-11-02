@@ -39,11 +39,11 @@
   </ul>
 
   <h2>2. AI Question Generation & Third-Party Processing</h2>
-  <p>To provide relevant clinical follow-up questions, PreConsult utilizes Google Vertex AI (Gemini 2.5 Flash Lite):</p>
+  <p>To provide relevant clinical follow-up questions, PreConsult utilizes {{LLM_PROCESSOR}}:</p>
   <ul>
-    <li>The clinical information you enter is transmitted via encrypted HTTPS connection to Google Vertex AI enterprise endpoints solely to generate contextual follow-up questions.</li>
+    <li>The clinical information you enter is transmitted via encrypted HTTPS connection to {{LLM_ENDPOINT}} solely to generate contextual follow-up questions.</li>
     <li>No personal identifiers (names, addresses, documents) are sent to the AI service.</li>
-    <li>Data processed via enterprise Google Vertex AI is not retained by Google or used to train public machine learning models.</li>
+    <li>{{LLM_TRAINING}}</li>
   </ul>
 
   <h2>3. Cookies & Local Analytics</h2>

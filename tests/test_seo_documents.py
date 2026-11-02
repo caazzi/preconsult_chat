@@ -1,10 +1,12 @@
-"""Crawler-facing documents stay byte-identical after the extraction.
+"""Crawler-facing documents keep their extraction-time contract.
 
 ``robots.txt``, ``sitemap.xml`` and ``llms.txt`` were inline literals in the
 old host module; they now come from ``preconsult.site.seo``, which has no
 framework dependency. These
 tests check the served contract (status, media type, cache headers, content)
-and the deterministic sitemap rendering.
+and the deterministic sitemap rendering. ``llms.txt`` is rendered from the
+configured provider disclosure rather than a module constant, so the expected
+value is the render function's output.
 """
 
 from datetime import date
@@ -13,7 +15,7 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from preconsult.site.seo import LLMS_TXT, ROBOTS_TXT, SITE_URL, sitemap_xml
+from preconsult.site.seo import ROBOTS_TXT, SITE_URL, render_llms_txt, sitemap_xml
 from preconsult.host import app
 
 
@@ -59,7 +61,7 @@ async def test_llms_txt_contract():
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/markdown")
     assert resp.headers["cache-control"] == "public, max-age=3600"
-    assert resp.text == LLMS_TXT
+    assert resp.text == render_llms_txt()
     assert resp.text.startswith("# PreConsult")
 
 

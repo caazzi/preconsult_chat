@@ -15,7 +15,7 @@ from typing import Any, Iterator
 import pytest
 
 from preconsult.core.i18n import translations
-from preconsult.site.seo import LLMS_TXT
+from preconsult.site.seo import render_llms_txt
 
 ROOT = Path(__file__).resolve().parents[1]
 DASHES = {
@@ -66,7 +66,7 @@ def test_document_and_legal_copy_use_no_long_dashes():
 
 
 def test_crawler_copy_uses_no_long_dashes():
-    assert _offenders("llms.txt", LLMS_TXT) == []
+    assert _offenders("llms.txt", render_llms_txt()) == []
 
 
 @pytest.mark.parametrize("lang", ["en", "pt"])

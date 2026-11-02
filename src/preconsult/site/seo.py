@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from preconsult.core.providers import active_disclosure
+
 SITE_URL = "https://pre-consult.org"
 
 ROBOTS_TXT = (
@@ -23,25 +25,33 @@ ROBOTS_TXT = (
     f"Sitemap: {SITE_URL}/sitemap.xml\n"
 )
 
-LLMS_TXT = (
+# ``{processor}`` is the same provider/model phrase the privacy pages render,
+# so llms.txt cannot advertise a provider the service no longer uses. It is a
+# template rather than a constant: the value depends on runtime configuration.
+_LLMS_TXT_TEMPLATE = (
     "# PreConsult: AI Medical Intake Assistant\n\n"
     "> Privacy-first guided AI interview helper for patient intake. "
     "Zero data persistence. No account required.\n\n"
     "PreConsult helps patients organize symptoms and prepare for "
     "doctor's appointments through a structured multi-step intake form. "
-    "The entire process runs in-browser, uses Google Vertex AI (Gemini) "
+    "The entire process runs in-browser, uses {processor} "
     "to generate targeted clinical questions, and produces a "
     "downloadable PDF report. All data is deleted when the browser tab is closed.\n\n"
     "Key principles:\n"
     "- Zero data persistence: No data stored on servers after session ends\n"
     "- No account required: Fully anonymous usage\n"
-    "- AI-powered clinical questions via Google Vertex AI (Gemini 2.5 Flash Lite)\n"
+    "- AI-powered clinical questions via {processor}\n"
     "- Multi-language: English and Portuguese (Brazil)\n"
     "- PDF report generation with form data and Q&A\n"
     "- Privacy-first: No tracking, no cookies, no PII collected\n\n"
     "## Pages\n\n"
     f"- [Homepage]({SITE_URL}/): Main intake form with 6-step wizard\n"
 )
+
+
+def render_llms_txt(lang: str = "en") -> str:
+    """Render ``llms.txt`` with the configured provider/model disclosure."""
+    return _LLMS_TXT_TEMPLATE.format(processor=active_disclosure(lang)["processor"])
 
 
 def sitemap_xml(today: date | None = None) -> str:

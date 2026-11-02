@@ -1,0 +1,9 @@
+{
+  "provider": "bedrock",
+  "source": "ChatBedrockConverse, Converse contentBlockDelta events",
+  "description": "Text arrives as a list of content blocks, not a string. `_text_of` in agent_service flattens this shape.",
+  "chunks": [
+    { "content": [{ "type": "text", "text": "1. When did the pain start?" }] },
+    { "content": [{ "type": "text", "text": "\n2. Does it spread anywhere?" }] }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "provider": "bedrock",
+  "source": "ChatBedrockConverse, Converse toolUse contentBlockStart/contentBlockDelta",
+  "description": "Tool arguments arrive as fragmented tool_call_chunks. Each fragment on its own parses into a TRUNCATED argument object, so a consumer reading complete tool_calls per chunk emits a mangled question and never sees the full list. The three fragments concatenate to {\"questions\": [\"When did the pain start?\", \"Does it spread anywhere?\"]}.",
+  "chunks": [
+    {
+      "content": "",
+      "tool_call_chunks": [
+        {
+          "name": "report_questions",
+          "args": "{\"questions\": [\"When did the pain start?\", \"Does it spread",
+          "id": "tooluse_abc",
+          "index": 0
+        }
+      ]
+    },
+    {
+      "content": "",
+      "tool_call_chunks": [
+        {
+          "args": " anywhere?",
+          "id": null,
+          "name": null,
+          "index": 0
+        }
+      ]
+    },
+    {
+      "content": "",
+      "tool_call_chunks": [
+        {
+          "args": "\"]}",
+          "id": null,
+          "name": null,
+          "index": 0
+        }
+      ]
+    }
+  ]
+}

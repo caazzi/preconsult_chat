@@ -20,8 +20,6 @@ if not PRECONSULT_API_KEY:
     else:
         raise ValueError("FATAL: PRECONSULT_API_KEY nao definida. Abortando startup.")
 
-SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
-
 # When True, honor the hop our own proxy appended to X-Forwarded-For. Required
 # on Cloud Run: the container's transport peer is the local proxy
 # (169.254.169.126, identical for every client), so with this False every
@@ -106,8 +104,7 @@ LLM_MAX_RETRIES = int(os.environ.get("LLM_MAX_RETRIES", "2"))
 
 # Deploy revision identity. GIT_SHA is injected by CI; K_REVISION is Cloud Run's
 # own revision id at runtime. Kept PHI-free and included in every structured log
-# event so "which deployed build produced this outcome" is answerable in logs,
-# not just in Sentry. Mirrors the Sentry `release` in main.py.
+# event so "which deployed build produced this outcome" is answerable in logs.
 REPOSITORY_REVISION = os.environ.get("GIT_SHA") or os.environ.get("K_REVISION") or "dev"
 
 # --- Session cookie (per-session auth) -------------------------------------

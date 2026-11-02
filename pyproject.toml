@@ -23,7 +23,6 @@ dependencies = [
     "httptools==0.8.0",
     "python-dotenv==1.2.4",
     "redis==6.4.0",
-    "sentry-sdk==2.73.0",
     # Pinned because SPAStaticFiles subclasses Starlette's StaticFiles and
     # depends on its path-normalisation/cache semantics; a major bump must be
     # a deliberate change with the static tests re-read, not a silent re-lock.

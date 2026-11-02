@@ -82,7 +82,7 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   `/health/live` is dependency-free (no Redis) and only answers once the ASGI app is up; keep it in
   both deploy profiles and in `scripts/deploy_backend.sh`. `preconsult.main` emits
   `event=app.boot duration_ms=...` so the import cost stays attributable.
-- **Boot cost is budgeted.** `preconsult.main` must not import `sentry_sdk`, `reportlab`,
+- **Boot cost is budgeted.** `preconsult.main` must not import `reportlab`,
   `langchain_core`, `langchain_aws` or `botocore`; `tests/test_import_budget.py` runs the import in a
   subprocess and fails if any of them appears. Defer a heavy import to the call site that needs it and
   leave a comment saying why. The image compiles bytecode at build time
@@ -315,5 +315,5 @@ outages), so Redis must be reserved for actual patient sessions:
   language (language ≠ data residency).
 - Deploy-affecting changes include anything the container runs: error-response shape (codes),
   health routes, config flags (e.g. `TRUST_PROXY_HEADERS`, `ALLOW_PUBLIC_INIT`), the served document
-  and its cache headers, Sentry init. Such a change is only "done" after the CI/CD-built revision
+  and its cache headers. Such a change is only "done" after the CI/CD-built revision
   serves `200` — local commits alone are NOT deployment.

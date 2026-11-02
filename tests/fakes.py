@@ -37,11 +37,15 @@ class ToolCallingFakeLLM(Runnable):
         text: str = "",
         questions: list[str] | None = None,
         shape: Literal["vertex", "bedrock"] = "vertex",
+        usage: dict | None = None,
+        finish_reason: str | None = None,
     ):
         super().__init__()
         self._text = text
         self._questions = questions
         self._shape = shape
+        self._usage = usage
+        self._finish_reason = finish_reason
         self.model = f"fake-{shape}"
 
     def bind_tools(self, tools, **kwargs: Any):  # noqa: ANN001 - test double
@@ -85,6 +89,22 @@ class ToolCallingFakeLLM(Runnable):
                         ],
                     )
                 )
+
+        if self._usage or self._finish_reason:
+            # Providers report usage/stop metadata on a trailing metadata chunk
+            # (Vertex: finish_reason, Bedrock: stop_reason). An empty-content
+            # chunk is the shape both adapters normalize.
+            response_metadata: dict = {}
+            if self._finish_reason:
+                key = "stop_reason" if self._shape == "bedrock" else "finish_reason"
+                response_metadata[key] = self._finish_reason
+            chunks.append(
+                AIMessageChunk(
+                    content="",
+                    usage_metadata=self._usage,
+                    response_metadata=response_metadata,
+                )
+            )
 
         return chunks
 

@@ -69,6 +69,39 @@ def record_funnel_step(event: str) -> None:
     log_event(logging.INFO, "funnel.step", step=event)
 
 
+def record_llm_stream() -> None:
+    """Count one attempted LLM stream (``llm.stream.total``).
+
+    A stream that fails mid-flight still counts: the point is that failures stop
+    looking like successes in the aggregate, not that only happy paths count.
+    """
+    _inc("llm.stream.total")
+
+
+def record_llm_structured_source(source: str | None) -> None:
+    """Count how the final question list was obtained.
+
+    ``tool`` -> ``llm.structured.ok`` (the structured output contract held),
+    ``text`` -> ``llm.structured.fallback`` (the prose salvage path ran). A
+    stream that produced no list at all increments neither. ``source`` is our
+    own enum, never user content.
+    """
+    if source == "tool":
+        _inc("llm.structured.ok")
+    elif source == "text":
+        _inc("llm.structured.fallback")
+
+
+def record_llm_error(kind: str) -> None:
+    """Count one failed LLM stream by stable error kind (``llm.error.<kind>``).
+
+    ``kind`` is the normalized provider vocabulary from ``LLMUpstreamError``
+    (``throttled``/``timeout``/``auth``/...) or ``unknown`` for a non-LLM
+    exception. It is an enum, never a message or user value.
+    """
+    _inc(f"llm.error.{kind}")
+
+
 def new_request_id() -> str:
     """Short, random, correlatable request id (16 chars, URL-safe, no PHI)."""
     return secrets.token_urlsafe(9)

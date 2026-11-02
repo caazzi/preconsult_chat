@@ -2,9 +2,12 @@
 //
 // Wire contract (docs/api-contract.md §3): each event is one line
 // `data: <json>` where <json> is EITHER a string text delta OR a terminal
-// object `{"type":"questions","questions":[...]}`. Mid-stream errors are served
-// as a normal SSE event (HTTP 200) holding a localized generic string, never an
-// HTTP error. The structured list is authoritative when present.
+// object `{"type":"questions","questions":[...]}`. A mid-stream failure is
+// served as a normal SSE event (HTTP 200) with a structured
+// `{"type":"error","code":"<stable code>"}` immediately followed by the
+// localized generic string, never an HTTP error. The structured list is
+// authoritative when present; unknown objects are ignored for forward
+// compatibility.
 
 import { apiUrl, ApiError, throwIfError } from "./client";
 import { isEmergencyTrigger, splitQuestions } from "../contracts/parsing";
@@ -16,16 +19,18 @@ export type StreamCallbacks = {
   onEmergency: (buffer: string) => void;
   /** The stream finished; `questions` is the authoritative final list. */
   onDone: (questions: string[]) => void;
-  onError?: (message: string) => void;
+  /** A stable error code (server `type:"error"` or a transport failure). */
+  onError?: (code: string) => void;
 };
 
 /**
- * Parse a single SSE `data:` payload into text or a structured question list.
- * Exported for unit testing.
+ * Parse a single SSE `data:` payload into text, a structured question list or
+ * a stable error code. Exported for unit testing.
  */
 export type ParsedEvent =
   | { kind: "text"; value: string }
-  | { kind: "questions"; value: string[] };
+  | { kind: "questions"; value: string[] }
+  | { kind: "error"; code: string };
 
 export function parseEventPayload(raw: string): ParsedEvent | null {
   let parsed: unknown;
@@ -35,16 +40,21 @@ export function parseEventPayload(raw: string): ParsedEvent | null {
     return null;
   }
   if (typeof parsed === "string") return { kind: "text", value: parsed };
-  if (
-    parsed &&
-    typeof parsed === "object" &&
-    (parsed as { type?: unknown }).type === "questions" &&
-    Array.isArray((parsed as { questions?: unknown }).questions)
-  ) {
-    const questions = (parsed as { questions: unknown[] }).questions.filter(
-      (q): q is string => typeof q === "string",
-    );
-    return { kind: "questions", value: questions };
+  if (parsed && typeof parsed === "object") {
+    const type = (parsed as { type?: unknown }).type;
+    if (type === "error") {
+      const code = (parsed as { code?: unknown }).code;
+      return {
+        kind: "error",
+        code: typeof code === "string" && code ? code : "internal_error",
+      };
+    }
+    if (type === "questions" && Array.isArray((parsed as { questions?: unknown }).questions)) {
+      const questions = (parsed as { questions: unknown[] }).questions.filter(
+        (q): q is string => typeof q === "string",
+      );
+      return { kind: "questions", value: questions };
+    }
   }
   return null;
 }
@@ -88,6 +98,13 @@ export async function streamInterviewQuestions(
     if (!line.startsWith("data: ")) return;
     const event = parseEventPayload(line.slice("data: ".length));
     if (!event) return;
+    if (event.kind === "error") {
+      // Structured failure. The localized text event that follows still lands
+      // in the buffer, so the message the user sees is unchanged; the code is
+      // what lets the UI offer a retry instead of silently showing nothing.
+      cbs.onError?.(event.code);
+      return;
+    }
     if (event.kind === "questions") {
       structured = event.value;
       return;

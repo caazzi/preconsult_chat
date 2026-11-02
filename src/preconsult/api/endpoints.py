@@ -9,18 +9,20 @@ import asyncio
 import html
 import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import date, timedelta
 from ipaddress import ip_address
-from typing import Annotated
+from typing import Annotated, AsyncIterator
 from fastapi import APIRouter, HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
 from fastapi.responses import StreamingResponse, Response, JSONResponse
 from pydantic import BaseModel, Field, StringConstraints, field_validator
-from langchain_core.runnables import Runnable
 
 from preconsult.core.config import (
     ALLOW_PUBLIC_INIT,
+    LLM_MODEL,
+    LLM_PROVIDER,
     PRECONSULT_API_KEY,
     TRUST_CF_CONNECTING_IP,
     TRUST_PROXY_HEADERS,
@@ -28,10 +30,15 @@ from preconsult.core.config import (
     SESSION_COOKIE_SECURE,
 )
 from preconsult.core.analytics import ANONYMOUS_FUNNEL_EVENTS, FUNNEL_EVENTS
+from preconsult.core.errors import LLM_UNAVAILABLE_KINDS, LLMUpstreamError
+from preconsult.core.llm import LLMDelta
 from preconsult.core.observability import (
     new_request_id,
     log_event,
     record_funnel_step,
+    record_llm_error,
+    record_llm_stream,
+    record_llm_structured_source,
     timed,
 )
 from preconsult.core.parsing import has_emergency_red_flag
@@ -41,6 +48,7 @@ from preconsult.core.session_auth import (
     verify_session_cookie,
 )
 from preconsult.services.agent_service import (
+    InterviewChain,
     stream_interview_questions,
     get_interview_chain,
 )
@@ -457,44 +465,153 @@ def _emergency_response_if_flagged(
     return None
 
 
+def _llm_identity(chain: object) -> tuple[str, str]:
+    """Provider/model ids for telemetry, never constructed from user content.
+
+    The chain exposes the adapter that actually serves it; the configured
+    defaults cover a test double (or a chain shape that has no identity). This
+    reads the constant config only — it never calls ``get_llm()``, so emitting
+    telemetry cannot construct a vendor client or touch credentials.
+    """
+    provider = getattr(chain, "provider", None)
+    model = getattr(chain, "model", None)
+    if not isinstance(provider, str) or not provider:
+        provider = LLM_PROVIDER
+    if not isinstance(model, str) or not model:
+        model = LLM_MODEL
+    return provider, model
+
+
+@dataclass
+class _LLMStreamMeta:
+    """Metadata carried on the neutral deltas, collected for one stream."""
+
+    usage: dict | None = None
+    finish_reason: str | None = None
+
+
+class _TelemetryChain:
+    """Pass-through chain wrapper that records usage/finish_reason.
+
+    ``stream_interview_questions`` intentionally only understands text and
+    questions. The neutral metadata rides on the final ``LLMDelta``, so the
+    endpoint observes it here instead of widening the service's typed event
+    contract. Deltas are yielded unchanged; nothing is buffered or reordered.
+    """
+
+    def __init__(self, chain: InterviewChain, meta: _LLMStreamMeta) -> None:
+        self._chain = chain
+        self._meta = meta
+
+    async def astream(self, input_dict: dict) -> AsyncIterator[LLMDelta]:
+        async for delta in self._chain.astream(input_dict):
+            usage = getattr(delta, "usage", None)
+            if isinstance(usage, dict) and usage:
+                self._meta.usage = usage
+            reason = getattr(delta, "finish_reason", None)
+            if isinstance(reason, str) and reason:
+                self._meta.finish_reason = reason
+            yield delta
+
+
 def _question_stream(
-    ctx: _StreamSession, chain: Runnable, *, topic: str
+    ctx: _StreamSession, chain: InterviewChain, *, topic: str
 ) -> StreamingResponse:
     """SSE response streaming the interview questions for this session.
 
     ``topic`` is the log-event namespace (``stream.initial`` / ``stream.interview``);
     the event payload is identical for both endpoints.
+
+    Every stream ends with exactly one ``llm.stream`` telemetry line (metadata
+    only: provider/model ids, timings, counts, token usage, stop reason, error
+    kind) and a matching ``llm.*`` counter. A failure is visible twice: as a
+    structured ``{"type":"error","code":...}`` SSE event before the localized
+    text, and as ``llm.error.<kind>`` in metrics, so it can never be counted as
+    a successful stream by accident.
     """
 
-    async def event_generator():
-        streamed = 0
+    async def event_generator() -> AsyncIterator[str]:
+        started = time.monotonic()
+        provider, model = _llm_identity(chain)
+        meta = _LLMStreamMeta()
+        ttft_ms: int | None = None
+        chunks = 0
         structured = False
+        source: str | None = None
+        error_kind: str | None = None
+
         try:
-            async for event in stream_interview_questions(ctx.session_data, ctx.lang, chain):
+            async for event in stream_interview_questions(
+                ctx.session_data, ctx.lang, _TelemetryChain(chain, meta)
+            ):
                 if event.kind == "questions":
                     structured = True
+                    source = event.source
                     payload = {"type": "questions", "questions": event.value}
                     yield f"data: {json.dumps(payload)}\n\n"
                 else:
-                    streamed += 1
+                    if ttft_ms is None:
+                        ttft_ms = int((time.monotonic() - started) * 1000)
+                    chunks += 1
                     yield f"data: {json.dumps(event.value)}\n\n"
             log_event(
                 logging.INFO,
                 f"{topic}.ok",
                 request_id=ctx.request_id,
                 session_id_short=ctx.session_id[:8],
-                chunks=streamed,
+                chunks=chunks,
                 structured=structured,
             )
         except Exception as e:
+            if isinstance(e, LLMUpstreamError):
+                error_kind = e.kind
+                code = (
+                    "llm_unavailable"
+                    if e.kind in LLM_UNAVAILABLE_KINDS
+                    else "ai_upstream_error"
+                )
+            else:
+                error_kind = "unknown"
+                code = "internal_error"
+            record_llm_error(error_kind)
             logging.error(f"Error during {topic} stream: {e}", exc_info=True)
             log_event(
                 logging.ERROR,
                 f"{topic}.error",
                 request_id=ctx.request_id,
                 error_type=type(e).__name__,
+                error_kind=error_kind,
             )
+            # Structured failure first: a client that understands codes can
+            # react (retry affordance) while older clients keep the localized
+            # text event and the pre-existing behaviour.
+            yield f"data: {json.dumps({'type': 'error', 'code': code})}\n\n"
             yield f"data: {json.dumps(' ' + ctx.err_msg)}\n\n"
+        finally:
+            usage = meta.usage or {}
+            record_llm_stream()
+            record_llm_structured_source(source)
+            # PHI-free by construction: stable ids/enums, timings and counts.
+            # ``None`` values are dropped by ``log_event``'s formatter.
+            log_event(
+                logging.INFO,
+                "llm.stream",
+                request_id=ctx.request_id,
+                session_id_short=ctx.session_id[:8],
+                topic=topic,
+                provider=provider,
+                model=model,
+                ttft_ms=ttft_ms,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                chunks=chunks,
+                structured=source == "tool",
+                fallback=source == "text",
+                input_tokens=usage.get("input_tokens"),
+                output_tokens=usage.get("output_tokens"),
+                cached_tokens=usage.get("cache_read"),
+                finish_reason=meta.finish_reason,
+                error_kind=error_kind,
+            )
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -513,7 +630,7 @@ def _question_stream(
 async def get_initial_questions_streamed(
     request: InitialRequest,
     fastapi_req: Request,
-    chain: Runnable = Depends(get_interview_chain)
+    chain: InterviewChain = Depends(get_interview_chain)
 ):
     """Streams interview questions based on chief complaint."""
     ctx = await _open_stream(request.session_id, fastapi_req)
@@ -555,7 +672,7 @@ async def get_initial_questions_streamed(
 async def get_interview_questions_streamed(
     request: InterviewRequest,
     fastapi_req: Request,
-    chain: Runnable = Depends(get_interview_chain)
+    chain: InterviewChain = Depends(get_interview_chain)
 ):
     """Streams targeted interview questions based on full form context. Single LLM call."""
     ctx = await _open_stream(request.session_id, fastapi_req)

@@ -55,10 +55,16 @@ class StreamEvent:
 
     ``kind="text"`` carries a raw model delta for live rendering.
     ``kind="questions"`` carries the final structured list (terminal event).
+
+    ``source`` is set only on the terminal ``questions`` event and records where
+    that list came from: the ``report_questions`` tool call (``"tool"``) or the
+    prose fallback (``"text"``). It is telemetry/observability metadata, not part
+    of ``kind``/``value`` semantics; it never carries user content.
     """
 
     kind: Literal["text", "questions"]
     value: Union[str, list[str]]
+    source: Literal["tool", "text"] | None = None
 
 
 def get_language_instructions(lang: str) -> dict:
@@ -89,6 +95,16 @@ class InterviewChain:
     def __init__(self, prompt: ChatPromptTemplate, client: LLMClient) -> None:
         self.prompt = prompt
         self._client = client
+
+    @property
+    def provider(self) -> str:
+        """Provider id of the active adapter (telemetry only, no secret)."""
+        return self._client.provider
+
+    @property
+    def model(self) -> str:
+        """Model id of the active adapter (telemetry only, no secret)."""
+        return self._client.model
 
     async def astream(self, input_dict: dict) -> AsyncGenerator[LLMDelta, None]:
         messages = self.prompt.format_messages(**input_dict)
@@ -192,20 +208,25 @@ async def stream_interview_questions(
 
     text_parts: list[str] = []
     final_questions: list[str] | None = None
+    source: Literal["tool", "text"] | None = None
 
     async for delta in chain.astream(input_dict):
         if delta.text:
             text_parts.append(delta.text)
             yield StreamEvent(kind="text", value=delta.text)
         if delta.tool_calls:
-            final_questions = questions_from_tool_calls(
+            structured_questions = questions_from_tool_calls(
                 list(delta.tool_calls), REPORT_QUESTIONS_TOOL["name"]
             )
+            if structured_questions is not None:
+                final_questions = structured_questions
+                source = "tool"
 
     if final_questions is None:
-        final_questions = questions_from_text("".join(text_parts))
+        fallback_questions = questions_from_text("".join(text_parts))
+        if fallback_questions is not None:
+            final_questions = fallback_questions
+            source = "text"
 
     if final_questions is not None:
-        yield StreamEvent(kind="questions", value=final_questions)
-
-
+        yield StreamEvent(kind="questions", value=final_questions, source=source)

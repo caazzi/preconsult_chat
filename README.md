@@ -189,6 +189,7 @@ LLM_MODEL=gemini-2.5-flash       # defaults to the provider's model when unset
 BEDROCK_REGION=us-east-1        # only read when LLM_PROVIDER=bedrock
 REDIS_URL=redis://localhost:6379/0
 GIT_SHA=                   # log revision tag (injected by CI)
+ENV=production             # resource.deployment.environment.name in structured logs
 TRUST_PROXY_HEADERS=false  # true on Cloud Run: the peer is the local proxy for every client
 TRUST_CF_CONNECTING_IP=false # true only if the domain sits behind Cloudflare's proxy
 ```

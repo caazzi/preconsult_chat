@@ -14,6 +14,7 @@ format, so existing greps and dashboards keep working.
 import asyncio
 import json
 import logging
+import os
 import re
 
 import pytest
@@ -116,7 +117,9 @@ def test_resource_fields_are_constant_and_carry_the_deploy_revision(caplog):
     assert first == second
     assert first["service.name"] == "preconsult"
     assert first["service.version"] == REPOSITORY_REVISION
-    assert first["deployment.environment.name"] == "production"
+    assert first["deployment.environment.name"] == (
+        os.environ.get("ENV") or "production"
+    )
     # Eight lowercase hex chars, generated once per process.
     assert re.fullmatch(r"[0-9a-f]{8}", first["service.instance.id"])
 

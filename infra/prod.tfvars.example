@@ -1,0 +1,35 @@
+# Copy to prod.tfvars (ignored by git) and edit the non-secret values.
+# Never put secret values here: API key, Redis URL and session secret live in
+# SSM Parameter Store as SecureStrings.
+
+aws_region  = "us-east-1"
+name_prefix = "preconsult"
+environment = "prod"
+
+# IMMUTABLE repository: use a git SHA, never "latest".
+image_tag = "bootstrap"
+
+lambda_memory_mb       = 1024
+lambda_timeout_seconds = 120
+log_retention_days     = 30
+
+# Optional custom domain. Both or neither; the certificate must be in us-east-1.
+# domain_name           = "pre-consult.org"
+# acm_certificate_arn   = "arn:aws:acm:us-east-1:<account-id>:certificate/<certificate-id>"
+
+# Optional alarm notifications (SNS topic ARN, no secrets).
+# alarm_sns_topic_arn = "arn:aws:sns:us-east-1:<account-id>:preconsult-alerts"
+
+# Parameter NAMES, not values. Defaults live in variables.tf.
+# ssm_secret_names = {
+#   api_key        = "/preconsult/prod/PRECONSULT_API_KEY"
+#   redis_url      = "/preconsult/prod/REDIS_URL"
+#   session_secret = "/preconsult/prod/SESSION_SECRET"
+# }
+
+# CloudFront: PriceClass_100 is cheapest; it has no South America edge.
+# cloudfront_price_class = "PriceClass_100"
+
+# The five-minute warmer is off by default. Enable only after measuring real
+# cold-start frequency; it costs ~$0.05/month and keeps at most one sandbox warm.
+# enable_warmer = true

@@ -23,7 +23,11 @@ COPY . .
 # `Building preconsult @ file:///app` CPU work that happened on every cold start.
 # --locked (not --frozen): a stale uv.lock must fail the image build, not ship a
 # resolution that no longer matches pyproject.toml.
-RUN uv sync --locked
+#
+# UV_EXTRAS is empty for the default Cloud Run image. The Lambda image passes
+# --build-arg UV_EXTRAS="--extra bedrock"; the image is otherwise identical.
+ARG UV_EXTRAS=""
+RUN uv sync --locked ${UV_EXTRAS}
 
 # --- Stage 1b: Build the SPA (web/) ----------------------------------------
 # The SPA is the canonical document at / (see src/preconsult/host.py). Vite's
@@ -61,6 +65,12 @@ EXPOSE 8080
 # Set up non-root user for security
 RUN groupadd -r preconsult && useradd -r -g preconsult -m preconsult && \
     chown -R preconsult:preconsult /app
+
+# AWS Lambda Web Adapter (~1 MB): inert outside Lambda and harmless in the
+# Cloud Run image. Inside Lambda it proxies function-URL invocations to the
+# unchanged gunicorn CMD below and waits for /health/live (AWS_LWA_* env is
+# set by the Lambda stack, not here).
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
 
 USER preconsult
 WORKDIR /app

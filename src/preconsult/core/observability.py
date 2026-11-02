@@ -10,19 +10,99 @@ logs. Every helper here is therefore deliberately conservative:
   non-content counters (e.g. length of a free-text field, never the value).
 
 Bundling both the log emitters and the (short) request-id generator here keeps
-the logging story consistent across the FastAPI backend and the Reflex host.
+the logging story consistent across the FastAPI backend and the Starlette host.
 """
 
+import json
 import logging
+import math
+import os
 import secrets
 import threading
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any
 
 from preconsult.core.config import REPOSITORY_REVISION
 
 log = logging.getLogger("preconsult.observability")
+
+# Third-party (non-JSON) lines keep the familiar gunicorn/uvicorn text shape.
+TEXT_LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+
+# OTel log data model severity table. Values between two levels map to the
+# lower severity (e.g. a library's NOTICE=25 is WARNING) rather than inventing
+# an off-table number.
+_SEVERITY_BY_LEVEL = {
+    logging.DEBUG: ("DEBUG", 5),
+    logging.INFO: ("INFO", 9),
+    logging.WARNING: ("WARNING", 13),
+    logging.ERROR: ("ERROR", 17),
+    logging.CRITICAL: ("CRITICAL", 21),
+}
+
+
+def _severity(level: int) -> tuple[str, int]:
+    mapped = _SEVERITY_BY_LEVEL.get(level)
+    if mapped is not None:
+        return mapped
+    if level >= logging.CRITICAL:
+        return _SEVERITY_BY_LEVEL[logging.CRITICAL]
+    if level >= logging.ERROR:
+        return _SEVERITY_BY_LEVEL[logging.ERROR]
+    if level >= logging.WARNING:
+        return _SEVERITY_BY_LEVEL[logging.WARNING]
+    if level >= logging.INFO:
+        return _SEVERITY_BY_LEVEL[logging.INFO]
+    return _SEVERITY_BY_LEVEL[logging.DEBUG]
+
+
+# Constant per process: every Lambda sandbox is a new process, so the random
+# instance id makes cold-start frequency queryable later. It carries no user
+# or host information.
+_SERVICE_INSTANCE_ID = secrets.token_hex(4)
+_DEPLOYMENT_ENVIRONMENT = os.environ.get("ENV") or "production"
+
+_RESOURCE = {
+    "service.name": "preconsult",
+    "service.version": REPOSITORY_REVISION,
+    "deployment.environment.name": _DEPLOYMENT_ENVIRONMENT,
+    "service.instance.id": _SERVICE_INSTANCE_ID,
+}
+
+_MISSING = object()
+
+
+class JsonLogFormatter(logging.Formatter):
+    """Render structured events as pure JSON and everything else as text.
+
+    ``log_event`` writes its JSON in ``record.msg``. A Formatter cannot know
+    which records are ours, so the message itself is the signal: lines that
+    start with ``{`` pass through untouched (one JSON object per line), while
+    library/handler lines keep ``TEXT_LOG_FORMAT``. This keeps our stdout
+    parseable without making uvicorn/gunicorn output unreadable.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(fmt=TEXT_LOG_FORMAT)
+
+    def format(self, record: logging.LogRecord) -> str:
+        if isinstance(record.msg, str) and record.msg.startswith("{"):
+            return record.getMessage()
+        return super().format(record)
+
+
+def install_log_formatter() -> None:
+    """Apply :class:`JsonLogFormatter` to the root handlers.
+
+    Called by ``preconsult.main`` after ``logging.basicConfig``. Re-applying is
+    harmless, and iterating (instead of passing ``handlers=``) still works when
+    a server or test runner configured the root logger first.
+    """
+    formatter = JsonLogFormatter()
+    for handler in logging.getLogger().handlers:
+        handler.setFormatter(formatter)
 
 
 # ---------------------------------------------------------------------------
@@ -107,37 +187,75 @@ def new_request_id() -> str:
     return secrets.token_urlsafe(9)
 
 
-def _fmt(extra: dict[str, Any]) -> str:
-    # Deterministic, injection-safe "key=value" payload; values are forced to
-    # safe JSON-like scalars/short strings by the caller.
-    return " ".join(f"{k}={_val(v)}" for k, v in sorted(extra.items()) if v is not None)
+def _sanitize(value: Any) -> Any:
+    """Return a JSON-safe scalar, or ``_MISSING`` when it must be dropped.
+
+    Only metadata types are accepted: booleans, numbers and short strings.
+    Containers and arbitrary objects are dropped rather than serialized with
+    ``str()``/``repr()`` — an exception repr can contain request content.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        # NaN/Infinity are not valid RFC 8259 JSON.
+        return value if math.isfinite(value) else _MISSING
+    if isinstance(value, str):
+        # Collapse all whitespace (including newlines) so one event is always
+        # exactly one line, then bound the value.
+        return " ".join(value.split())[:120]
+    return _MISSING
 
 
-def _val(v: Any) -> str:
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, (int, float)):
-        return str(v)
-    s = str(v)
-    # collapse whitespace and quote to keep the parse unambiguous
-    return repr(s.strip()[:120])
+def _timestamp() -> str:
+    """UTC RFC3339 timestamp with millisecond precision and a ``Z`` suffix."""
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
 
 
 def log_event(level: int, event: str, **extra: Any) -> None:
-    """Emit one structured, PHI-safe log line.
+    """Emit exactly one OTel-shaped JSON log line.
 
-    ``event`` is a stable machine-readable name (e.g. ``session.init``).
-    ``extra`` must contain only metadata: request_id, lang, duration_ms,
-    status/status_code, counts and similar. Do not pass user content.
+    ``event`` is a stable machine-readable name (e.g. ``session.init``); it is
+    both the readable ``body`` and ``attributes["event.name"]``. ``extra`` must
+    contain only metadata: request_id, lang, duration_ms, status/status_code,
+    counts and similar. Do not pass user content.
 
-    Every line is tagged with the deploy ``revision`` (GIT_SHA/K_REVISION) so
-    logs are attributable to a specific deployed build. An explicit ``revision``
-    in ``extra`` wins (callers can override).
+    The deploy revision lives in ``resource.service.version`` (GIT_SHA/
+    K_REVISION) so every line is attributable to a specific build, and the
+    per-process ``resource.service.instance.id`` makes cold starts queryable.
     """
     try:
-        meta = dict(extra)
-        meta.setdefault("revision", REPOSITORY_REVISION)
-        log.log(level, f"event={event} {_fmt(meta)}".strip())
+        attributes: dict[str, Any] = {"event.name": event}
+        for key, value in extra.items():
+            if key == "event.name":
+                continue
+            sanitized = _sanitize(value)
+            if sanitized is not _MISSING:
+                attributes[key] = sanitized
+
+        severity_text, severity_number = _severity(level)
+        record = {
+            "timestamp": _timestamp(),
+            "severity_text": severity_text,
+            "severity_number": severity_number,
+            "body": event,
+            "attributes": attributes,
+            "resource": _RESOURCE,
+        }
+        log.log(
+            level,
+            json.dumps(
+                record,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            ),
+        )
     except Exception:  # logging must never break the request path
         pass
 

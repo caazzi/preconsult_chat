@@ -145,7 +145,13 @@ variable "cloudfront_price_class" {
 }
 
 variable "alarm_sns_topic_arn" {
-  description = "Optional SNS topic for CloudWatch alarm actions. Empty = alarms exist but notify nobody."
+  description = "Optional existing SNS topic for CloudWatch alarm actions. Takes precedence over alarm_email. Empty = use the topic created from alarm_email, or notify nobody if that is empty too."
+  type        = string
+  default     = ""
+}
+
+variable "alarm_email" {
+  description = "Optional email address for alarm notifications. Non-empty creates an SNS topic and an EMAIL subscription, which stays PENDING until the recipient confirms it. Ignored when alarm_sns_topic_arn is set."
   type        = string
   default     = ""
 }

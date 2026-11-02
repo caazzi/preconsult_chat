@@ -52,8 +52,6 @@ locals {
     REDIS_URL          = local.ssm_parameter_arns.redis_url
     SESSION_SECRET     = local.ssm_parameter_arns.session_secret
   }
-
-  alarm_actions = var.alarm_sns_topic_arn == "" ? [] : [var.alarm_sns_topic_arn]
 }
 
 resource "aws_ecr_repository" "app" {

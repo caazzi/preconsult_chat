@@ -27,7 +27,7 @@ gunicorn `CMD` and proxies function-URL requests to it on `:8080`.
 | CloudFront | $0 | Per request/GB only, no commitment. |
 | ECR | ~$0.10/GB-month | Lifecycle keeps the last 10 images. |
 | CloudWatch Logs | Retention-bound | 30 days by default; ingestion charged. |
-| Alarms | $0 (first 10) | Two alarms; optional SNS actions. |
+| Alarms | $0 (first 10) | Three alarms; ~$0.10/alarm-month beyond the free tier; SNS email delivery is free at this volume. |
 | Warmer | ~$0.05/month | Opt-in (`enable_warmer`, default `false`): one 128 MB ping every 5 minutes. |
 | ALB / NAT / Fargate | **not provisioned** | Those were the fixed-cost drivers. |
 
@@ -196,6 +196,46 @@ verifiable without an AWS call.
 empty CloudFront uses its `*.cloudfront.net` certificate and domain; when set,
 the certificate must be in us-east-1 and DNS must point at CloudFront.
 
+## Alarms and notifications
+
+`observability.tf` defines three alarms:
+
+- **Lambda `Errors`** — one or more invocation failures in five minutes;
+- **Lambda `Throttles`** — concurrency may be exhausted;
+- **CloudFront `5xxErrorRate`** — more than 1% viewer-visible 5xx for two
+  consecutive five-minute periods.
+
+The CloudFront alarm closes a real gap: `AWS/Lambda Errors` counts *failed
+invocations*, not a function that runs successfully and returns
+`503 llm_unavailable` (or any other 5xx) to the user. That is a healthy
+invocation with a broken response, so it never appears in the Lambda metric.
+The alarm is deliberately on the edge (CloudFront) because that is where the
+user-visible status is measured.
+
+CloudFront metrics only exist once traffic actually reaches the edge. Before
+that, `treat_missing_data = "notBreaching"` keeps the alarm quiet instead of
+paging on a distribution that has never served a request.
+
+### SNS notifications
+
+Set either:
+
+- `alarm_sns_topic_arn` — an existing topic to publish to (wins when both are
+  set); or
+- `alarm_email` — Terraform creates the `${name}-alarms` topic and an **EMAIL**
+  subscription.
+
+The email subscription is created **pending**. AWS sends a confirmation email;
+until someone clicks the link, alarm notifications are not delivered. Confirm
+it from the recipient inbox before treating the stack as monitored.
+
+If neither value is set, the alarms exist but notify nobody. Alarm payloads
+contain only the metric name, threshold and timestamps — never request content,
+headers, bodies or user data, so the zero-PHI posture holds.
+
+Cost: CloudWatch charges about **$0.10 per alarm-month** after the ten-alarm
+free tier; this stack creates three. SNS email delivery is free at this volume.
+
 ## Streaming caveat (read before cutover)
 
 Function URLs created with `invoke_mode = "RESPONSE_STREAM"` stream SSE, but
@@ -288,8 +328,10 @@ retention and no subscription.
   repository, the named SSM parameters (plus KMS decrypt through SSM), and the
   Claude inference profile plus the wildcard-region foundation model ARN that
   cross-region inference needs.
-- Alarms are `AWS/Lambda` `Errors` and `Throttles`, five-minute sums. Set
-  `alarm_sns_topic_arn` to notify; without it they are visible but silent.
+- Alarms are `AWS/Lambda` `Errors` and `Throttles` (five-minute sums) plus
+  `AWS/CloudFront` `5xxErrorRate`. Set `alarm_sns_topic_arn` or `alarm_email`
+  to notify; see [Alarms and notifications](#alarms-and-notifications). Without
+  either they are visible but silent.
 
 ## Files
 
@@ -300,7 +342,7 @@ infra/
   main.tf                ECR, log group, Lambda, live alias, function URL, permissions
   iam.tf                 execution role (logs, ECR, Bedrock, SSM/KMS)
   cloudfront.tf          distribution + managed policy ids
-  observability.tf       Errors/Throttles alarms
+  observability.tf       Errors/Throttles/CloudFront 5xx alarms + optional SNS topic
   warmer.tf              opt-in EventBridge rule + pinger Lambda
   warmer/pinger.py       tiny stdlib health pinger
   outputs.tf             URL, alias ARN, CloudFront domain, ECR URL, log group

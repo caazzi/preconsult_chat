@@ -80,8 +80,8 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   `:8080` before the uvicorn worker finishes importing the app, so a TCP probe marks the instance
   ready tens of seconds early and routes the first request into a half-booted worker.
   `/health/live` is dependency-free (no Redis) and only answers once the ASGI app is up; keep it in
-  both deploy profiles and in `scripts/deploy_backend.sh`. `preconsult.main` emits
-  `event=app.boot duration_ms=...` so the import cost stays attributable.
+  both deploy profiles and in `scripts/deploy_backend.sh`. `preconsult.main` emits a one-line JSON
+  `app.boot` event with `attributes.duration_ms` so the import cost stays attributable.
 - **Boot cost is budgeted.** `preconsult.main` must not import `reportlab`,
   `langchain_core`, `langchain_aws` or `botocore`; `tests/test_import_budget.py` runs the import in a
   subprocess and fails if any of them appears. Defer a heavy import to the call site that needs it and
@@ -137,8 +137,30 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   only accepts metadata (event name, request id, language, counts, timings) and truncates
   free-text-derived lengths — NEVER log chief complaint, conditions, medications, answers, or
   complaint detail values. Only non-content counters (e.g. `len(...)`) are allowed.
-- Every structured event is tagged with `revision` (`GIT_SHA`/`K_REVISION`) so logs are attributable
-  to a deployed build. Keep that tag; do not drop it.
+- Structured events are **OTel-shaped JSON, one object per line** on stdout (data model only; no
+  SDK, no OTLP exporter, no traces). The shape is `timestamp` (UTC RFC3339, milliseconds, `Z`),
+  `severity_text`/`severity_number` (DEBUG 5, INFO 9, WARNING 13, ERROR 17, CRITICAL 21), `body`,
+  `attributes`, `resource`. `body` and `attributes["event.name"]` both carry the event name.
+- **Event names are stable identifiers** (`llm.stream`, `http.request`, `static.asset_404`,
+  `app.boot`, `funnel.step`, `stream.*`, `session.*`, ...). Renaming one breaks Logs Insights
+  queries, greps and alarms; change it only together with every query that consumes it.
+- `attributes` is **metadata only**, with the same caller-supplied keys as before (`request_id`,
+  `lang`, `duration_ms`, `status`, `provider`, `model`, counts, stable enums). `None` is omitted;
+  strings collapse whitespace and truncate to 120 chars; arbitrary objects and exception reprs are
+  dropped. The old `revision` attribute moved to `resource.service.version`.
+- `resource` is constant per process: `service.name="preconsult"`, `service.version` is the deploy
+  revision (`GIT_SHA`/`K_REVISION`), `deployment.environment.name` comes from `ENV` (default
+  `production`), and `service.instance.id` is a random 8-hex id generated once at import. The
+  version tag makes logs attributable to a build; keep it. The instance id makes cold-start
+  frequency queryable (`count_distinct(service.instance.id)` per hour).
+- Our lines must stay **pure JSON** — no `"2026-11-02 12:43:45,123 - INFO - "` prefix.
+  `core/observability.py` installs a formatter that returns `{`-prefixed messages unchanged and
+  applies the familiar text format to library/server lines, so both stay readable. Do not encode a
+  structured event with `%`-style logging.
+- **EMF / custom CloudWatch metrics are deliberately not enabled.** They answer no question that a
+  Logs Insights query over these attributes does not, and add per-request work on a 1 GiB Lambda.
+  Revisit only when latency p95 becomes a decision input. Alarms use built-in metrics
+  (`AWS/Lambda Errors`/`Throttles`, `AWS/CloudFront 5xxErrorRate`).
 - Emergency detection must NOT rest solely on the LLM's output. `has_emergency_red_flag`
   (`core/parsing.py`, reusing the `is_emergency_trigger` token list) gates the stream endpoints on
   the patient-supplied chief complaint / detail BEFORE any model call; a hit short-circuits to a
@@ -153,8 +175,10 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   log line (method + path only, no query string) and counts outcomes as `http.status.<code>`. A 404
   under `/assets` is counted and logged as **`static.asset_404`** — the tell that a cached document
   references chunks the current build does not have. Both are exposed read-only via
-  `GET /health/metrics` (in-memory, per-worker, PHI-free, never Redis). Keep these PHI-safe: only
-  path/status/event-name keys, never user content.
+  `GET /health/metrics` (in-memory, per-process, PHI-free, never Redis). Keep these PHI-safe: only
+  path/status/event-name keys, never user content. The counters are **per-process**: on Lambda every
+  sandbox has its own copy, so the endpoint is a per-environment curiosity, not a fleet aggregate.
+  Locally and on a long-lived Cloud Run process it remains useful.
 - Every error response carries a stable machine-readable `code` (`auth_failed`, `bot_blocked`,
   `rate_limited`, `session_expired`, `validation_failed`, `redis_unavailable`,
   `redis_quota_exceeded`, `llm_unavailable`, `ai_upstream_error`, `service_unavailable`,

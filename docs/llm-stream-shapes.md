@@ -70,3 +70,19 @@ on `langchain-core 1.7.0`.
    accumulated text.
 4. Record new provider shapes as fixtures before writing the adapter. A fake
    that emits the complete-call shape cannot catch this class of bug.
+
+## Usage and stop metadata
+
+Providers report token usage and the stop reason on their **last** chunk
+(Vertex `usage_metadata` + `response_metadata.finish_reason`, Bedrock
+`usage_metadata` + `response_metadata.stop_reason`). `StreamAccumulator.usage`
+reduces that to neutral counts (`input_tokens`, `output_tokens`, and
+`cache_read` when present) and `StreamAccumulator.finish_reason` to a short
+enum. `deltas_from_chunks` attaches both to the **final** `LLMDelta`, combined
+with the tool-call delta when there is one and emitted as a metadata-only delta
+otherwise.
+
+That keeps telemetry provider-neutral: `api/endpoints.py::_question_stream`
+logs one `llm.stream` line per stream with counts/enums/durations only, and
+`StreamEvent.source` (`"tool"` vs `"text"`) says how the final list was
+obtained. Neither carries prompt or answer text.

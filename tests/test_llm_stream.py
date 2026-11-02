@@ -6,11 +6,16 @@ covers the assembly rules in isolation.
 
 from langchain_core.messages import AIMessageChunk
 
+import pytest
+
+from preconsult.core.llm import deltas_from_chunks
 from preconsult.core.llm_stream import (
     MAX_QUESTIONS,
     StreamAccumulator,
     clean_questions,
+    finish_reason_from,
     flatten_content,
+    normalize_usage,
     questions_from_text,
     questions_from_tool_calls,
 )
@@ -168,3 +173,92 @@ def test_questions_from_text_requires_a_list():
 def test_questions_from_text_never_relabels_emergency_prose():
     assert questions_from_text("[EMERGENCY ALERT] Call 911 immediately.") is None
     assert questions_from_text("1. Call 911?\n2. This is an emergency?") is None
+
+
+def test_accumulator_reads_usage_and_finish_reason_from_object_chunks():
+    accumulator = StreamAccumulator()
+    accumulator.feed(
+        AIMessageChunk(
+            content="hi",
+            usage_metadata={
+                "input_tokens": 12,
+                "output_tokens": 3,
+                "total_tokens": 15,
+                "input_token_details": {"cache_read": 7},
+            },
+        )
+    )
+    accumulator.feed(
+        AIMessageChunk(content="", response_metadata={"finish_reason": "stop"})
+    )
+
+    assert accumulator.usage == {
+        "input_tokens": 12,
+        "output_tokens": 3,
+        "cache_read": 7,
+    }
+    assert accumulator.finish_reason == "stop"
+
+
+def test_accumulator_reads_usage_and_finish_reason_from_dict_chunks():
+    accumulator = StreamAccumulator()
+    accumulator.feed(
+        {
+            "content": "hi",
+            "usage_metadata": {"input_tokens": 4, "output_tokens": 1},
+            "response_metadata": {"stop_reason": "end_turn"},
+        }
+    )
+
+    assert accumulator.usage == {"input_tokens": 4, "output_tokens": 1}
+    assert accumulator.finish_reason == "end_turn"
+
+
+def test_accumulator_without_metadata_reports_none():
+    accumulator = StreamAccumulator()
+    accumulator.feed(AIMessageChunk(content="plain"))
+
+    assert accumulator.usage is None
+    assert accumulator.finish_reason is None
+
+
+def test_normalize_usage_ignores_non_counts_and_non_dicts():
+    assert normalize_usage(None) is None
+    assert normalize_usage({"input_tokens": True, "output_tokens": "9"}) is None
+    assert normalize_usage(
+        {
+            "input_tokens": 5,
+            "output_tokens": 2,
+            "input_token_details": {"cache_read": "many"},
+        }
+    ) == {"input_tokens": 5, "output_tokens": 2}
+    assert finish_reason_from({"finish_reason": ""}) is None
+    assert finish_reason_from({"stop_reason": "end_turn"}) == "end_turn"
+    assert finish_reason_from(None) is None
+
+
+@pytest.mark.asyncio
+async def test_deltas_from_chunks_surfaces_metadata_without_a_tool_call():
+    chunks = [
+        AIMessageChunk(
+            content="1. A?\n2. B?",
+            usage_metadata={
+                "input_tokens": 9,
+                "output_tokens": 4,
+                "total_tokens": 13,
+                "input_token_details": {"cache_read": 2},
+            },
+            response_metadata={"finish_reason": "stop"},
+        )
+    ]
+
+    deltas = [delta async for delta in deltas_from_chunks(chunks)]
+
+    assert [delta.text for delta in deltas if delta.text] == ["1. A?\n2. B?"]
+    assert deltas[-1].tool_calls == ()
+    assert deltas[-1].usage == {
+        "input_tokens": 9,
+        "output_tokens": 4,
+        "cache_read": 2,
+    }
+    assert deltas[-1].finish_reason == "stop"

@@ -39,10 +39,16 @@ class LLMDelta:
 
     Either text (render it) or a set of *complete* tool calls (use it). A
     provider must never expose a partial tool call as an ``LLMDelta``.
+
+    ``usage`` and ``finish_reason`` are provider-reported metadata, carried on
+    the final delta of every stream (possibly combined with the tool-call
+    delta). They contain counts/enums only, never prompt or answer text.
     """
 
     text: str = ""
     tool_calls: tuple[dict, ...] = ()
+    usage: dict | None = None
+    finish_reason: str | None = None
 
 
 class LLMClient(Protocol):
@@ -83,6 +89,10 @@ async def deltas_from_chunks(chunks) -> AsyncIterator[LLMDelta]:
 
     Shared by every adapter and by the contract tests, so the fixtures exercise
     the same assembly code the deployed provider uses.
+
+    The last delta also carries the stream's ``usage``/``finish_reason`` (when
+    the provider reported them), even for a stream with no tool call, so
+    telemetry never has to know a provider's chunk shape.
     """
     accumulator = StreamAccumulator()
     async for chunk in _aiter(chunks):
@@ -90,8 +100,17 @@ async def deltas_from_chunks(chunks) -> AsyncIterator[LLMDelta]:
         if text:
             yield LLMDelta(text=text)
 
+    usage = accumulator.usage
+    finish_reason = accumulator.finish_reason
+
     if accumulator.tool_calls_complete and accumulator.tool_calls:
-        yield LLMDelta(tool_calls=tuple(accumulator.tool_calls))
+        yield LLMDelta(
+            tool_calls=tuple(accumulator.tool_calls),
+            usage=usage,
+            finish_reason=finish_reason,
+        )
+    elif usage is not None or finish_reason is not None:
+        yield LLMDelta(usage=usage, finish_reason=finish_reason)
 
 
 async def _with_timeouts(

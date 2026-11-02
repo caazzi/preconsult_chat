@@ -80,11 +80,24 @@ respond `content-type: text/event-stream`. Wire contract pins:
   directly instead of re-parsing numbered text with `split_questions`. The
   structured list is authoritative when present.
 - **Mid-stream errors are served as a normal SSE event — never an HTTP error.**
-  The endpoint resolves `200` even on failure; the final `data:` payload is a
-  localized, generic error string (e.g. `"Service temporarily unavailable..."`).
-  Server exceptions/internals must never leak into the body.
+  The endpoint resolves `200` even on failure. A failure emits, in order:
+  1. one structured event with a **stable code** (same vocabulary as the JSON
+     error handlers, so clients can offer a retry without parsing prose):
+     ```
+     data: {"type": "error", "code": "llm_unavailable"}
+     ```
+     `llm_unavailable` covers throttling/timeouts, `ai_upstream_error` every
+     other provider failure, and `internal_error` anything else.
+  2. the localized, generic error string
+     (`data: "Service temporarily unavailable..."`) kept for back-compat, so a
+     string-only consumer still sees a message.
+
+  Server exceptions/internals must never leak into the body. Unknown object
+  events are ignored by the client (forward compatibility).
 - Client stream consumer responsibilities:
   - Accumulate chunks into a local buffer.
+  - Surface a `type:"error"` event through the stream error callback (the SPA
+    `onError(code)`), in addition to the localized text that follows.
   - Re-parse the buffer on each chunk after `is_emergency_trigger` gate (a
     red-flag token aborts into the emergency dialog). The SPA port lives in
     `web/src/api/sse.ts` + `web/src/contracts/parsing.ts`.

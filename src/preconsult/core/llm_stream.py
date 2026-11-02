@@ -65,6 +65,55 @@ def _raw_args_by_index(tool_call_chunks: Any) -> dict[int, str]:
     return {index: "".join(parts) for index, parts in grouped.items()}
 
 
+def _metadata_of(chunk: Any, key: str) -> Any:
+    """Read ``key`` from an object chunk or a plain dict chunk."""
+    if isinstance(chunk, dict):
+        return chunk.get(key)
+    return getattr(chunk, key, None)
+
+
+def normalize_usage(metadata: Any) -> dict | None:
+    """Reduce provider ``usage_metadata`` to neutral token counts.
+
+    Providers name the cache hit differently (``input_token_details.cache_read``
+    on both current adapters); the returned dict keeps that name and adds
+    nothing derived from user content. Returns ``None`` when no counts exist, so
+    a stream without usage telemetry is distinguishable from a zero-token one.
+    """
+    if not isinstance(metadata, dict):
+        return None
+
+    usage: dict[str, int] = {}
+    for key in ("input_tokens", "output_tokens"):
+        value = metadata.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            usage[key] = value
+
+    details = metadata.get("input_token_details")
+    if isinstance(details, dict):
+        cached = details.get("cache_read")
+        if isinstance(cached, int) and not isinstance(cached, bool):
+            usage["cache_read"] = cached
+
+    return usage or None
+
+
+def finish_reason_from(metadata: Any) -> str | None:
+    """Best-effort stop reason from provider ``response_metadata``.
+
+    Vertex/Gemini reports ``finish_reason``; Bedrock/Claude reports
+    ``stop_reason``. Both are short enums (``stop``, ``end_turn``, ``length``),
+    never user content.
+    """
+    if not isinstance(metadata, dict):
+        return None
+    for key in ("finish_reason", "stop_reason"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
 class StreamAccumulator:
     """Accumulates a provider stream into its final text and tool calls.
 
@@ -77,6 +126,11 @@ class StreamAccumulator:
         self._text_parts: list[str] = []
         self._merged: Any = None
         self._dict_tool_calls: list = []
+        # Usage/stop metadata for dict-shaped chunks, where there is no merged
+        # message to read after the stream (object chunks are read from
+        # ``self._merged``; AIMessageChunk sums usage_metadata on ``+``).
+        self._dict_usage: dict | None = None
+        self._dict_finish_reason: str | None = None
 
     def feed(self, chunk: Any) -> str:
         """Add one chunk and return the text it contributed (possibly empty)."""
@@ -96,8 +150,30 @@ class StreamAccumulator:
             self._merged = (
                 chunk if self._merged is None else _merge(self._merged, chunk)
             )
+        else:
+            # Dict chunks are never merged, so keep the last metadata seen.
+            usage = normalize_usage(chunk.get("usage_metadata"))
+            if usage is not None:
+                self._dict_usage = usage
+            reason = finish_reason_from(chunk.get("response_metadata"))
+            if reason is not None:
+                self._dict_finish_reason = reason
 
         return text
+
+    @property
+    def usage(self) -> dict | None:
+        """Provider-reported token counts, or ``None`` when the stream had none."""
+        merged_usage = normalize_usage(_metadata_of(self._merged, "usage_metadata"))
+        return merged_usage if merged_usage is not None else self._dict_usage
+
+    @property
+    def finish_reason(self) -> str | None:
+        """Provider-reported stop reason, best effort."""
+        merged_reason = finish_reason_from(
+            _metadata_of(self._merged, "response_metadata")
+        )
+        return merged_reason if merged_reason is not None else self._dict_finish_reason
 
     @property
     def text(self) -> str:

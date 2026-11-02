@@ -23,7 +23,7 @@ from typing import Awaitable, Callable
 
 from starlette.responses import JSONResponse
 
-from preconsult.core.config import REPOSITORY_REVISION
+from preconsult.core.config import LLM_MODEL, LLM_PROVIDER, REPOSITORY_REVISION
 from preconsult.core.observability import log_event, new_request_id, snapshot_counters
 
 # Throttle health probes so frequently-hit health endpoints (CI, scanners, and
@@ -138,6 +138,11 @@ def register_health_routes(app, event_channel_probe: EventChannelProbe | None = 
             "status": "healthy",
             "redis": redis_status,
             "event_channel": channel,
+            # Which model is configured to answer. Read from constant config on
+            # purpose: calling get_llm() here would construct a vendor client
+            # (opening credentials/SDK state) on every probe. Provider/model
+            # ids are configuration, not secrets.
+            "llm": {"provider": LLM_PROVIDER, "model": LLM_MODEL},
         }
         # Provide a stable machine-readable code when storage is unhealthy so
         # alerts/CI can key on quota exhaustion as distinct from a general outage.

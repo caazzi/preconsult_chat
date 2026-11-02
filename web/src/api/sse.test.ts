@@ -29,6 +29,23 @@ describe("parseEventPayload", () => {
   it("returns null for an unrelated object", () => {
     expect(parseEventPayload('{"foo":"bar"}')).toBeNull();
   });
+
+  it("parses a structured error event", () => {
+    expect(
+      parseEventPayload('{"type":"error","code":"llm_unavailable"}'),
+    ).toEqual({ kind: "error", code: "llm_unavailable" });
+  });
+
+  it("defaults an error event without a usable code", () => {
+    expect(parseEventPayload('{"type":"error"}')).toEqual({
+      kind: "error",
+      code: "internal_error",
+    });
+    expect(parseEventPayload('{"type":"error","code":42}')).toEqual({
+      kind: "error",
+      code: "internal_error",
+    });
+  });
 });
 
 function sseResponse(events: string[]): Response {
@@ -45,6 +62,7 @@ function collect() {
     questions: null as string[] | null,
     emergency: false,
     error: false,
+    errorCode: null as string | null,
   };
   return {
     state,
@@ -52,7 +70,10 @@ function collect() {
       onText: (b: string) => state.text.push(b),
       onDone: (q: string[]) => (state.questions = q),
       onEmergency: () => (state.emergency = true),
-      onError: () => (state.error = true),
+      onError: (code: string) => {
+        state.error = true;
+        state.errorCode = code;
+      },
     },
   };
 }
@@ -92,5 +113,33 @@ describe("streamInterviewQuestions", () => {
     await streamInterviewQuestions("sess", cbs);
     expect(state.emergency).toBe(true);
     expect(state.questions).toBeNull();
+  });
+
+  it("surfaces a structured error event and its stable code", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      sseResponse([
+        '{"type":"error","code":"llm_unavailable"}',
+        JSON.stringify(" Service temporarily unavailable. Please try again."),
+      ]),
+    );
+    const { state, cbs } = collect();
+    await streamInterviewQuestions("sess", cbs);
+    expect(state.error).toBe(true);
+    expect(state.errorCode).toBe("llm_unavailable");
+    // The localized text event is still delivered (back-compat with the plain
+    // string consumer); the structured code is what adds the retry signal.
+    expect(state.text[state.text.length - 1]).toContain(
+      "Service temporarily unavailable",
+    );
+  });
+
+  it("does not treat an unknown object event as an error", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      sseResponse(['{"type":"future","foo":1}', JSON.stringify("1. Alpha?\n2. Beta?")]),
+    );
+    const { state, cbs } = collect();
+    await streamInterviewQuestions("sess", cbs);
+    expect(state.error).toBe(false);
+    expect(state.questions).toEqual(["Alpha?", "Beta?"]);
   });
 });

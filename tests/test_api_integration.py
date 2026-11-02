@@ -364,6 +364,11 @@ async def test_health_endpoint():
     # /health reports the interactive-channel status. The Reflex-free app has no
     # socket, so it answers "not_configured" rather than pretending.
     assert body["event_channel"] in ("ok", "unavailable", "not_configured")
+    # The configured model identity is advertised for ops/telemetry correlation.
+    # It must come from the constant config, not from constructing a client.
+    from preconsult.core.config import LLM_MODEL, LLM_PROVIDER
+
+    assert body["llm"] == {"provider": LLM_PROVIDER, "model": LLM_MODEL}
 
 
 @pytest.mark.asyncio

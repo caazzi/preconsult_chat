@@ -6,23 +6,23 @@ need no credentials, which is the point: the shape bug is reproducible in CI.
 
 The Bedrock tool-call case is the regression this file exists for.
 ``ChatBedrockConverse`` streams tool arguments as fragmented
-``tool_call_chunks``. A fragment on its own parses into a *truncated* argument
-object, so a consumer that reads complete ``tool_calls`` per chunk emits a
+``tool_call_chunks``. Each fragment on its own parses into a *valid but
+truncated* argument object, so reading complete ``tool_calls`` per chunk emits a
 mangled question and never revisits the merged result.
 """
 
 import json
 from pathlib import Path
 
-import pytest
 from langchain_core.messages import AIMessageChunk
 
+from preconsult.core.llm_stream import flatten_content
 from preconsult.services.agent_service import stream_interview_questions
 
 FIXTURES = Path(__file__).parent / "fixtures" / "llm"
 
 
-def _chunks(fixture_name: str) -> list[AIMessageChunk]:
+def _load(fixture_name: str) -> list[AIMessageChunk]:
     payload = json.loads((FIXTURES / fixture_name).read_text(encoding="utf-8"))
     return [AIMessageChunk(**chunk) for chunk in payload["chunks"]]
 
@@ -38,11 +38,9 @@ class _StreamingStub:
             yield chunk
 
 
-async def _collect(fixture_name: str):
+async def _collect(chunks: list[AIMessageChunk]):
     events = []
-    async for event in stream_interview_questions(
-        {}, "en", _StreamingStub(_chunks(fixture_name))
-    ):
+    async for event in stream_interview_questions({}, "en", _StreamingStub(chunks)):
         events.append(event)
     return events
 
@@ -57,37 +55,62 @@ def _questions(events) -> list[list[str]]:
 
 async def test_vertex_string_content_is_streamed():
     """Characterization: the shape the consumer was written against."""
-    events = await _collect("vertex_text_stream.json")
+    events = await _collect(_load("vertex_text_stream.json"))
 
     assert _text(events) == "1. When did the pain start?\n2. Does it spread anywhere?"
-    assert _questions(events) == []
+    assert _questions(events) == [
+        ["When did the pain start?", "Does it spread anywhere?"]
+    ]
 
 
 async def test_bedrock_content_blocks_are_streamed():
     """Bedrock sends text as content blocks; both providers must render the same."""
-    events = await _collect("bedrock_converse_text_stream.json")
+    events = await _collect(_load("bedrock_converse_text_stream.json"))
 
     assert _text(events) == "1. When did the pain start?\n2. Does it spread anywhere?"
-    assert _questions(events) == []
+    assert _questions(events) == [
+        ["When did the pain start?", "Does it spread anywhere?"]
+    ]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="partial tool_call_chunks are read per-chunk, so the question list is truncated (Wave 1)",
-)
 async def test_bedrock_partial_tool_chunks_emit_the_full_question_list():
     """The merged tool call is the contract, not any single fragment."""
-    events = await _collect("bedrock_partial_tool_chunks.json")
+    events = await _collect(_load("bedrock_partial_tool_chunks.json"))
 
     assert _questions(events) == [
         ["When did the pain start?", "Does it spread anywhere?"]
     ]
 
 
+async def test_a_lone_truncated_fragment_is_not_emitted_as_questions():
+    """An unfinished tool call must not become a short, wrong question list."""
+    first_fragment = _load("bedrock_partial_tool_chunks.json")[0]
+
+    events = await _collect([first_fragment])
+
+    assert _questions(events) == []
+
+
+async def test_numbered_prose_without_a_tool_call_is_salvaged():
+    """The server-side fallback, so a prose-only provider still yields a list."""
+    events = await _collect(
+        [AIMessageChunk(content="1. When did it start?\n2. Does it spread anywhere?")]
+    )
+
+    assert _questions(events) == [["When did it start?", "Does it spread anywhere?"]]
+
+
+async def test_emergency_prose_is_never_relabelled_as_questions():
+    events = await _collect(
+        [AIMessageChunk(content="[EMERGENCY ALERT] Please call 911 immediately.")]
+    )
+
+    assert _text(events).startswith("[EMERGENCY ALERT]")
+    assert _questions(events) == []
+
+
 def test_non_text_content_blocks_are_ignored():
     """Reasoning/thinking blocks must never reach the renderer or the parser."""
-    from preconsult.services.agent_service import _to_dict
-
     message = AIMessageChunk(
         content=[
             {"type": "thinking", "thinking": "internal reasoning"},
@@ -95,7 +118,7 @@ def test_non_text_content_blocks_are_ignored():
         ]
     )
 
-    assert _to_dict(message)["content"] == "visible text"
+    assert flatten_content(message.content) == "visible text"
 
 
 async def test_bedrock_fake_emits_fragmented_tool_chunks():

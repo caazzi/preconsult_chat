@@ -11,6 +11,10 @@ typed ``string[]`` rather than numbered prose the client has to regex-split.
 live ``text`` deltas (kept for back-compat / progressive rendering) followed by
 a terminal ``questions`` event with the structured list. Consumers that only
 understand text can ignore the terminal event.
+
+When no tool call arrives (or its arguments are malformed) the service falls
+back to parsing the accumulated numbered text, so a provider that only manages
+prose still produces a usable list.
 """
 import logging
 from dataclasses import dataclass
@@ -19,6 +23,11 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
 from preconsult.core.llm import get_llm
+from preconsult.core.llm_stream import (
+    StreamAccumulator,
+    questions_from_text,
+    questions_from_tool_calls,
+)
 
 
 # Structured-output tool the model must call to return the final questions.
@@ -135,58 +144,6 @@ def get_interview_chain() -> Runnable:
     return _interview_chain
 
 
-def _text_of(content) -> str:
-    """Flatten message content to text.
-
-    langchain-core 1.x types content as ``str | list[str | dict]``: Gemini can
-    return a list of content blocks, and a consumer that only accepts ``str``
-    would silently drop every delta. Non-text blocks (images, reasoning) are
-    ignored because only text is rendered and regex-parsed here.
-    """
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for block in content:
-            if isinstance(block, str):
-                parts.append(block)
-            elif isinstance(block, dict):
-                text = block.get("text")
-                if isinstance(text, str):
-                    parts.append(text)
-        return "".join(parts)
-    return ""
-
-
-def _to_dict(msg) -> dict:
-    """Normalize a message into a plain dict for the streaming consumer.
-
-    Kept dependency-free so tests can feed either a real BaseMessage or a fake
-    exposing ``content`` / ``tool_calls``.
-    """
-    if isinstance(msg, dict):
-        content = msg.get("content", "")
-        tool_calls = msg.get("tool_calls") or []
-    else:
-        content = getattr(msg, "content", "")
-        tool_calls = getattr(msg, "tool_calls", None) or []
-    return {"content": _text_of(content), "tool_calls": tool_calls}
-
-
-def _extract_questions(tool_call) -> list[str] | None:
-    """Pull a ``questions`` list out of a ``report_questions`` tool call."""
-    if not isinstance(tool_call, dict):
-        return None
-    if tool_call.get("name") != REPORT_QUESTIONS_TOOL["name"]:
-        return None
-    args = tool_call.get("args") or {}
-    questions = args.get("questions")
-    if isinstance(questions, list):
-        cleaned = [q.strip() for q in questions if isinstance(q, str) and q.strip()]
-        return cleaned or None
-    return None
-
-
 async def stream_interview_questions(
     session_data: dict,
     lang: str,
@@ -220,16 +177,21 @@ async def stream_interview_questions(
         "language_instruction": lang_instructions["initial_q_instruction"],
     }
 
-    final_questions: list[str] | None = None
+    accumulator = StreamAccumulator()
     async for msg in chain.astream(input_dict):
-        data = _to_dict(msg)
-        content = data.get("content")
-        if isinstance(content, str) and content:
-            yield StreamEvent(kind="text", value=content)
-        for tool_call in data.get("tool_calls", []) or []:
-            questions = _extract_questions(tool_call)
-            if questions:
-                final_questions = questions
+        # Per-chunk text keeps progressive rendering working; the terminal
+        # question list is read from the accumulator, never from one chunk.
+        delta = accumulator.feed(msg)
+        if delta:
+            yield StreamEvent(kind="text", value=delta)
+
+    final_questions = None
+    if accumulator.tool_calls_complete:
+        final_questions = questions_from_tool_calls(
+            accumulator.tool_calls, REPORT_QUESTIONS_TOOL["name"]
+        )
+    if final_questions is None:
+        final_questions = questions_from_text(accumulator.text)
 
     if final_questions is not None:
         yield StreamEvent(kind="questions", value=final_questions)

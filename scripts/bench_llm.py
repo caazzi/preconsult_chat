@@ -81,10 +81,15 @@ DEFAULT_MAX_CONCURRENCY = 2
 DEFAULT_REPEAT = 3
 DEFAULT_LANGS = "en,pt"
 
-# Token counts are estimated at ~4 characters/token because the LLMDelta seam
-# deliberately drops provider usage metadata (nothing above the seam needs it).
-# The number is a budgeting/regression signal, not a billed token count.
+# Fallback only: used when a provider reports no usage metadata. Provider
+# counts are preferred whenever the adapter surfaces them.
 CHARS_PER_TOKEN = 4
+# Deterministic usage the offline fake provider reports on its final chunk, so
+# the CI path exercises the exact-count branch instead of the fallback.
+FAKE_USAGE = {
+    "input_tokens": 128,
+    "output_tokens": 32,
+}
 # Generous upper bound for the formatted system + human prompt when reserving
 # budget. The actual benchmark prompt is far smaller (the system prompt is a few
 # thousand characters); this keeps the hard cap conservative without a
@@ -181,9 +186,13 @@ class CallResult:
     error_kind: str | None
     ttft_ms: float | None
     duration_ms: float
-    prompt_tokens_est: int
-    output_tokens_est: int
-    cost_usd_est: float
+    prompt_tokens: int
+    output_tokens: int
+    # "exact" (provider-reported usage), "estimated" (character fallback) or
+    # "none" (the call never produced a measurable stream).
+    tokens_source: str
+    cache_read_tokens: int | None
+    cost_usd: float
     question_count: int
     questions: tuple[str, ...] | None
     score: QualityScore | None
@@ -199,9 +208,16 @@ class CallResult:
             "error_kind": self.error_kind,
             "ttft_ms": self.ttft_ms,
             "duration_ms": self.duration_ms,
-            "prompt_tokens_est": self.prompt_tokens_est,
-            "output_tokens_est": self.output_tokens_est,
-            "cost_usd_est": self.cost_usd_est,
+            "prompt_tokens": self.prompt_tokens,
+            "output_tokens": self.output_tokens,
+            "tokens_source": self.tokens_source,
+            "cache_read_tokens": self.cache_read_tokens,
+            "cost_usd": self.cost_usd,
+            # v1 aliases. The numbers are exact when ``tokens_source`` is
+            # "exact"; the ``_est`` suffix is a historical key name, not a claim.
+            "prompt_tokens_est": self.prompt_tokens,
+            "output_tokens_est": self.output_tokens,
+            "cost_usd_est": self.cost_usd,
             "question_count": self.question_count,
         }
         if include_questions and self.questions is not None:
@@ -226,14 +242,21 @@ class AggregateRow:
     ttft_p95_ms: float | None = None
     duration_p50_ms: float | None = None
     duration_p95_ms: float | None = None
-    prompt_tokens_est: int = 0
-    output_tokens_est: int = 0
-    cost_usd_est: float = 0.0
+    prompt_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    tokens_exact_calls: int = 0
+    tokens_estimated_calls: int = 0
+    cost_usd: float = 0.0
     quality: dict[str, float] = field(default_factory=dict)
 
     @property
     def error_rate(self) -> float:
         return self.failed / self.calls if self.calls else 0.0
+
+    @property
+    def tokens_source(self) -> str:
+        return _tokens_source(self.tokens_exact_calls, self.tokens_estimated_calls)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -249,19 +272,26 @@ class AggregateRow:
             "ttft_p95_ms": self.ttft_p95_ms,
             "duration_p50_ms": self.duration_p50_ms,
             "duration_p95_ms": self.duration_p95_ms,
-            "prompt_tokens_est": self.prompt_tokens_est,
-            "output_tokens_est": self.output_tokens_est,
-            "cost_usd_est": self.cost_usd_est,
+            "prompt_tokens": self.prompt_tokens,
+            "output_tokens": self.output_tokens,
+            "cache_read_tokens": self.cache_read_tokens,
+            "tokens_source": self.tokens_source,
+            "cost_usd": self.cost_usd,
+            # v1 aliases, same caveat as ``CallResult.to_dict``.
+            "prompt_tokens_est": self.prompt_tokens,
+            "output_tokens_est": self.output_tokens,
+            "cost_usd_est": self.cost_usd,
             "quality": self.quality,
         }
 
 
 class BudgetTracker:
-    """Reserve worst-case cost per call, settle with the estimate after it runs.
+    """Reserve worst-case cost per call, settle with the reported cost after it runs.
 
     A call is only started when ``actual_spent + reserved + worst_case`` fits
-    the cap, so the *estimated* spend can never cross the cap. Token counts are
-    estimates, which is why this is a budgeting guard rather than an invoice.
+    the cap, so the spend can never cross the cap. Token counts are provider
+    counts when available and estimates otherwise, which is why this is a
+    budgeting guard rather than an invoice.
     """
 
     def __init__(self, max_calls: int, max_cost_usd: float) -> None:
@@ -369,9 +399,6 @@ class FakeLLM:
         )
         chunks: list[Any] = [message_cls(content=numbered)]
 
-        if self.model == "fake-text-only":
-            return chunks
-
         if self.model == "fake-fragmented":
             arguments = json.dumps({"questions": self._questions})
             cut = len(arguments) // 2
@@ -401,20 +428,25 @@ class FakeLLM:
                     ),
                 ]
             )
-            return chunks
-
-        chunks.append(
-            message_cls(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "report_questions",
-                        "args": {"questions": self._questions},
-                        "id": "call_1",
-                    }
-                ],
+        elif self.model != "fake-text-only":
+            chunks.append(
+                message_cls(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "report_questions",
+                            "args": {"questions": self._questions},
+                            "id": "call_1",
+                        }
+                    ],
+                )
             )
-        )
+
+        # A real adapter reports usage on its final delta; the fake does the same
+        # so the offline path exercises provider counts, not the fallback.
+        usage = dict(FAKE_USAGE)
+        usage["total_tokens"] = usage["input_tokens"] + usage["output_tokens"]
+        chunks.append(message_cls(content="", usage_metadata=usage))
         return chunks
 
 
@@ -722,6 +754,39 @@ def _estimate_tokens(characters: int) -> int:
     return math.ceil(characters / CHARS_PER_TOKEN) if characters > 0 else 0
 
 
+def _tokens_source(exact_calls: int, estimated_calls: int) -> str:
+    if exact_calls and estimated_calls:
+        return "mixed"
+    if estimated_calls:
+        return "estimated"
+    if exact_calls:
+        return "exact"
+    return "none"
+
+
+def _reported_counts(usage: dict | None) -> tuple[int, int, int | None] | None:
+    """Provider-reported ``(input, output, cache_read)``, or ``None``.
+
+    Both input and output counts are required: a partial usage dict cannot price
+    the call, so it falls back to the character estimate as a whole rather than
+    mixing one measured and one estimated side.
+    """
+    if not isinstance(usage, dict):
+        return None
+
+    input_tokens = usage.get("input_tokens")
+    output_tokens = usage.get("output_tokens")
+    if not isinstance(input_tokens, int) or isinstance(input_tokens, bool):
+        return None
+    if not isinstance(output_tokens, int) or isinstance(output_tokens, bool):
+        return None
+
+    cache_read = usage.get("cache_read")
+    if not isinstance(cache_read, int) or isinstance(cache_read, bool):
+        cache_read = None
+    return input_tokens, output_tokens, cache_read
+
+
 def _percentile(values: Sequence[float], percentile: float) -> float | None:
     """Nearest-rank percentile (small samples; no statistics dependency)."""
     if not values:
@@ -763,9 +828,11 @@ def _failure_result(
         error_kind=error_kind,
         ttft_ms=None,
         duration_ms=duration_ms,
-        prompt_tokens_est=0,
-        output_tokens_est=0,
-        cost_usd_est=0.0,
+        prompt_tokens=0,
+        output_tokens=0,
+        tokens_source="none",
+        cache_read_tokens=None,
+        cost_usd=0.0,
         question_count=0,
         questions=None,
         score=None,
@@ -779,6 +846,7 @@ async def _run_one(
     include_questions: bool,
 ) -> CallResult:
     from preconsult.core.errors import LLMUpstreamError
+    from preconsult.core.llm import StreamMeta, observe_stream
     from preconsult.services.agent_service import stream_interview_questions
 
     if spec.provider == "fake":
@@ -787,12 +855,13 @@ async def _run_one(
         inner = client
 
     recording = _RecordingClient(inner)
+    meta = StreamMeta()
     started = time.perf_counter()
     questions: list[str] = []
     error_kind: str | None = None
 
     try:
-        chain = _build_chain(recording)
+        chain = observe_stream(_build_chain(recording), meta)
         async for event in stream_interview_questions(
             spec.fixture.session, spec.fixture.lang, chain
         ):
@@ -804,8 +873,17 @@ async def _run_one(
         error_kind = type(exc).__name__
 
     duration_ms = (time.perf_counter() - started) * 1000
-    prompt_tokens = _estimate_tokens(recording.prompt_chars)
-    output_tokens = _estimate_tokens(recording.output_chars)
+    reported = _reported_counts(meta.usage)
+    if reported is None:
+        # The provider reported no usage (or only half of it): label the numbers
+        # as estimates so they are never read as measurements.
+        prompt_tokens = _estimate_tokens(recording.prompt_chars)
+        output_tokens = _estimate_tokens(recording.output_chars)
+        cache_read_tokens = None
+        tokens_source = "estimated"
+    else:
+        prompt_tokens, output_tokens, cache_read_tokens = reported
+        tokens_source = "exact"
     cost = estimate_cost_usd(spec.model, prompt_tokens, output_tokens)
     score = None
     if error_kind is None:
@@ -827,9 +905,11 @@ async def _run_one(
             else None
         ),
         duration_ms=duration_ms,
-        prompt_tokens_est=prompt_tokens,
-        output_tokens_est=output_tokens,
-        cost_usd_est=cost,
+        prompt_tokens=prompt_tokens,
+        output_tokens=output_tokens,
+        tokens_source=tokens_source,
+        cache_read_tokens=cache_read_tokens,
+        cost_usd=cost,
         question_count=len(questions),
         questions=tuple(questions) if include_questions else None,
         score=score,
@@ -866,9 +946,18 @@ def _aggregate(results: Sequence[CallResult]) -> list[AggregateRow]:
                 ttft_p95_ms=_percentile(ttfts, 95),
                 duration_p50_ms=_percentile(durations, 50),
                 duration_p95_ms=_percentile(durations, 95),
-                prompt_tokens_est=sum(result.prompt_tokens_est for result in group),
-                output_tokens_est=sum(result.output_tokens_est for result in group),
-                cost_usd_est=sum(result.cost_usd_est for result in group),
+                prompt_tokens=sum(result.prompt_tokens for result in group),
+                output_tokens=sum(result.output_tokens for result in group),
+                cache_read_tokens=sum(
+                    result.cache_read_tokens or 0 for result in group
+                ),
+                tokens_exact_calls=sum(
+                    1 for result in group if result.tokens_source == "exact"
+                ),
+                tokens_estimated_calls=sum(
+                    1 for result in group if result.tokens_source == "estimated"
+                ),
+                cost_usd=sum(result.cost_usd for result in group),
                 quality=quality,
             )
         )
@@ -881,6 +970,13 @@ def _totals(
     planned: int,
     tracker: BudgetTracker,
 ) -> dict[str, Any]:
+    prompt_tokens = sum(row.prompt_tokens for row in aggregates)
+    output_tokens = sum(row.output_tokens for row in aggregates)
+    cost_usd = sum(row.cost_usd for row in aggregates)
+    tokens_source = _tokens_source(
+        sum(row.tokens_exact_calls for row in aggregates),
+        sum(row.tokens_estimated_calls for row in aggregates),
+    )
     return {
         "calls_planned": planned,
         "calls_attempted": len(results),
@@ -891,9 +987,15 @@ def _totals(
         "error_rate": (
             sum(row.failed for row in aggregates) / len(results) if results else 0.0
         ),
-        "prompt_tokens_est": sum(row.prompt_tokens_est for row in aggregates),
-        "output_tokens_est": sum(row.output_tokens_est for row in aggregates),
-        "cost_usd_est": sum(row.cost_usd_est for row in aggregates),
+        "prompt_tokens": prompt_tokens,
+        "output_tokens": output_tokens,
+        "cache_read_tokens": sum(row.cache_read_tokens for row in aggregates),
+        "tokens_source": tokens_source,
+        "cost_usd": cost_usd,
+        # v1 aliases, same caveat as ``CallResult.to_dict``.
+        "prompt_tokens_est": prompt_tokens,
+        "output_tokens_est": output_tokens,
+        "cost_usd_est": cost_usd,
     }
 
 
@@ -942,8 +1044,8 @@ def _render_report(
         f"({', '.join(f'{lang}={count}' for lang, count in document['fixtures']['by_lang'].items())})",
         f"- Calls: planned {totals['calls_planned']}, "
         f"attempted {totals['calls_attempted']}, ok {totals['ok']}",
-        f"- Estimated cost: {format_usd(totals['cost_usd_est'])} "
-        f"(pricing as of {PRICING_AS_OF})",
+        f"- Cost: {format_usd(totals['cost_usd'])} "
+        f"(pricing as of {PRICING_AS_OF}; tokens: **{totals['tokens_source']}**)",
         f"- Caps: ${document['caps']['max_cost_usd']:.2f} / "
         f"{document['caps']['max_calls']} calls",
         "",
@@ -982,8 +1084,8 @@ def _render_report(
             "",
             "| Provider | Model | Lang | Calls | OK | Throttled | Failed | "
             "Error rate | TTFT p50 (ms) | TTFT p95 (ms) | Duration p50 (ms) | "
-            "Prompt tok (est) | Output tok (est) | Cost (est) |",
-            "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "Prompt tok | Output tok | Tokens | Cost |",
+            "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for row in aggregates:
@@ -1002,9 +1104,10 @@ def _render_report(
                     _format_ms(row.ttft_p50_ms),
                     _format_ms(row.ttft_p95_ms),
                     _format_ms(row.duration_p50_ms),
-                    str(row.prompt_tokens_est),
-                    str(row.output_tokens_est),
-                    format_usd(row.cost_usd_est),
+                    str(row.prompt_tokens),
+                    str(row.output_tokens),
+                    row.tokens_source,
+                    format_usd(row.cost_usd),
                 ]
             )
             + " |"
@@ -1075,8 +1178,15 @@ def _render_report(
             "",
             "## Notes",
             "",
-            "- Token counts are estimated at ~4 characters/token: the LLMDelta "
-            "seam does not expose provider usage metadata.",
+            "- `Tokens` says where the counts came from: `exact` is usage "
+            "reported by the provider, `estimated` is the ~4 characters/token "
+            "fallback used when it reported none, and `mixed` means both in one "
+            "row (`none` = no measurable stream).",
+            "- `run.json` keeps `prompt_tokens_est` / `output_tokens_est` / "
+            "`cost_usd_est` as v1 aliases; read `tokens_source` to know whether "
+            "those numbers are measurements or estimates.",
+            "- Cache-read tokens are recorded per call in `run.json`; the price "
+            "table has no cache tier, so cost uses uncached list prices.",
             "- Costs use the explicit price table in `scripts/bench_pricing.py` "
             f"(as of {PRICING_AS_OF}); unknown models fail instead of guessing.",
             "- Throttled errors are counted separately from real failures: a "
@@ -1139,7 +1249,7 @@ async def _execute(
             except Exception as exc:  # defensive: reserve must always settle
                 result = _failure_result(spec, type(exc).__name__)
             finally:
-                await tracker.settle(worst_case, result.cost_usd_est)
+                await tracker.settle(worst_case, result.cost_usd)
             return result
 
     results = await asyncio.gather(*(guarded(spec) for spec in specs))
@@ -1244,7 +1354,7 @@ def _run(args: argparse.Namespace) -> int:
     totals = _totals(aggregates, results, planned, tracker)
 
     document: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": _utc_now(),
         "mode": mode,
         "revision": os.environ.get("GIT_SHA") or os.environ.get("K_REVISION") or "dev",
@@ -1309,7 +1419,8 @@ def _run(args: argparse.Namespace) -> int:
 
     print(
         f"mode={mode} planned={planned} attempted={len(results)} "
-        f"ok={totals['ok']} cost_est={format_usd(totals['cost_usd_est'])}"
+        f"ok={totals['ok']} cost={format_usd(totals['cost_usd'])} "
+        f"tokens={totals['tokens_source']}"
     )
     print(f"throttled_errors={totals['throttled']} (reported separately)")
     print(f"real_failures={totals['failed']} error_rate={totals['error_rate']:.0%}")

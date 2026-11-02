@@ -4,8 +4,9 @@ The table is deliberately explicit: a model id that is not listed raises
 :class:`UnknownModelError` instead of falling back to a guessed price. Prices
 are public list prices in USD per **one million** tokens, recorded on
 ``PRICING_AS_OF``. They are budgeting inputs, not an invoice: providers change
-prices, regions differ, and the harness counts estimated (not tokenizer-exact)
-tokens.
+prices, regions differ, and the harness prices provider-reported counts when
+the stream exposes them, falling back to character estimates otherwise; treat
+the result as a budgeting input, not an invoice.
 
 Add a model by adding one :class:`ModelPrice` entry and a test for it. Live
 runs refuse to start when any requested model is missing, so a silent guess can

@@ -8,7 +8,12 @@ from langchain_core.messages import AIMessageChunk
 
 import pytest
 
-from preconsult.core.llm import deltas_from_chunks
+from preconsult.core.llm import (
+    LLMDelta,
+    StreamMeta,
+    deltas_from_chunks,
+    observe_stream,
+)
 from preconsult.core.llm_stream import (
     MAX_QUESTIONS,
     StreamAccumulator,
@@ -262,3 +267,36 @@ async def test_deltas_from_chunks_surfaces_metadata_without_a_tool_call():
         "cache_read": 2,
     }
     assert deltas[-1].finish_reason == "stop"
+
+
+class _StubDeltaStream:
+    """Anything with ``astream(input_dict)`` is enough for the observer."""
+
+    def __init__(self, deltas: list[LLMDelta]) -> None:
+        self._deltas = deltas
+        self.inputs: list[dict] = []
+
+    async def astream(self, input_dict: dict):
+        self.inputs.append(input_dict)
+        for delta in self._deltas:
+            yield delta
+
+
+@pytest.mark.asyncio
+async def test_observe_stream_passes_deltas_through_and_keeps_the_last_metadata():
+    deltas = [
+        LLMDelta(text="a", usage={"input_tokens": 1}, finish_reason="stop"),
+        LLMDelta(text="b", usage={"input_tokens": 3, "output_tokens": 2}),
+        LLMDelta(text="c", finish_reason="length"),
+    ]
+    meta = StreamMeta()
+    stub = _StubDeltaStream(deltas)
+
+    received = [delta async for delta in observe_stream(stub, meta).astream({"x": 1})]
+
+    assert received == deltas
+    assert stub.inputs == [{"x": 1}]
+    # The last reported value of each field wins, even when they arrive on
+    # different deltas (the endpoint logs both after the stream ends).
+    assert meta.usage == {"input_tokens": 3, "output_tokens": 2}
+    assert meta.finish_reason == "length"

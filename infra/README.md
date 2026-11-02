@@ -28,12 +28,13 @@ gunicorn `CMD` and proxies function-URL requests to it on `:8080`.
 | ECR | ~$0.10/GB-month | Lifecycle keeps the last 10 images. |
 | CloudWatch Logs | Retention-bound | 30 days by default; ingestion charged. |
 | Alarms | $0 (first 10) | Two alarms; optional SNS actions. |
-| Warmer | ~$0.05/month | One 128 MB ping every 5 minutes, if enabled. |
+| Warmer | ~$0.05/month | Opt-in (`enable_warmer`, default `false`): one 128 MB ping every 5 minutes. |
 | ALB / NAT / Fargate | **not provisioned** | Those were the fixed-cost drivers. |
 
 CloudFront has no fixed fee, so it is optional in cost terms but included here
-for TLS, a custom domain and edge caching of hashed assets. The function URL is
-also directly usable; see the streaming caveat first.
+for TLS and an optional custom domain. The default behavior is deliberately
+uncached (`CachingDisabled`), so it does not reduce Lambda invocations for the
+SPA assets.
 
 ## What lives outside Terraform
 
@@ -86,6 +87,11 @@ terraform apply -target=aws_ecr_repository.app -target=aws_ecr_lifecycle_policy.
 terraform apply -var-file=prod.tfvars -var="image_tag=<git-sha>"
 ```
 
+The full apply publishes version 1 and points the `live` alias at it; the
+function URL is qualified by that alias from the start. Later deploys publish
+new versions and move the alias (see below). The image tag must exist before
+this step because Lambda validates the image when creating the function.
+
 For local syntax checks no backend or credentials are needed:
 
 ```bash
@@ -123,25 +129,47 @@ The Dockerfile also copies the AWS Lambda Web Adapter (`0.9.1`) into
 image is unaffected. The `CMD` is untouched; the adapter launches it and waits
 for `GET /health/live` before forwarding traffic (`AWS_LWA_READINESS_CHECK_PATH`).
 
-## Deploying a new image
+## Deploying, aliases and rollback
 
 The ECR repository is immutable, so every deploy uses a new tag (normally the
-git SHA). Two supported paths:
-
-- **Terraform-driven:** change `image_tag` and `terraform apply` (human).
-- **CI-driven:** push the image, then update the function and let the function
-  URL pick up `$LATEST`:
+git SHA). Terraform bootstraps the function once; after that, **CI owns code
+deploys**, and the function URL is pinned to the `live` alias, never to
+`$LATEST`. A deploy publishes a new version and moves the alias:
 
 ```bash
-aws lambda update-function-code \
+VERSION=$(aws lambda update-function-code \
   --function-name preconsult-prod \
   --image-uri "$REPO:$TAG" \
-  --publish
+  --publish \
+  --query Version --output text)
+
+aws lambda update-alias \
+  --function-name preconsult-prod \
+  --name live \
+  --function-version "$VERSION"
 ```
 
-Rolling back with `$LATEST` means re-pushing/re-pointing code; there is no
-immutable version selector yet. Do not treat ECR tags as the rollback unit
-beyond the ten images the lifecycle policy retains.
+Rolling back is the reverse, with no rebuild and no URL change:
+
+```bash
+aws lambda update-alias \
+  --function-name preconsult-prod \
+  --name live \
+  --function-version <previous-version>
+```
+
+Terraform deliberately ignores `image_uri` on the function and
+`function_version` on the alias. Without those ignores, any later apply would
+revert a CI deploy/rollback to the bootstrap version. Consequently `image_tag`
+is a **bootstrap-only** value: changing it after the first apply does not
+deploy anything.
+
+Keep `GIT_SHA` in the function configuration in step with the deployed image
+(it tags structured log events). Lambda environment variables are
+version-specific, so update the value before publishing a version, or the new
+version inherits the old tag. Also keep the rollback depth inside the ECR
+lifecycle window (ten images): a new sandbox pulls its image, so the rollback
+target must still exist in ECR.
 
 ## CloudFront details
 
@@ -195,14 +223,22 @@ idle timeout just to fit CloudFront; that changes answer quality/latency.
   large), adapter boot, gunicorn start and Python/Starlette imports. Expect
   multi-second latency after idle; no number here is measured.
 - Each sandbox handles **one request at a time**. Every concurrent SSE stream
-  needs its own sandbox, and each can cold start independently. The warmer
-  keeps at most one sandbox warm; it does not pre-warm concurrency.
+  needs its own sandbox, and each can cold start independently.
 - Provisioned concurrency is the only guarantee and is deliberately not used:
   it is always-on compute, the cost model this stack is avoiding.
 - `timeout = 120` bounds a single stream. Long streams are cut at 120 s even
   without CloudFront.
 - Upstash is reached over public TLS; there is no VPC/NAT. Many sandboxes mean
   many Redis connections, so watch the Upstash connection/quota limits.
+
+### Warmer is opt-in
+
+`enable_warmer` defaults to `false`. When it is false Terraform creates **no**
+EventBridge rule, pinger Lambda, zip archive or warmer IAM role. Enable it only
+after measuring how often a real user actually waits on a cold start; a
+five-minute ping is otherwise speculative spend. When enabled it costs roughly
+**$0.05/month** and keeps at most one sandbox warm — it does not pre-warm
+concurrency, and every additional concurrent visitor can still cold start.
 
 ## Auth, client IP and privacy
 
@@ -217,11 +253,13 @@ for the app's controls.
 `TRUST_PROXY_HEADERS=true` is kept. The app trusts the **rightmost**
 `X-Forwarded-For` hop because Cloud Run appends the real client there. Through
 CloudFront + a function URL, the hop order must be re-measured with a
-header-echo probe before production: CloudFront adds the viewer address, and
-the function URL front end may add another hop. If the rightmost entry is not
-the viewer, every visitor shares one rate-limit/quota bucket. This is a launch
-blocker, not a detail; `TRUST_CF_CONNECTING_IP` stays false because CloudFront
-does not set `cf-connecting-ip`.
+header-echo probe before production: CloudFront adds the viewer address, the
+function URL front end may add another hop, and the Lambda Web Adapter proxies
+from localhost (so `request.client.host` is not a usable fallback either). If
+the rightmost entry is not the viewer, every visitor shares one
+rate-limit/quota bucket. This is a launch blocker, not a detail;
+`TRUST_CF_CONNECTING_IP` stays false because CloudFront does not set
+`cf-connecting-ip`.
 
 CloudWatch receives only the app's existing metadata events (no complaint,
 answers, conditions or medications). CloudFront access logging is **not**
@@ -235,8 +273,17 @@ retention and no subscription.
   If the toolchain moves to Terraform 1.10+, `use_lockfile = true` can replace
   the DynamoDB table; do not change it in the same commit as a deploy.
 - CloudFront changes take time to deploy (`wait_for_deployment` defaults true).
-- ECR is immutable and keeps ten images. A rollback older than those ten
-  requires a rebuild from the corresponding commit.
+- Code/version ownership: Terraform creates the first published version and
+  the `live` alias, then ignores `image_uri` and the alias's
+  `function_version`. CI publishes versions and moves the alias; an apply
+  cannot silently undo a deploy or a rollback. The function URL is qualified
+  by `live` from creation, so this is not a later migration. If Terraform
+  itself changes version-specific configuration (environment variables), that
+  publishes a new version; move `live` to it explicitly, because Terraform
+  will not.
+- ECR is immutable and keeps ten images. A new sandbox pulls its image, so a
+  rollback target must still exist in ECR; a rollback older than those ten
+  images requires a rebuild.
 - The function role is least-privilege: its own log stream, its one ECR
   repository, the named SSM parameters (plus KMS decrypt through SSM), and the
   Claude inference profile plus the wildcard-region foundation model ARN that
@@ -250,12 +297,12 @@ retention and no subscription.
 infra/
   versions.tf            Terraform/provider pins, partial S3 backend
   variables.tf           names, sizes, model ids, SSM parameter names
-  main.tf                ECR, log group, Lambda, function URL, permissions
+  main.tf                ECR, log group, Lambda, live alias, function URL, permissions
   iam.tf                 execution role (logs, ECR, Bedrock, SSM/KMS)
   cloudfront.tf          distribution + managed policy ids
   observability.tf       Errors/Throttles alarms
-  warmer.tf              EventBridge + pinger Lambda
+  warmer.tf              opt-in EventBridge rule + pinger Lambda
   warmer/pinger.py       tiny stdlib health pinger
-  outputs.tf             URL, CloudFront domain, ECR URL, log group
+  outputs.tf             URL, alias ARN, CloudFront domain, ECR URL, log group
   prod.tfvars.example    non-secret example values
 ```

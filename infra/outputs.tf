@@ -28,7 +28,17 @@ output "function_name" {
   value       = aws_lambda_function.app.function_name
 }
 
+output "live_alias_arn" {
+  description = "ARN of the stable `live` alias the function URL serves. CI moves this for deploy and rollback."
+  value       = aws_lambda_alias.live.arn
+}
+
+output "live_alias_name" {
+  description = "Alias name used by the function URL and CI deploy/rollback commands."
+  value       = aws_lambda_alias.live.name
+}
+
 output "warmer_function_name" {
-  description = "Warmer Lambda function name."
-  value       = aws_lambda_function.warmer.function_name
+  description = "Warmer Lambda function name, or null when the warmer is disabled."
+  value       = var.enable_warmer ? aws_lambda_function.warmer[0].function_name : null
 }

@@ -101,8 +101,20 @@ resource "aws_lambda_function" "app" {
   memory_size   = var.lambda_memory_mb
   timeout       = var.lambda_timeout_seconds
 
+  # Every configuration/code change publishes an immutable version. The
+  # `live` alias (below) is the only thing the function URL is allowed to
+  # serve, so rollback is an alias flip rather than a code update.
+  publish = true
+
   environment {
     variables = local.function_environment
+  }
+
+  # Terraform bootstraps the first image, then CI owns code deploys
+  # (update-function-code --publish). Without this, every later apply would
+  # propose reverting the function to the bootstrap tag.
+  lifecycle {
+    ignore_changes = [image_uri]
   }
 
   # The log group must exist first so Lambda does not create an unretained one.
@@ -112,11 +124,27 @@ resource "aws_lambda_function" "app" {
   ]
 }
 
+# Stable target for the function URL. CI publishes a new version and moves
+# this alias; rolling back is `update-alias --function-version <old>`, with no
+# rebuild and no function URL change. Terraform deliberately ignores
+# function_version drift so an apply never undoes a CI deploy or rollback.
+resource "aws_lambda_alias" "live" {
+  name             = "live"
+  description      = "Stable alias for the function URL; CI moves it on deploy/rollback."
+  function_name    = aws_lambda_function.app.function_name
+  function_version = aws_lambda_function.app.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
+}
+
 # AuthType NONE is deliberate: the app is already publicly reachable (Cloud
 # Run's --allow-unauthenticated) and enforces its own API key / bot gate /
 # per-IP limits / session quota. CloudFront is a CDN, not an auth layer.
 resource "aws_lambda_function_url" "app" {
   function_name      = aws_lambda_function.app.function_name
+  qualifier          = aws_lambda_alias.live.name
   authorization_type = "NONE"
   invoke_mode        = "RESPONSE_STREAM"
 }
@@ -126,6 +154,7 @@ resource "aws_lambda_permission" "function_url" {
   statement_id           = "AllowPublicFunctionUrl"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = aws_lambda_function.app.function_name
+  qualifier              = aws_lambda_alias.live.name
   principal              = "*"
   function_url_auth_type = "NONE"
 }
@@ -134,6 +163,7 @@ resource "aws_lambda_permission" "function_url_invoke" {
   statement_id             = "AllowPublicFunctionInvokeViaUrl"
   action                   = "lambda:InvokeFunction"
   function_name            = aws_lambda_function.app.function_name
+  qualifier                = aws_lambda_alias.live.name
   principal                = "*"
   invoked_via_function_url = true
 }

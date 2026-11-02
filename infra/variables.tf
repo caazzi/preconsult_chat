@@ -110,6 +110,12 @@ variable "log_retention_days" {
   }
 }
 
+variable "enable_warmer" {
+  description = "Create the EventBridge + pinger warmer. Off by default: a five-minute ping is speculative until real cold-start frequency is measured. Cost when enabled is ~$0.05/month."
+  type        = bool
+  default     = false
+}
+
 variable "domain_name" {
   description = "Optional custom domain for CloudFront (e.g. pre-consult.org). Empty = use the CloudFront default domain."
   type        = string

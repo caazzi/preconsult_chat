@@ -1,0 +1,9 @@
+{
+  "provider": "vertex",
+  "source": "ChatGoogleGenerativeAI(vertexai=True), langchain-core 1.7",
+  "description": "String content deltas. The consumer has always handled this shape; the fixture pins it so a future normalizer cannot regress it.",
+  "chunks": [
+    { "content": "1. When did the pain start?" },
+    { "content": "\n2. Does it spread anywhere?" }
+  ]
+}

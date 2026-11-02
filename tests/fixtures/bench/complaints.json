@@ -1,0 +1,427 @@
+{
+  "schema_version": 1,
+  "synthetic": true,
+  "description": "Synthetic intake complaints for the offline LLM benchmark. Every persona, symptom description and history value is invented for testing. No real patient data is present, and these records must never be replaced with production data.",
+  "complaints": [
+    {
+      "id": "en-chest-pressure",
+      "lang": "en",
+      "synthetic": true,
+      "persona": "Synthetic persona EN-01",
+      "session": {
+        "age_bracket": "36-45",
+        "sex": "Female",
+        "specialist": "Cardiology",
+        "chief_complaint": "Pressure in the middle of the chest",
+        "duration": "2 days",
+        "complaint_detail": "Comes on when climbing stairs and settles after resting",
+        "conditions": ["High blood pressure"],
+        "medications": ["Lisinopril"],
+        "allergies": "None",
+        "family_history": ["Heart attack in father"],
+        "smoking": "Never",
+        "alcohol": "Rarely"
+      },
+      "expected_dimensions": ["onset", "provocation", "quality", "radiation", "associated"]
+    },
+    {
+      "id": "en-headache",
+      "lang": "en",
+      "synthetic": true,
+      "persona": "Synthetic persona EN-02",
+      "session": {
+        "age_bracket": "26-35",
+        "sex": "Male",
+        "specialist": "Neurology",
+        "chief_complaint": "Recurring headache above the left eye",
+        "duration": "3 weeks",
+        "complaint_detail": "Two or three times a week, usually late afternoon",
+        "conditions": ["Migraine"],
+        "medications": ["None"],
+        "allergies": "Penicillin",
+        "family_history": ["Migraine in mother"],
+        "smoking": "Never",
+        "alcohol": "Occasionally"
+      },
+      "expected_dimensions": ["onset", "quality", "severity", "associated", "medications"]
+    },
+    {
+      "id": "en-abdominal-pain",
+      "lang": "en",
+      "synthetic": true,
+      "persona": "Synthetic persona EN-03",
+      "session": {
+        "age_bracket": "18-25",
+        "sex": "Female",
+        "specialist": "Gastroenterology",
+        "chief_complaint": "Cramping pain in the lower abdomen",
+        "duration": "5 days",
+        "complaint_detail": "Worse after meals, no vomiting",
+        "conditions": ["Irritable bowel syndrome"],
+        "medications": ["None"],
+        "allergies": "None",
+        "family_history": ["None"],
+        "smoking": "Never",
+        "alcohol": "Never"
+      },
+      "expected_dimensions": ["onset", "region", "quality", "timing", "last_intake"]
+    },
+    {
+      "id": "en-back-pain",
+      "lang": "en",
+      "synthetic": true,
+      "persona": "Synthetic persona EN-04",
+      "session": {
+        "age_bracket": "46-55",
+        "sex": "Male",
+        "specialist": "Orthopedics",
+        "chief_complaint": "Lower back stiffness",
+        "duration": "10 days",
+        "complaint_detail": "Begins after sitting at a desk for a long time",
+        "conditions": ["None"],
+        "medications": ["None"],
+        "allergies": "None",
+        "family_history": ["Arthritis in father"],
+        "smoking": "Former smoker",
+        "alcohol": "Rarely"
+      },
+      "expected_dimensions": ["onset", "provocation", "palliation", "severity", "radiation"]
+    },
+    {
+      "id": "en-shortness-of-breath",
+      "lang": "en",
+      "synthetic": true,
+      "persona": "Synthetic persona EN-05",
+      "session": {
+        "age_bracket": "56-65",
+        "sex": "Female",
+        "specialist": "Pulmonology",
+        "chief_complaint": "Shortness of breath after walking uphill",
+        "duration": "1 month",
+        "complaint_detail": "Recovers within a few minutes of stopping",
+        "conditions": ["Asthma"],
+        "medications": ["Salbutamol inhaler"],
+        "allergies": "Dust",
+        "family_history": ["None"],
+        "smoking": "Never",
+        "alcohol": "Never"
+      },
+      "expected_dimensions": ["onset", "timing", "associated", "past_history", "events"]
+    },
+    {
+      "id": "en-sore-throat",
+      "lang": "en",
+      "synthetic": true,
+      "persona": "Synthetic persona EN-06",
+      "session": {
+        "age_bracket": "26-35",
+        "sex": "Female",
+        "specialist": "Otolaryngology",
+        "chief_complaint": "Scratchy sore throat",
+        "duration": "4 days",
+        "complaint_detail": "Worse in the morning and with hot drinks",
+        "conditions": ["None"],
+        "medications": ["None"],
+        "allergies": ["Pollen"],
+        "family_history": ["None"],
+        "smoking": "Never",
+        "alcohol": "Occasionally"
+      },
+      "expected_dimensions": ["onset", "quality", "associated", "allergies", "medications"]
+    },
+    {
+      "id": "en-joint-swelling",
+      "lang": "en",
+      "synthetic": true,
+      "persona": "Synthetic persona EN-07",
+      "session": {
+        "age_bracket": "36-45",
+        "sex": "Male",
+        "specialist": "Rheumatology",
+        "chief_complaint": "Swelling in the right wrist",
+        "duration": "2 weeks",
+        "complaint_detail": "Stiff in the morning for about twenty minutes",
+        "conditions": ["None"],
+        "medications": ["None"],
+        "allergies": "None",
+        "family_history": ["Lupus in sister"],
+        "smoking": "Never",
+        "alcohol": "Rarely"
+      },
+      "expected_dimensions": ["onset", "region", "quality", "associated", "past_history"]
+    },
+    {
+      "id": "en-dizziness",
+      "lang": "en",
+      "synthetic": true,
+      "persona": "Synthetic persona EN-08",
+      "session": {
+        "age_bracket": "66-75",
+        "sex": "Female",
+        "specialist": "Neurology",
+        "chief_complaint": "Light-headedness when standing up",
+        "duration": "3 weeks",
+        "complaint_detail": "Lasts a few seconds and happens most mornings",
+        "conditions": ["Type 2 diabetes"],
+        "medications": ["Metformin"],
+        "allergies": "None",
+        "family_history": ["None"],
+        "smoking": "Never",
+        "alcohol": "Never"
+      },
+      "expected_dimensions": ["onset", "timing", "associated", "events", "medications"]
+    },
+    {
+      "id": "en-skin-rash",
+      "lang": "en",
+      "synthetic": true,
+      "persona": "Synthetic persona EN-09",
+      "session": {
+        "age_bracket": "18-25",
+        "sex": "Male",
+        "specialist": "Dermatology",
+        "chief_complaint": "Itchy patches on both forearms",
+        "duration": "1 week",
+        "complaint_detail": "Appeared after trying a new laundry detergent",
+        "conditions": ["Eczema"],
+        "medications": ["None"],
+        "allergies": ["Nickel"],
+        "family_history": ["Eczema in mother"],
+        "smoking": "Never",
+        "alcohol": "Occasionally"
+      },
+      "expected_dimensions": ["onset", "region", "quality", "allergies", "medications"]
+    },
+    {
+      "id": "en-fatigue",
+      "lang": "en",
+      "synthetic": true,
+      "persona": "Synthetic persona EN-10",
+      "session": {
+        "age_bracket": "26-35",
+        "sex": "Female",
+        "specialist": "General Medicine",
+        "chief_complaint": "Tiredness that does not improve with sleep",
+        "duration": "6 weeks",
+        "complaint_detail": "Naps in the afternoon and still feels drained",
+        "conditions": ["None"],
+        "medications": ["None"],
+        "allergies": "None",
+        "family_history": ["Thyroid disease in aunt"],
+        "smoking": "Never",
+        "alcohol": "Occasionally"
+      },
+      "expected_dimensions": ["onset", "timing", "associated", "last_intake", "past_history"]
+    },
+    {
+      "id": "pt-dor-peito",
+      "lang": "pt",
+      "synthetic": true,
+      "persona": "Persona sintética PT-01",
+      "session": {
+        "age_bracket": "36-45",
+        "sex": "Feminino",
+        "specialist": "Cardiologia",
+        "chief_complaint": "Aperto no meio do peito",
+        "duration": "2 dias",
+        "complaint_detail": "Aparece ao subir escadas e melhora com repouso",
+        "conditions": ["Pressão alta"],
+        "medications": ["Losartana"],
+        "allergies": "Nenhuma",
+        "family_history": ["Infarto no pai"],
+        "smoking": "Nunca",
+        "alcohol": "Raramente"
+      },
+      "expected_dimensions": ["onset", "provocation", "quality", "radiation", "associated"]
+    },
+    {
+      "id": "pt-dor-cabeca",
+      "lang": "pt",
+      "synthetic": true,
+      "persona": "Persona sintética PT-02",
+      "session": {
+        "age_bracket": "26-35",
+        "sex": "Masculino",
+        "specialist": "Neurologia",
+        "chief_complaint": "Dor de cabeça recorrente acima do olho esquerdo",
+        "duration": "3 semanas",
+        "complaint_detail": "Duas ou três vezes por semana, geralmente no fim da tarde",
+        "conditions": ["Enxaqueca"],
+        "medications": ["Nenhum"],
+        "allergies": "Penicilina",
+        "family_history": ["Enxaqueca na mãe"],
+        "smoking": "Nunca",
+        "alcohol": "Ocasionalmente"
+      },
+      "expected_dimensions": ["onset", "quality", "severity", "associated", "medications"]
+    },
+    {
+      "id": "pt-dor-abdominal",
+      "lang": "pt",
+      "synthetic": true,
+      "persona": "Persona sintética PT-03",
+      "session": {
+        "age_bracket": "18-25",
+        "sex": "Feminino",
+        "specialist": "Gastroenterologia",
+        "chief_complaint": "Cólica na parte de baixo da barriga",
+        "duration": "5 dias",
+        "complaint_detail": "Piora depois das refeições, sem vômito",
+        "conditions": ["Síndrome do intestino irritável"],
+        "medications": ["Nenhum"],
+        "allergies": "Nenhuma",
+        "family_history": ["Nenhum"],
+        "smoking": "Nunca",
+        "alcohol": "Nunca"
+      },
+      "expected_dimensions": ["onset", "region", "quality", "timing", "last_intake"]
+    },
+    {
+      "id": "pt-dor-lombar",
+      "lang": "pt",
+      "synthetic": true,
+      "persona": "Persona sintética PT-04",
+      "session": {
+        "age_bracket": "46-55",
+        "sex": "Masculino",
+        "specialist": "Ortopedia",
+        "chief_complaint": "Rigidez na parte de baixo das costas",
+        "duration": "10 dias",
+        "complaint_detail": "Começa depois de ficar muito tempo sentado trabalhando",
+        "conditions": ["Nenhuma"],
+        "medications": ["Nenhum"],
+        "allergies": "Nenhuma",
+        "family_history": ["Artrite no pai"],
+        "smoking": "Ex-fumante",
+        "alcohol": "Raramente"
+      },
+      "expected_dimensions": ["onset", "provocation", "palliation", "severity", "radiation"]
+    },
+    {
+      "id": "pt-falta-de-ar",
+      "lang": "pt",
+      "synthetic": true,
+      "persona": "Persona sintética PT-05",
+      "session": {
+        "age_bracket": "56-65",
+        "sex": "Feminino",
+        "specialist": "Pneumologia",
+        "chief_complaint": "Falta de ar ao caminhar em subida",
+        "duration": "1 mês",
+        "complaint_detail": "Melhora alguns minutos depois de parar",
+        "conditions": ["Asma"],
+        "medications": ["Inalador de salbutamol"],
+        "allergies": "Poeira",
+        "family_history": ["Nenhum"],
+        "smoking": "Nunca",
+        "alcohol": "Nunca"
+      },
+      "expected_dimensions": ["onset", "timing", "associated", "past_history", "events"]
+    },
+    {
+      "id": "pt-dor-de-garganta",
+      "lang": "pt",
+      "synthetic": true,
+      "persona": "Persona sintética PT-06",
+      "session": {
+        "age_bracket": "26-35",
+        "sex": "Feminino",
+        "specialist": "Otorrinolaringologia",
+        "chief_complaint": "Arranhão na garganta",
+        "duration": "4 dias",
+        "complaint_detail": "Piora pela manhã e com bebidas quentes",
+        "conditions": ["Nenhuma"],
+        "medications": ["Nenhum"],
+        "allergies": ["Pólen"],
+        "family_history": ["Nenhum"],
+        "smoking": "Nunca",
+        "alcohol": "Ocasionalmente"
+      },
+      "expected_dimensions": ["onset", "quality", "associated", "allergies", "medications"]
+    },
+    {
+      "id": "pt-inchaço-articular",
+      "lang": "pt",
+      "synthetic": true,
+      "persona": "Persona sintética PT-07",
+      "session": {
+        "age_bracket": "36-45",
+        "sex": "Masculino",
+        "specialist": "Reumatologia",
+        "chief_complaint": "Inchaço no punho direito",
+        "duration": "2 semanas",
+        "complaint_detail": "Rigidez pela manhã por cerca de vinte minutos",
+        "conditions": ["Nenhuma"],
+        "medications": ["Nenhum"],
+        "allergies": "Nenhuma",
+        "family_history": ["Lúpus na irmã"],
+        "smoking": "Nunca",
+        "alcohol": "Raramente"
+      },
+      "expected_dimensions": ["onset", "region", "quality", "associated", "past_history"]
+    },
+    {
+      "id": "pt-tontura",
+      "lang": "pt",
+      "synthetic": true,
+      "persona": "Persona sintética PT-08",
+      "session": {
+        "age_bracket": "66-75",
+        "sex": "Feminino",
+        "specialist": "Neurologia",
+        "chief_complaint": "Tontura ao levantar",
+        "duration": "3 semanas",
+        "complaint_detail": "Dura alguns segundos e acontece quase toda manhã",
+        "conditions": ["Diabetes tipo 2"],
+        "medications": ["Metformina"],
+        "allergies": "Nenhuma",
+        "family_history": ["Nenhum"],
+        "smoking": "Nunca",
+        "alcohol": "Nunca"
+      },
+      "expected_dimensions": ["onset", "timing", "associated", "events", "medications"]
+    },
+    {
+      "id": "pt-manchas-na-pele",
+      "lang": "pt",
+      "synthetic": true,
+      "persona": "Persona sintética PT-09",
+      "session": {
+        "age_bracket": "18-25",
+        "sex": "Masculino",
+        "specialist": "Dermatologia",
+        "chief_complaint": "Manchas que coçam nos dois antebraços",
+        "duration": "1 semana",
+        "complaint_detail": "Apareceram depois de testar um sabão novo",
+        "conditions": ["Eczema"],
+        "medications": ["Nenhum"],
+        "allergies": ["Níquel"],
+        "family_history": ["Eczema na mãe"],
+        "smoking": "Nunca",
+        "alcohol": "Ocasionalmente"
+      },
+      "expected_dimensions": ["onset", "region", "quality", "allergies", "medications"]
+    },
+    {
+      "id": "pt-cansaco",
+      "lang": "pt",
+      "synthetic": true,
+      "persona": "Persona sintética PT-10",
+      "session": {
+        "age_bracket": "26-35",
+        "sex": "Feminino",
+        "specialist": "Clínica Geral",
+        "chief_complaint": "Cansaço que não melhora com sono",
+        "duration": "6 semanas",
+        "complaint_detail": "Tira cochilos à tarde e ainda se sente sem energia",
+        "conditions": ["Nenhuma"],
+        "medications": ["Nenhum"],
+        "allergies": "Nenhuma",
+        "family_history": ["Doença da tireoide na tia"],
+        "smoking": "Nunca",
+        "alcohol": "Ocasionalmente"
+      },
+      "expected_dimensions": ["onset", "timing", "associated", "last_intake", "past_history"]
+    }
+  ]
+}

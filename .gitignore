@@ -129,5 +129,8 @@ lighthouse.*/
 Lighthouse/
 C:*/
 
+# Local LLM benchmark artifacts (never committed; may contain synthetic output)
+outputs/
+
 
 

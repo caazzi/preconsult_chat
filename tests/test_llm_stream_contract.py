@@ -16,6 +16,7 @@ from pathlib import Path
 
 from langchain_core.messages import AIMessageChunk
 
+from preconsult.core.llm import deltas_from_chunks
 from preconsult.core.llm_stream import flatten_content
 from preconsult.services.agent_service import stream_interview_questions
 
@@ -33,9 +34,9 @@ class _StreamingStub:
     def __init__(self, chunks: list[AIMessageChunk]) -> None:
         self._chunks = chunks
 
-    async def astream(self, _input):
-        for chunk in self._chunks:
-            yield chunk
+    async def astream(self, _messages=None, _tools=None):
+        async for delta in deltas_from_chunks(self._chunks):
+            yield delta
 
 
 async def _collect(chunks: list[AIMessageChunk]):
@@ -130,7 +131,7 @@ async def test_bedrock_fake_emits_fragmented_tool_chunks():
     from tests.fakes import ToolCallingFakeLLM
 
     fake = ToolCallingFakeLLM(questions=["A?", "B?"], shape="bedrock")
-    chunks = [chunk async for chunk in fake.astream({})]
+    chunks = fake.chunks()
 
     fragments = [
         chunk.tool_call_chunks[0]["args"] for chunk in chunks if chunk.tool_call_chunks

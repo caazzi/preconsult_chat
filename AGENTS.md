@@ -272,9 +272,12 @@ outages), so Redis must be reserved for actual patient sessions:
   references, not plaintext env vars, in every deploy. `SESSION_SECRET` signs the session cookie and
   is required at startup outside `BUILD_MODE`.
 - **The active LLM provider is selected by `LLM_PROVIDER`, and the default is `vertex`
-  (Google Vertex AI / Gemini), not Bedrock.** `core/llm.py` builds a `ChatVertexAI` client from
-  `LLM_MODEL` + `VERTEX_REGION` + `PROJECT_ID`, or a `ChatBedrockConverse` client from
-  `LLM_MODEL` + `BEDROCK_REGION` when `LLM_PROVIDER=bedrock`. **Bedrock lives in the
+  (Google Vertex AI / Gemini), not Bedrock.** `core/llm.py` is the only module allowed to import a
+  vendor SDK: `VertexClient` wraps `ChatGoogleGenerativeAI` (`LLM_MODEL` + `LLM_REGION` /
+  `VERTEX_REGION` + `PROJECT_ID`), `BedrockClient` wraps `ChatBedrockConverse` (`LLM_MODEL` +
+  `LLM_REGION` / `BEDROCK_REGION`), and `PROVIDERS` is the registry. Both yield neutral
+  `LLMDelta`s (text or *complete* tool calls), so nothing above the seam knows a provider's chunk
+  shape; `tests/test_provider_neutrality.py` fails if a vendor import escapes it. **Bedrock lives in the
   `bedrock` optional extra**, so the default image does not install boto3/botocore (~34 MB) for a
   provider it has no credentials for: a Bedrock deployment must build with
   `uv sync --locked --extra bedrock` (the Dockerfile's plain `uv sync --locked` installs Vertex
@@ -292,9 +295,10 @@ outages), so Redis must be reserved for actual patient sessions:
   same commit, along with the deploy's `secrets:` block (add
   `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`), the `LLM_MODEL` default, and the IAM policy scope
   (`bedrock:InvokeModelWithResponseStream` on the single Haiku model).
-  Upstream failures map to the existing stable codes via `google_api_handler` /
-  `bedrock_api_handler` (throttling → `503 llm_unavailable`, everything else → `502
-  ai_upstream_error`); keep those codes unchanged. Regions are fixed and must not be routed by UI
+  Upstream failures are normalized by the adapter into `LLMUpstreamError(kind)` and mapped by
+  `llm_upstream_handler` (`throttled`/`timeout` → `503 llm_unavailable`, everything else → `502
+  ai_upstream_error`); keep those codes unchanged. Adapters own the TTFT and inter-token idle
+  budgets and retry only *before* the first token, never after output started. Regions are fixed and must not be routed by UI
   language (language ≠ data residency).
 - Deploy-affecting changes include anything the container runs: error-response shape (codes),
   health routes, config flags (e.g. `TRUST_PROXY_HEADERS`, `ALLOW_PUBLIC_INIT`), the served document

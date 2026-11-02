@@ -61,6 +61,47 @@ LLM_MODEL = os.environ.get("LLM_MODEL") or _DEFAULT_LLM_MODEL.get(
     LLM_PROVIDER, _DEFAULT_LLM_MODEL["vertex"]
 )
 
+
+def validate_model_for_provider(provider: str, model: str) -> None:
+    """Reject a model id that belongs to the other provider.
+
+    A single ``LLM_MODEL`` is shared by every provider, so flipping
+    ``LLM_PROVIDER`` without also flipping the model sends a Gemini id to
+    Bedrock (or a Claude id to Vertex) and fails on the first question instead
+    of at startup. Both are configuration errors; catch them here.
+    """
+    if provider == "bedrock":
+        if model.startswith("gemini"):
+            raise ValueError(
+                f"FATAL: LLM_PROVIDER=bedrock cannot use the Gemini model {model!r}. "
+                "Set LLM_MODEL to a Bedrock model id."
+            )
+    elif provider == "vertex":
+        if model.startswith(("us.anthropic", "anthropic.", "eu.anthropic", "apac.anthropic")):
+            raise ValueError(
+                f"FATAL: LLM_PROVIDER=vertex cannot use the Bedrock model {model!r}. "
+                "Set LLM_MODEL to a Gemini model id."
+            )
+
+
+if LLM_PROVIDER not in _DEFAULT_LLM_MODEL:
+    raise ValueError(
+        f"FATAL: LLM_PROVIDER={LLM_PROVIDER!r} is not supported. "
+        f"Use one of {sorted(_DEFAULT_LLM_MODEL)}."
+    )
+validate_model_for_provider(LLM_PROVIDER, LLM_MODEL)
+
+# Neutral, provider-independent knobs. The provider-specific names above stay
+# as overrides so existing deployments keep working; LLM_REGION wins when set.
+LLM_REGION = os.environ.get("LLM_REGION", "")
+LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.2"))
+LLM_MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "1024"))
+# Time-to-first-token and inter-token idle budgets, not a total duration: a
+# total timeout would truncate a legitimately long answer.
+LLM_TTFT_TIMEOUT_S = float(os.environ.get("LLM_TTFT_TIMEOUT_S", "30"))
+LLM_IDLE_TIMEOUT_S = float(os.environ.get("LLM_IDLE_TIMEOUT_S", "60"))
+LLM_MAX_RETRIES = int(os.environ.get("LLM_MAX_RETRIES", "2"))
+
 # Deploy revision identity. GIT_SHA is injected by CI; K_REVISION is Cloud Run's
 # own revision id at runtime. Kept PHI-free and included in every structured log
 # event so "which deployed build produced this outcome" is answerable in logs,

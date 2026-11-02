@@ -6,14 +6,16 @@ from typing import Any, Literal
 from langchain_core.messages import AIMessageChunk
 from langchain_core.runnables import Runnable
 
+from preconsult.core.llm import deltas_from_chunks
+
 
 class ToolCallingFakeLLM(Runnable):
     """Minimal tool-capable fake chat model for stream tests.
 
-    ``FakeListChatModel.bind_tools`` raises NotImplementedError, and the
-    interview chain always binds the ``report_questions`` tool. This fake is a
-    ``Runnable`` (so ``prompt | fake`` composes) that emits the supplied text and
-    an optional ``report_questions`` tool call.
+    Implements the ``LLMClient`` stream method (``astream(messages, tools)``)
+    by producing provider-shaped chunks and normalizing them through the same
+    ``deltas_from_chunks`` helper the real adapters use, so the test double
+    exercises the assembly code instead of bypassing it.
 
     ``shape`` selects which real provider's wire format to imitate:
 
@@ -28,6 +30,8 @@ class ToolCallingFakeLLM(Runnable):
     against ``shape="bedrock"`` too.
     """
 
+    provider = "fake"
+
     def __init__(
         self,
         text: str = "",
@@ -38,6 +42,7 @@ class ToolCallingFakeLLM(Runnable):
         self._text = text
         self._questions = questions
         self._shape = shape
+        self.model = f"fake-{shape}"
 
     def bind_tools(self, tools, **kwargs: Any):  # noqa: ANN001 - test double
         return self
@@ -48,49 +53,64 @@ class ToolCallingFakeLLM(Runnable):
     async def ainvoke(self, input, config=None, **kwargs):  # noqa: ANN001
         raise NotImplementedError("use astream in tests")
 
-    async def astream(self, input, config=None, **kwargs):  # noqa: ANN001
+    async def astream(self, messages=None, tools=None, **kwargs):  # noqa: ANN001
+        async for delta in deltas_from_chunks(self.chunks()):
+            yield delta
+
+    def chunks(self) -> list[AIMessageChunk]:
+        """The raw provider-shaped chunks this fake would stream."""
+        chunks: list[AIMessageChunk] = []
+
         if self._text:
             if self._shape == "bedrock":
-                yield AIMessageChunk(content=[{"type": "text", "text": self._text}])
+                chunks.append(
+                    AIMessageChunk(content=[{"type": "text", "text": self._text}])
+                )
             else:
-                yield AIMessageChunk(content=self._text)
+                chunks.append(AIMessageChunk(content=self._text))
+
         if self._questions:
             if self._shape == "bedrock":
-                for chunk in self._bedrock_tool_chunks():
-                    yield chunk
+                chunks.extend(self._bedrock_tool_chunks())
             else:
-                yield AIMessageChunk(
-                    content="",
-                    tool_calls=[
-                        {
-                            "name": "report_questions",
-                            "args": {"questions": self._questions},
-                            "id": "call_1",
-                        }
-                    ],
+                chunks.append(
+                    AIMessageChunk(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "report_questions",
+                                "args": {"questions": self._questions},
+                                "id": "call_1",
+                            }
+                        ],
+                    )
                 )
 
-    def _bedrock_tool_chunks(self):
+        return chunks
+
+    def _bedrock_tool_chunks(self) -> list[AIMessageChunk]:
         """Split the tool arguments mid-value, as real Converse deltas do."""
         args = json.dumps({"questions": self._questions})
         cut = len(args) // 2
-        yield AIMessageChunk(
-            content="",
-            tool_call_chunks=[
-                {
-                    "name": "report_questions",
-                    "args": args[:cut],
-                    "id": "call_1",
-                    "index": 0,
-                }
-            ],
-        )
-        yield AIMessageChunk(
-            content="",
-            tool_call_chunks=[
-                {"args": args[cut:], "id": None, "name": None, "index": 0}
-            ],
-        )
+        return [
+            AIMessageChunk(
+                content="",
+                tool_call_chunks=[
+                    {
+                        "name": "report_questions",
+                        "args": args[:cut],
+                        "id": "call_1",
+                        "index": 0,
+                    }
+                ],
+            ),
+            AIMessageChunk(
+                content="",
+                tool_call_chunks=[
+                    {"args": args[cut:], "id": None, "name": None, "index": 0}
+                ],
+            ),
+        ]
 
 
 def session_payload(**overrides: object) -> dict:

@@ -95,8 +95,11 @@ terraform apply -var-file=prod.tfvars     # human only
   readiness probes Redis, and gunicorn binds the port before the ASGI app is
   imported. The live probe is dependency-free.
 - **`idle_timeout = 300`** on the ALB because SSE answers can pause between
-  tokens. Target deregistration delay is 30s so a replaced task can finish an
-  in-flight stream.
+  tokens. `alb_deregistration_delay` defaults to 300s as well: the ALB stops
+  new requests on a draining task immediately but keeps existing connections
+  until the delay elapses, and the drain must outlast the longest answer
+  stream. Lowering it to seconds would cut live answers on every scale-in or
+  rolling deploy.
 - **No target-group stickiness.** Redis is the session store of record;
   stickiness would mask a broken store instead of failing loudly.
 - **Immutable ECR tags + lifecycle of 10 images.** Deploy a fresh tag per

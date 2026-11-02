@@ -166,6 +166,17 @@ variable "alb_idle_timeout" {
   }
 }
 
+variable "alb_deregistration_delay" {
+  description = "Seconds the ALB keeps an existing connection to a draining task alive after it stops routing new requests to it. Must exceed the longest realistic SSE answer: a 30s drain would cut live streams on every scale-in or rolling deploy."
+  type        = number
+  default     = 300
+
+  validation {
+    condition     = var.alb_deregistration_delay >= 0 && var.alb_deregistration_delay <= 3600
+    error_message = "alb_deregistration_delay must be between 0 and 3600 seconds."
+  }
+}
+
 variable "certificate_arn" {
   description = "ACM certificate ARN for the optional HTTPS listener. Empty means HTTP-only (no listener on 443); the certificate is created out of band."
   type        = string

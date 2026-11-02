@@ -19,10 +19,11 @@ resource "aws_lb_target_group" "this" {
   vpc_id      = aws_vpc.this.id
   target_type = "ip"
 
-  # Fast replacement: a scaled-in or replaced task should stop receiving
-  # traffic quickly. 30s is long enough for in-flight requests, including an
-  # answer stream, to finish.
-  deregistration_delay = 30
+  # The ALB stops sending new requests as soon as a task starts draining, but
+  # it keeps existing connections until this delay elapses. It must exceed the
+  # longest realistic SSE answer, otherwise a scale-in or rolling deploy cuts
+  # live streams mid-response.
+  deregistration_delay = var.alb_deregistration_delay
 
   # /health/live, not /health/ready: readiness probes Redis, and gunicorn binds
   # the port before the ASGI app is imported. A live check keeps a slow-booting

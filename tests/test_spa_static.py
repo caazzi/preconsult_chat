@@ -14,6 +14,7 @@ After the cutover the same class is mounted at ``/`` and inherits the origin's
 404s (never the shell). Those cases are exercised through a root mount.
 """
 
+import json
 import logging
 
 import pytest
@@ -279,6 +280,8 @@ def test_backend_prefix_404_logs_normalized_path_only(root_client, caplog):
 
     message = records[0].getMessage()
     # Metadata only: the normalized path, never the query string or user input.
-    assert "path='_event'" in message
+    event = json.loads(message)
+    assert event["body"] == "static.backend_prefix_404"
+    assert event["attributes"]["path"] == "_event"
     assert "?" not in message
     assert "should-not-be-logged" not in message

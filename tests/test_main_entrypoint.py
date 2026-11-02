@@ -6,8 +6,8 @@ no longer exists.
 """
 
 import importlib
+import json
 import logging
-import re
 
 
 def test_main_entrypoint_exports_the_host_app():
@@ -22,10 +22,13 @@ def test_main_entrypoint_logs_boot_duration(caplog):
         importlib.reload(importlib.import_module("preconsult.main"))
 
     boot_lines = [
-        record.getMessage()
+        json.loads(record.getMessage())
         for record in caplog.records
-        if "event=app.boot" in record.getMessage()
+        if record.getMessage().startswith("{")
     ]
 
-    assert boot_lines, "the entrypoint must log how long the app import took"
-    assert re.search(r"duration_ms=\d+", boot_lines[0])
+    boot_events = [event for event in boot_lines if event["body"] == "app.boot"]
+    assert boot_events, "the entrypoint must log how long the app import took"
+    duration_ms = boot_events[0]["attributes"]["duration_ms"]
+    assert isinstance(duration_ms, int)
+    assert duration_ms >= 0

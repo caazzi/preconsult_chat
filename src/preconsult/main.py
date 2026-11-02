@@ -16,11 +16,16 @@ import time
 # before this module runs, so this is the attribution point for a cold start.
 _BOOT_STARTED = time.monotonic()
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+logging.basicConfig(level=logging.INFO)
+
+from preconsult.core.observability import (  # noqa: E402
+    install_log_formatter,
+    log_event,
 )
 
-from preconsult.core.observability import log_event  # noqa: E402
+# Structured events are already JSON; leave those lines untouched and keep the
+# familiar text format for library/server records.
+install_log_formatter()
 
 from preconsult.host import app  # noqa: E402, F401
 

@@ -23,7 +23,6 @@ dependencies = [
     "httptools==0.8.0",
     "python-dotenv==1.2.4",
     "redis==6.4.0",
-    "sentry-sdk==2.73.0",
     # Pinned because SPAStaticFiles subclasses Starlette's StaticFiles and
     # depends on its path-normalisation/cache semantics; a major bump must be
     # a deliberate change with the static tests re-read, not a silent re-lock.
@@ -75,10 +74,11 @@ build-backend = "hatchling.build"
 #
 # Both provider packages are pinned to the langchain-core 1.x line and MUST move
 # together: they share one universal lock (the `bedrock` extra is resolved
-# alongside the runtime deps), so `langchain-google-vertexai` 3.x cannot be
-# installed while `langchain-aws` is still on 0.x. The 3.x Vertex provider also
-# drops `pyarrow` (137 MB) and `numpy` for it, which is why the pyarrow
-# GHSA-rgxp-2hwp-jwgg alert disappears here instead of being floored.
+# alongside the runtime deps), so a provider that still requires langchain-core
+# 0.x cannot be installed next to `langchain-aws` 1.x or
+# `langchain-google-genai` 4.x. The google-genai Vertex path also drops `pyarrow`
+# (137 MB) and `numpy`, which is why the pyarrow GHSA-rgxp-2hwp-jwgg alert
+# disappears here instead of being floored.
 constraint-dependencies = [
     "certifi>=2026.10.18",
     "anyio>=4.14.2",

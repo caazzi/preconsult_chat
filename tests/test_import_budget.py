@@ -1,10 +1,9 @@
 """Executable budget for the cold-start import of the served entrypoint.
 
 ``preconsult.main`` is what gunicorn imports before it can serve a single
-request, so every module it pulls in is paid on each cold start. Three heavy
+request, so every module it pulls in is paid on each cold start. Two heavy
 dependency trees are deliberately deferred until something actually needs them:
 
-* ``sentry_sdk`` (+ its FastAPI integration) -> ``core.sentry.init_sentry``
 * ``reportlab`` -> ``services.pdf_service.generate_pdf_report_in_memory``
 * ``langchain_core`` (and its tracer/LangSmith stack) ->
   ``services.agent_service.get_interview_chain``
@@ -32,13 +31,11 @@ DEFERRED = (
     "langchain_core",
     "botocore",
     "reportlab",
-    "sentry_sdk",
 )
 
 # Run outside the repo so python-dotenv cannot discover a developer's .env (which
-# might set SENTRY_DSN and pull sentry_sdk in legitimately). The config module
-# refuses to boot without the API key/secret; SENTRY_DSN is deliberately absent,
-# matching the deployed environment.
+# might pull extra modules in legitimately). The config module refuses to boot
+# without the API key/secret, matching the deployed environment.
 _BASE_ENV = {
     "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
     "PRECONSULT_API_KEY": "import-budget-key",

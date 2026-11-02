@@ -2,15 +2,14 @@
 PDF Generation Service.
 Generates PDF reports in memory with internationalization (i18n) support
 for labels in English and Portuguese.
+
+ReportLab is imported inside the renderer, not at module scope: the API router
+imports this module on every boot, and reportlab (plus its PDF and imaging
+dependencies) is only needed when a patient actually downloads a report.
 """
 import io
 import logging
 from datetime import datetime
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph
 
 # --- Translation Dictionary (i18n) ---
 translations = {
@@ -72,6 +71,13 @@ def generate_pdf_report_in_memory(form: dict, qa_pairs: list, lang: str = 'en') 
     Returns:
         tuple[bytes, str]: A tuple containing the PDF bytes and the recommended filename.
     """
+    # Deferred: see the module docstring. Import caching keeps repeat calls cheap.
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.pdfgen import canvas
+    from reportlab.platypus import Paragraph
+
     # Select the correct labels, defaulting to English if lang is invalid
     labels = translations.get(lang, translations['en'])
     none_reported_text = labels.get("none_reported", "None reported")

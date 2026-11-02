@@ -82,6 +82,13 @@ through the GitHub Actions pipeline at `.github/workflows/ci-cd.yml`.
   `/health/live` is dependency-free (no Redis) and only answers once the ASGI app is up; keep it in
   both deploy profiles and in `scripts/deploy_backend.sh`. `preconsult.main` emits
   `event=app.boot duration_ms=...` so the import cost stays attributable.
+- **Boot cost is budgeted.** `preconsult.main` must not import `sentry_sdk`, `reportlab`,
+  `langchain_core`, `langchain_aws` or `botocore`; `tests/test_import_budget.py` runs the import in a
+  subprocess and fails if any of them appears. Defer a heavy import to the call site that needs it and
+  leave a comment saying why. The image compiles bytecode at build time
+  (`ENV UV_COMPILE_BYTECODE=1`) because the runtime stage sets `PYTHONDONTWRITEBYTECODE=1` — that stops
+  *writing* `.pyc`, not reading them, so an image built without it re-compiles every module on every
+  cold start.
 - `web/scripts/prerender.mjs` (part of `npm run build`) writes the landing copy into `#root` of
   **two** documents: `index.html` (en, served at `/`) and `index.pt.html` (pt, served at
   `/?lang=pt`). The copy comes from the generated i18n contracts, and `main.tsx` removes the block

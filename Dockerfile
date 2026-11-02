@@ -24,6 +24,12 @@ COPY . .
 # --locked (not --frozen): a stale uv.lock must fail the image build, not ship a
 # resolution that no longer matches pyproject.toml.
 #
+# uv does not compile bytecode by default, and the runtime stage sets
+# PYTHONDONTWRITEBYTECODE=1 (which stops *writing* .pyc, not reading them). Without
+# this, the image ships zero .pyc and every cold start re-compiles every imported
+# module (~1.9 s measured). Compile once here; the venv is copied downstream.
+ENV UV_COMPILE_BYTECODE=1
+
 # UV_EXTRAS is empty for the default Cloud Run image. The Lambda image passes
 # --build-arg UV_EXTRAS="--extra bedrock"; the image is otherwise identical.
 ARG UV_EXTRAS=""
